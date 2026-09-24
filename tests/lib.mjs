@@ -67,10 +67,11 @@ export async function startServer({ port, env = {}, mock = false, dataDir } = {}
 // A proxy in front of the server whose delays can be changed mid-test, to fake slow Wi-Fi.
 // It passes client disconnects through, as a real proxy does.
 export function slowProxy({ port, target }) {
-  const delays = { shell: 0, state: 0 };
+  const delays = { shell: 0, state: 0, write: 0 };
   const server = http.createServer((req, res) => {
     const p = req.url.split("?")[0];
-    const wait = p === "/" || p === "/index.html" ? delays.shell : p === "/api/state" ? delays.state : 0;
+    const wait = p === "/" || p === "/index.html" ? delays.shell : p === "/api/state" ? delays.state
+      : (req.method === "PUT" || req.method === "DELETE") ? delays.write : 0;
     setTimeout(() => {
       const up = http.request({ port: target, path: req.url, method: req.method, headers: req.headers }, (r) => { res.writeHead(r.statusCode, r.headers); r.pipe(res); });
       up.on("error", () => res.destroy());

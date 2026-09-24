@@ -1,6 +1,6 @@
 {
   "name": "bourdain",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "private": true,
   "type": "module",
   "description": "Self-hosted recipe importer, meal planner and pantry",
@@ -16,7 +16,7 @@
     "better-sqlite3": "^11.3.0",
     "express": "^4.21.1",
     "multer": "^2.0.2",
-    "sharp": "^0.33.5"
+    "sharp": "^0.35.4"
   },
   "devDependencies": {
     "playwright": "1.56.1"

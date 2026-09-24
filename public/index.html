@@ -1277,6 +1277,7 @@ function renderReview(){
     <h2>${state.editingId?"Edit recipe":"Check the import"}</h2>
     ${state.editingId?"":`<p class="hint" style="margin-bottom:12px">Fix anything the reader got wrong before it goes into the book.</p>`}
     <div class="field"><label>Title</label><input class="input" id="fTitle" value="${esc(d.title)}"></div>
+    <div class="field"><label>Description</label><textarea class="input" id="fDesc" style="min-height:64px">${esc(d.description||"")}</textarea></div>
     <div class="row" style="margin-bottom:12px">
       <div class="field" style="flex:1;margin:0"><label>Serves</label><input class="input" id="fServ" type="number" min="1" value="${d.servings??""}"></div>
       <div class="field" style="flex:1;margin:0"><label>Prep min</label><input class="input" id="fPrep" type="number" min="0" value="${d.prep_min??""}"></div>
@@ -1311,7 +1312,7 @@ function renderReview(){
     const rows=[...el.querySelectorAll(".ingrow")].map(r=>{ const g=f=>r.querySelector(`[data-f=${f}]`).value; const q=g("quantity"); const o=d.ingredients[+r.dataset.ix]||{};
       return {raw_text:o.raw_text||"",quantity:q===""?null:Number(q),unit:g("unit"),item:g("item").trim().toLowerCase(),prep:g("prep").trim(),section:o.section||"",aisle:g("aisle"),optional:!!o.optional}; }).filter(i=>i.item);
     const num=id=>{ const v=el.querySelector(id).value; return v===""?null:Number(v); };
-    return {...d, title:el.querySelector("#fTitle").value.trim(), servings:num("#fServ"), prep_min:num("#fPrep"), cook_min:num("#fCook"),
+    return {...d, title:el.querySelector("#fTitle").value.trim(), description:el.querySelector("#fDesc").value.trim(), servings:num("#fServ"), prep_min:num("#fPrep"), cook_min:num("#fCook"),
       source_url:el.querySelector("#fUrl").value.trim(), source_type:(el.querySelector("#fUrl").value.trim()===(d.source_url||"")) ? d.source_type : sourceType(el.querySelector("#fUrl").value.trim()),
       tags:el.querySelector("#fTags").value.split(",").map(t=>t.trim().toLowerCase()).filter(Boolean),
       ingredients:rows, steps:el.querySelector("#fSteps").value.split("\n").map(s=>s.trim()).filter(Boolean), notes:el.querySelector("#fNotes").value.trim()};
@@ -1337,8 +1338,11 @@ function renderReview(){
   rowsEl.onpointerup=endDrag; rowsEl.onpointercancel=endDrag;
   el.querySelector("#addIng").onclick=()=>{ state.draft=collect(); state.draft.ingredients.push({raw_text:"",quantity:null,unit:"",item:"",prep:"",section:"",aisle:"other",optional:false}); renderReview(); setTimeout(()=>{ const rows=el.querySelectorAll(".ingrow"); rows[rows.length-1]?.querySelector("[data-f=item]").focus(); },0); };
   el.querySelector("#revBack").onclick=()=>{ state.draft=null; if(state.editingId){ const id=state.editingId; state.editingId=null; state.detailId=id; show("detail"); } else renderImport(); };
+  let saving=false;
   const save=async()=>{
+    if(saving) return; // on slow Wi-Fi a second tap would save the recipe again under a new id
     const r=collect(); if(!r.title){ toast("Give it a title first"); el.querySelector("#fTitle").focus(); return; }
+    saving=true; for(const b of el.querySelectorAll("#revSave,#revSave2")){ b.disabled=true; b.textContent="Saving…"; }
     const id=state.editingId||uid(); r.created_at=state.editingId? (state.recipes[id]?.created_at||new Date().toISOString()) : new Date().toISOString(); r.updated_at=new Date().toISOString();
     state.recipes[id]=r; state.lastSavedId=id; const ok=await store.put("recipes",id,r);
     state.draft=null; state.editingId=null; state.images=[]; document.getElementById("srcText").value=""; document.getElementById("srcUrl").value="";

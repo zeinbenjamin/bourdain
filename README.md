@@ -2,7 +2,7 @@
 
 A self-hosted cooking app: import recipes from links, screenshots or screen recordings, plan the week, and keep track of what's in the pantry.
 
-Runs as a single container on your own server. Your recipes never leave it.
+Runs as a single container on your own server. Your recipes and photos are stored only there.
 
 ---
 
@@ -13,9 +13,17 @@ Runs as a single container on your own server. Your recipes never leave it.
 | `public/index.html` | The whole front end, one file, no build step |
 | `server.js` | Express: serves the app, stores data, proxies Claude, fetches links |
 | `/data/bourdain.db` | SQLite — recipes, plan, pantry |
-| `/data/photos` | Recipe photos as JPEGs |
+| `/data/photos` | Recipe photos (JPEG) and cover illustrations (WebP) |
+| `tests/` | End-to-end tests, run with `npm test` |
 
-**The only outbound traffic** is to `api.anthropic.com` when reading a recipe, and to a recipe site when you fetch a link. Nothing else phones home.
+**Outbound traffic, all of it:**
+
+- `api.anthropic.com` when Claude reads something: a recipe's text or screenshots on import, pantry photos when you scan the fridge, your pantry list for "Cook from what I have", and the recipe when describing a cover.
+- `api.openai.com` only when you tap **Make cover**: a short description of the dish goes there to be painted.
+- The recipe site itself when you fetch a link, plus TikTok's caption service for TikTok links.
+- Google Fonts, for the two typefaces.
+
+Nothing else phones home. Photos you upload are never sent anywhere except to Claude during an import or a fridge scan.
 
 ---
 
@@ -97,9 +105,9 @@ Now Add to Home Screen works and you get a proper app icon.
 
 ```bash
 npm install
-cp .env.example .env        # add your key
 DATA_DIR=./data ANTHROPIC_API_KEY=sk-ant-... npm start
 # http://localhost:8080
+# add OPENAI_API_KEY=sk-... to the same line for covers
 ```
 
 `localhost` counts as a secure context, so everything works there without a certificate.
@@ -143,7 +151,21 @@ That's real work, not a config flag. Fine to leave alone if it's just for you.
 
 ---
 
+## Tests
+
+```bash
+npm test                  # every suite, under 2 minutes
+node tests/scan.test.mjs  # one suite
+```
+
+The tests start the real server with a throwaway database and drive the app in headless Chromium, with fake stand-ins for Claude and OpenAI. They need no API keys and cost nothing. On a new machine, run `npx playwright install chromium` once first.
+
+---
+
 ## Troubleshooting
+
+**Changes made offline on one address don't show on the other.** The HTTPS (`…ts.net`) address and `http://YOUR-NAS-IP:8080` are separate apps to your phone. Each has its own offline copy and its own queue of unsynced changes and photos, and that queue only sends when you next open *that* address. Only the HTTPS one can open without a connection. Use the HTTPS address for your home-screen icon and everyday use.
+
 
 **"Server unreachable — working offline"** — the app couldn't reach `/api/state`. It falls back to browser storage so you can keep cooking, but changes won't sync until the server's back. Check the container is running.
 
