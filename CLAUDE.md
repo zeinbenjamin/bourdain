@@ -84,8 +84,13 @@ GitHub Actions builds the image on push to `main` and publishes it to
 
 1. Push to `main`
 2. Wait for the green tick in the Actions tab
-3. TrueNAS → Apps → bourdain → ⋮ → **Redeploy**
+3. TrueNAS → Apps → bourdain → ⋮ → **Redeploy**. This only pulls the new image
+   because the app YAML sets `pull_policy: always`.
 4. Hard-refresh on the phone
+
+To confirm what's running, in TrueNAS → System → Shell:
+`sudo docker inspect bourdain --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'`
+prints the commit SHA the running container was built from.
 
 Data lives on mounted datasets, so redeploys never touch recipes or photos.
 Take a ZFS snapshot before anything that changes stored data.
@@ -99,9 +104,16 @@ app after a redeploy, which looks exactly like a broken build.
 **The container must run as UID 568.** TrueNAS datasets with "app permissions"
 are owned by the `apps` user (568), not node's default 1000. The Dockerfile
 runs as `node` (1000), so the app YAML in TrueNAS must set `user: "568:568"`.
-Without it the container crash-loops on SQLite open. **The repo's
-`docker-compose.yml` does not have this line yet** — add it by hand if you
-reinstall from that file.
+Without it the container crash-loops on SQLite open. The repo's
+`docker-compose.yml` has it.
+
+**Redeploy needs `pull_policy: always`.** Without it TrueNAS restarts the image
+it already has, and the new build never arrives. That looks exactly like a
+deploy that didn't work, the same as a forgotten service worker bump.
+
+**`docker-compose.yml` mirrors the live TrueNAS YAML**, with the pool path and
+API key replaced by placeholders. If you change the YAML in TrueNAS, change this
+file to match. The live setup uses datasets under `/mnt/sonic/builds_/bourdain/`.
 
 **No `confirm()` or `alert()`.** The app runs in a sandboxed frame in some
 contexts where those are silently blocked and return false — a delete button

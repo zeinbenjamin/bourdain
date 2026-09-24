@@ -1,8 +1,7 @@
 # Paste this into TrueNAS SCALE:  Apps -> Discover -> (three dots) -> Install via YAML
 #
 # Before you do, replace:
-#   YOUR-GITHUB-USERNAME  with your GitHub username (lowercase)
-#   YOUR-POOL             with your ZFS pool name
+#   YOUR-POOL             with your ZFS pool name (and adjust the dataset paths to match yours)
 #   sk-ant-...            with your Anthropic API key
 #
 # Create these two datasets first (Datasets -> Add Dataset):
@@ -11,9 +10,14 @@
 
 services:
   bourdain:
-    image: ghcr.io/YOUR-GITHUB-USERNAME/bourdain:latest
+    image: ghcr.io/zeinbenjamin/bourdain:latest
+    # Without this, Redeploy restarts the image already on the NAS instead of pulling the new build.
+    pull_policy: always
     container_name: bourdain
     restart: unless-stopped
+    # TrueNAS datasets with "app permissions" belong to the apps user (568). The image runs as
+    # node (1000) by default, which can't open the SQLite file, so the container crash-loops.
+    user: "568:568"
     environment:
       ANTHROPIC_API_KEY: "sk-ant-REPLACE-ME"
       CLAUDE_MODEL: "claude-sonnet-4-6"
