@@ -30,7 +30,7 @@ A recipe:
 ```js
 {
   title, description, servings, prep_min, cook_min, notes,
-  source_url, source_type,          // web | instagram | tiktok | manual
+  source_url, source_type,          // web | instagram | tiktok | youtube | manual
   photos: [assetId],                // first one is the hero image
   tags: [string],
   ingredients: [{
@@ -56,7 +56,8 @@ Everything goes through the `store` object in `index.html`. If you are changing
 how data persists, that is the only place to touch.
 
 - `store.put(col, id, doc)` / `store.del(col, id)` — writes, with a localStorage
-  mirror so the app still works when the server is unreachable
+  mirror. The mirror is only *read* when `/api/state` fails at startup; it is
+  never synced back to the server. See "Known gaps" below.
 - `store.ask(prompt, images)` — proxied Claude call, returns parsed JSON
 - `store.fetchUrl(url)` — server-side page fetch
 - `store.uploadPhoto(blob)` — returns `{id}`
@@ -84,8 +85,11 @@ in `public/sw.js` → `v2`, `v3`. Forget this and the phone keeps serving the ol
 app after a redeploy, which looks exactly like a broken build.
 
 **The container must run as UID 568.** TrueNAS datasets with "app permissions"
-are owned by the `apps` user (568), not node's default 1000. `user: "568:568"`
-in the compose file. Without it the container crash-loops on SQLite open.
+are owned by the `apps` user (568), not node's default 1000. The Dockerfile
+runs as `node` (1000), so the app YAML in TrueNAS must set `user: "568:568"`.
+Without it the container crash-loops on SQLite open. **The repo's
+`docker-compose.yml` does not have this line yet** — add it by hand if you
+reinstall from that file.
 
 **No `confirm()` or `alert()`.** The app runs in a sandboxed frame in some
 contexts where those are silently blocked and return false — a delete button
@@ -97,12 +101,19 @@ every open precisely because an earlier version attached listeners that survived
 into the next sheet and swallowed its clicks. Route every sheet button through
 `data-act` + `sheetActions()`. Never attach ad-hoc `onclick` to sheet contents.
 
-**Deletes fall back to tombstones.** `store.del` tries a real delete and, if that
-fails, writes `{deleted: true}` instead. Loading filters out tombstones, empty
-plan days, and recipes with no title. Keep that filtering if you touch load.
+**Deletes are not retried and there are no tombstones.** `store.del` sends a
+real DELETE; if it fails it shows a toast and nothing else, so the item comes
+back on the next load. Loading does no filtering at all — whatever is in the
+database is shown. Removing the last meal from a plan day writes
+`{date, entries: []}` rather than deleting the row. Earlier, pre-repo versions
+may have written `{deleted: true}` rows; the current code does not filter them,
+and an untitled recipe crashes the Plan picker (`pickRecipe` calls
+`title.localeCompare`).
 
-**Adding a collection needs a server edit too.** New collection names must be
-added to `COLLECTIONS` in `server.js` or writes are rejected with 404.
+**Adding a collection needs server edits too.** In `server.js`: add it to
+`COLLECTIONS` (or writes get a 404), add a `CREATE TABLE` (or writes fail with
+a 500), and add it to the `/api/state` response. In `index.html`: add it to
+`state` and to both branches of `store.init()` and to `store.local()`.
 
 **Adding fields is safe; renaming is not.** Old recipes simply lack new fields —
 treat missing as empty. Renaming an existing field orphans every stored recipe
@@ -157,7 +168,8 @@ never inline.
 
 Four tabs: Recipes, Plan, Pantry, Import. The Shop tab was removed but all its
 code (`buildList`, `renderShop`, the `shop` collection) is intact and hidden —
-restoring it is adding the tab button back.
+restoring it is adding the tab button back and changing `.tabs`
+`grid-template-columns:repeat(4,1fr)` to `repeat(5,1fr)`.
 
 Live features: link fetch and AI import with review screen, screen-recording
 frame extraction, recipe photos, drag-to-reorder ingredients in the edit form,
@@ -165,3 +177,25 @@ frame extraction, recipe photos, drag-to-reorder ingredients in the edit form,
 
 Ideas not yet built: nutrition estimates, pantry quantities decremented by
 cooking, a cooking mode with timers, restoring the shopping list.
+
+## Known gaps
+
+Found in a review on 2026-09-24 and not yet fixed. Remove each line once it
+is fixed.
+
+- **Failed saves look like successes.** `store.put` toasts "Couldn't save to
+  the server, kept on this device", but callers immediately toast "Saved"
+  (or "Deleted") over it.
+- **Offline edits are lost.** When the server answers at startup its data
+  replaces the local mirror, and the next write overwrites the mirror.
+  Nothing made offline, or in a failed PUT, reaches the server.
+- **No loading state or client timeouts.** The app renders the empty "Nothing
+  in the book yet" screen until `/api/state` returns, however long that takes.
+- **Import "Stop" does nothing.** `parseCtl` is never passed to `fetch`.
+- **The build ignores the lockfile.** The Dockerfile copies only
+  `package.json` and runs `npm install`, not `npm ci`.
+- **`index.html` and `sw.js` are served with `maxAge: 1h`**, so a phone can
+  keep the old app for up to an hour after a redeploy, even after a cache bump.
+- **The server has no error handler of its own.** Synchronous errors return
+  Express's HTML 500. One corrupt row makes `/api/state` fail, and the client
+  then reports "Server unreachable".
