@@ -3,7 +3,7 @@ import multer from "multer";
 import Database from "better-sqlite3";
 import sharp from "sharp";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, existsSync, createReadStream } from "node:fs";
+import { mkdirSync, existsSync, createReadStream, readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,30 @@ const API_KEY = process.env.ANTHROPIC_API_KEY || "";
 const MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-4-6";
 
 mkdirSync(PHOTO_DIR, { recursive: true });
+
+/* ---------------- version ----------------
+   package.json holds the version; the build passes the commit in as APP_COMMIT.
+   CHANGELOG.md is parsed once at startup for the in-app version history.   */
+const VERSION = JSON.parse(readFileSync(path.join(__dirname, "package.json"), "utf8")).version;
+const COMMIT = (process.env.APP_COMMIT || "dev").slice(0, 7);
+function readChangelog() {
+  let text = "";
+  try { text = readFileSync(path.join(__dirname, "CHANGELOG.md"), "utf8"); }
+  catch { return []; }
+  const out = [];
+  for (const line of text.split("\n")) {
+    const h = line.match(/^##\s+(\S+)\s+[—-]+\s+(\d{4}-\d{2}-\d{2})/);
+    if (h) { out.push({ version: h[1], date: h[2], notes: [] }); continue; }
+    const b = line.match(/^-\s+(.+)/);
+    if (b && out.length) out[out.length - 1].notes.push(b[1].trim());
+  }
+  return out;
+}
+const CHANGELOG = readChangelog();
+// The served index.html carries its own version, so the phone can tell which build it is running.
+const INDEX_HTML = readFileSync(path.join(__dirname, "public", "index.html"), "utf8")
+  .replace('content="__APP_VERSION__"', `content="${VERSION}"`)
+  .replace('content="__APP_COMMIT__"', `content="${COMMIT}"`);
 
 /* ---------------- database ---------------- */
 const db = new Database(path.join(DATA_DIR, "bourdain.db"));
@@ -45,8 +69,10 @@ app.use(express.json({ limit: "30mb" }));
 app.disable("x-powered-by");
 
 app.get("/api/health", (_req, res) =>
-  res.json({ ok: true, hasApiKey: Boolean(API_KEY) })
+  res.json({ ok: true, hasApiKey: Boolean(API_KEY), version: VERSION, commit: COMMIT })
 );
+
+app.get("/api/version", (_req, res) => res.json({ version: VERSION, commit: COMMIT, changelog: CHANGELOG }));
 
 app.get("/api/state", (_req, res) => {
   res.json({
@@ -291,11 +317,13 @@ function describe(err) {
    The app shell must be revalidated on every load, or a phone keeps the old
    app after a redeploy. no-cache still allows a cheap 304 via the ETag.   */
 const revalidate = (res) => res.set("Cache-Control", "no-cache");
+const sendIndex = (_req, res) => { revalidate(res); res.type("html").send(INDEX_HTML); }; // Express adds an ETag, so 304s still work
+app.get(["/", "/index.html"], sendIndex);
 app.use(express.static(path.join(__dirname, "public"), {
   maxAge: "1h",
   setHeaders: (res, file) => { if (/\.html$|[\\/]sw\.js$/.test(file)) revalidate(res); },
 }));
-app.get(/.*/, (_req, res) => { revalidate(res); res.sendFile(path.join(__dirname, "public", "index.html")); });
+app.get(/.*/, sendIndex);
 
 // Last, so it catches errors from every route above.
 app.use((err, req, res, _next) => {
@@ -309,5 +337,5 @@ app.use((err, req, res, _next) => {
 process.on("unhandledRejection", (err) => console.error("unhandled rejection", err));
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Bourdain on :${PORT}  data=${DATA_DIR}  key=${API_KEY ? "set" : "MISSING"}`);
+  console.log(`Bourdain ${VERSION} (${COMMIT}) on :${PORT}  data=${DATA_DIR}  key=${API_KEY ? "set" : "MISSING"}`);
 });

@@ -1,6 +1,6 @@
 // Caches the shell so the app opens without a connection.
 // API calls always go to the network: recipe data must never be served stale.
-const CACHE = "bourdain-v3";
+const CACHE = "bourdain-v4";
 const SHELL = ["/", "/index.html", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (e) => {

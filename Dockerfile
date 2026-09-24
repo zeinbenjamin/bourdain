@@ -13,8 +13,11 @@ WORKDIR /app
 ENV NODE_ENV=production DATA_DIR=/data PORT=8080
 RUN mkdir -p /data && chown node:node /data
 COPY --from=build /app/node_modules ./node_modules
-COPY server.js ./
+COPY package.json CHANGELOG.md server.js ./
 COPY public ./public
+# The commit this image was built from, shown in the app's version sheet.
+ARG APP_COMMIT=dev
+ENV APP_COMMIT=$APP_COMMIT
 USER node
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \

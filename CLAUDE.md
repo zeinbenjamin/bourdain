@@ -86,19 +86,44 @@ GitHub Actions builds the image on push to `main` and publishes it to
 2. Wait for the green tick in the Actions tab
 3. TrueNAS → Apps → bourdain → ⋮ → **Redeploy**. This only pulls the new image
    because the app YAML sets `pull_policy: always`.
-4. Hard-refresh on the phone
+4. Open the app on the phone and tap the **Bourdain** title. The sheet shows the
+   version and build the phone is running, and says whether the server has a
+   newer one.
 
-To confirm what's running, in TrueNAS → System → Shell:
+If the app itself won't load, the server-side check is TrueNAS → System → Shell:
 `sudo docker inspect bourdain --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'`
 prints the commit SHA the running container was built from.
+
+## Releases
+
+Every change that ships to the app gets a new version. Docs-only changes don't.
+
+1. Bump the version with `npm version <x.y.z> --no-git-tag-version`. This
+   updates `package.json` and `package-lock.json` together.
+   - **Patch** (1.3.0 → 1.3.1): fixes, no new behaviour.
+   - **Minor** (1.3.0 → 1.4.0): new features or changed behaviour.
+   - **Major** (1.x → 2.0.0): a change to stored data that needs a migration.
+2. Add an entry at the top of `CHANGELOG.md`: `## x.y.z — YYYY-MM-DD` followed by
+   `- ` bullets. The server parses exactly that format for the in-app history.
+   Write the bullets for Zein, not for a developer: what's different when using
+   the app.
+3. Bump the service worker cache as usual if the front end changed.
+
+How the version reaches the phone: `server.js` reads the version from
+`package.json`, the commit from `APP_COMMIT` (set by the Actions build), and
+stamps both into the `app-version` / `app-commit` meta tags as it serves
+`index.html`. The app compares its own tags with `/api/version`. On startup it
+toasts when the server has a newer build, and the version sheet shows the same.
+Serve `index.html` only through `sendIndex` in `server.js`, never as a plain
+static file, or the placeholders reach the phone unfilled.
 
 Data lives on mounted datasets, so redeploys never touch recipes or photos.
 Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v3"`
-in `public/sw.js` → `v4`, `v5`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v4"`
+in `public/sw.js` → `v5`, `v6`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
