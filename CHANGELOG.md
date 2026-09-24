@@ -6,6 +6,12 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 1.5.0 — 2026-09-24
+- New: Scan fridge or pantry. Take a few photos and the app lists the food it can see, so you don't have to type it.
+- Nothing is added until you've checked the list. Everything starts ticked except items marked "not sure".
+- Things already on your pantry list are shown, but never added twice.
+- Counts are only filled in when they're obvious, like eggs or cans. Salt, pepper, oil and water are skipped, as they're always assumed.
+
 ## 1.4.0 — 2026-09-24
 - New: tap Make cover on a recipe to get an illustrated cover in your usual style, floating on the page with no background.
 - Covers show whole on the recipe card and at the top of the recipe, and your own photos stay underneath.

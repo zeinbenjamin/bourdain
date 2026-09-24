@@ -264,6 +264,8 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .idea p{margin:0 0 6px;font-size:16px;line-height:1.45}
 .idea .need{font-family:var(--sans);font-size:12px;color:var(--ink-3);margin-bottom:8px}
 .ideas-head{display:flex;justify-content:space-between;align-items:center;margin:16px 0 0}
+.scanlist .item .lbl small{display:block;font-family:var(--sans);font-size:12px;color:var(--ink-3)}
+.scanlist .have{font-family:var(--sans);font-size:12.5px;color:var(--ink-3);margin:10px 0 0}
 .toast{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:9px 14px;border-radius:var(--r);font-family:var(--sans);font-size:13px;z-index:30;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
 </style>
@@ -323,7 +325,7 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
       <button class="btn" id="pantryAddBtn">Add</button>
     </div>
     <p class="hint">Separate several with commas. Salt, pepper, oil and water are assumed.</p>
-    <div class="actions"><button class="btn primary" id="cookFrom">Cook from what I have</button></div>
+    <div class="actions"><button class="btn primary" id="cookFrom">Cook from what I have</button><button class="btn" id="pantryScan">Scan fridge or pantry</button></div>
     <div id="ideas"></div>
     <div id="pantryList"></div>
   </section>
@@ -829,6 +831,74 @@ function renderIdeas(){
     const b=e.target.closest("[data-make]"); if(!b) return; writeRecipe(state.ideas[+b.dataset.make], b);
   };
 }
+/* ---------- scan the fridge / pantry ----------
+   Photos go to Claude (same route as screenshot imports), which lists what it can
+   see. Nothing is added until the user ticks it off in a review list, the same rule
+   as imports: everything is pre-ticked except items Claude isn't sure of. Items
+   already in the pantry are listed but never added twice. */
+const SCAN_MAX=6;
+const SCAN_PROMPT=`You are looking at photos of a home fridge, freezer or pantry cupboard. List the food and cooking ingredients you can see, so they can be added to a pantry list.
+
+Reply with ONLY a JSON object, no prose: {"items":[{"item": string, "qty": number|null, "unit": string, "aisle": string, "sure": boolean}]}
+
+- item: canonical, lowercase, singular, generic name with no brand, e.g. "greek yoghurt", "chicken thigh", "soy sauce", "egg".
+- qty: a number only when you can clearly count whole items (eggs, cans, lemons, bottles). Otherwise null. Never guess weights or how full a container is.
+- unit: "" unless one of ["can","packet","bunch","slice","clove"] clearly fits the count.
+- aisle: one of ${JSON.stringify(AISLES)}.
+- sure: false when the item is partly hidden, the label is unreadable, or you are guessing what is inside an opaque container or tub.
+- The same item seen in several photos is listed once.
+- Skip salt, pepper, cooking oil and water (always assumed), and anything that is not food or drink (medicine, cleaning products, containers that are clearly empty).
+- If you can see no food at all, reply {"items":[]}.`;
+const itemKey=t=>String(t||"").toLowerCase().trim().replace(/ies$/,"y").replace(/oes$/,"o").replace(/([^s])s$/,"$1");
+function tidyScan(out){
+  const seen=new Set(), items=[];
+  for(const x of (out&&Array.isArray(out.items)?out.items:[])){
+    const item=String(x&&x.item||"").toLowerCase().trim(); if(!item||seen.has(itemKey(item))) continue; seen.add(itemKey(item));
+    const q=Number(x.qty); items.push({ item, qty:x.qty!=null&&isFinite(q)&&q>0?q:null, unit:typeof x.unit==="string"?x.unit.toLowerCase().trim():"",
+      aisle:AISLES.includes(x.aisle)?x.aisle:guessAisle(item), sure:x.sure!==false });
+  }
+  return items;
+}
+async function scanPantry(){
+  if(!store.online){ toast("Scanning needs the server. Try again when you're back on home Wi-Fi."); return; }
+  let files=(await pickPhotos()).filter(f=>f.type.startsWith("image/")); if(!files.length) return;
+  if(files.length>SCAN_MAX){ files=files.slice(0,SCAN_MAX); toast(`Using the first ${SCAN_MAX} photos.`); }
+  const ctl=new AbortController();
+  const sh=openSheet(`<h3>Scanning</h3><p class="status" id="scanStatus"><span class="spin"></span>Looking for food in ${files.length} photo${files.length===1?"":"s"}…</p>
+    <div class="row" style="margin-top:12px"><button class="btn ghost" data-act="stop">Stop</button></div>`);
+  sheetActions(sh,{ stop:()=>{ ctl.abort(); closeSheet(); toast("Stopped. Nothing was added."); } });
+  const mine=()=>sh.isConnected&&sh.classList.contains("open");
+  const fail=msg=>{ if(!mine()) return toast(msg); sh.querySelector("h3").textContent="Couldn't scan that";
+    const st=sh.querySelector("#scanStatus"); st.className="status err"; st.textContent=msg;
+    sh.querySelector('[data-act="stop"]').textContent="Close"; sheetActions(sh,{ stop:closeSheet }); };
+  let items;
+  try{
+    const images=[]; for(const f of files) images.push(await forReading(f));
+    items=tidyScan(await store.ask(SCAN_PROMPT, images, ctl.signal));
+  }catch(e){ if(e&&e.name==="AbortError") return; console.warn("scan failed",e); return fail(aiError(e,"scanning those photos")); }
+  if(!mine()){ toast("The scan finished after it was closed, so nothing was added."); return; }
+  if(!items.length) return fail("Couldn't spot any food in those photos. Try closer photos with the fridge light on.");
+  const have=new Set(Object.values(state.pantry).map(p=>itemKey(p.item)));
+  const fresh=items.filter(i=>!have.has(itemKey(i.item))), already=items.filter(i=>have.has(itemKey(i.item)));
+  if(!fresh.length) return fail(`Everything in those photos is already on your list: ${already.map(i=>i.item).join(", ")}.`);
+  const label=()=>{ const n=sh.querySelectorAll("input[data-ix]:checked").length; const b=sh.querySelector('[data-act="add"]'); b.textContent=n?`Add ${n} item${n===1?"":"s"}`:"Nothing ticked"; b.disabled=!n; };
+  sh.innerHTML=`<h3>Found ${fresh.length} item${fresh.length===1?"":"s"}</h3>
+    <p class="muted small" style="margin:0 0 6px">Untick anything that's wrong. Items marked "not sure" start unticked.</p>
+    <div class="scanlist">${fresh.map((i,ix)=>`<label class="item"><input type="checkbox" data-act="tick" data-ix="${ix}" ${i.sure?"checked":""}>
+      <span class="lbl">${i.qty?`<span class="q">${esc(fmtQty(i.qty))}${i.unit?" "+esc(i.unit):""}</span> `:""}${esc(i.item)}${i.sure?"":` <span class="tag">not sure</span>`}<small>${esc(i.aisle)}</small></span></label>`).join("")}
+    ${already.length?`<p class="have">Already on your list: ${esc(already.map(i=>i.item).join(", "))}</p>`:""}</div>
+    <div class="row" style="margin-top:14px"><button class="btn primary" data-act="add"></button><button class="btn ghost" data-act="cancel">Cancel</button></div>`;
+  label();
+  sheetActions(sh,{ tick:label, cancel:closeSheet, add:async()=>{
+    const picked=[...sh.querySelectorAll("input[data-ix]:checked")].map(c=>fresh[+c.dataset.ix]); closeSheet();
+    let ok=true;
+    for(const i of picked){ const e={id:uid(), qty:i.qty, unit:i.unit, item:i.item, aisle:i.aisle, added:new Date().toISOString()};
+      state.pantry[e.id]=e; ok=await store.put("pantry",e.id,e)&&ok; }
+    renderPantry(); if(ok) toast(`Added ${picked.length} item${picked.length===1?"":"s"} to the pantry`);
+  } });
+}
+document.getElementById("pantryScan").onclick=scanPantry;
+
 function pantryText(){ return Object.values(state.pantry).map(i=>`${i.qty?fmtQty(i.qty)+(i.unit?" "+i.unit:"")+" ":""}${i.item}`).join(", "); }
 document.getElementById("pantryAddBtn").onclick=pantryAdd;
 document.getElementById("pantryAdd").addEventListener("keydown",e=>{ if(e.key==="Enter") pantryAdd(); });

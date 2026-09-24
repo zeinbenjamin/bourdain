@@ -132,8 +132,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v6"`
-in `public/sw.js` → `v7`, `v8`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v7"`
+in `public/sw.js` → `v8`, `v9`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -259,7 +259,8 @@ restoring it is adding the tab button back and changing `.tabs`
 
 Live features: link fetch and AI import with review screen, screen-recording
 frame extraction, recipe photos, AI cover illustrations (on request), drag-to-reorder ingredients in the edit form,
-0.5×–10× batch multiplier, week planner, pantry with "cook from what I have".
+0.5×–10× batch multiplier, week planner, pantry with "cook from what I have"
+and photo scanning.
 
 Ideas not yet built: nutrition estimates, pantry quantities decremented by
 cooking, a cooking mode with timers, restoring the shopping list, and
@@ -284,6 +285,19 @@ on the grey `--steel` tile and never cropped. That rule is what makes the dish
 look like it's floating. The API calls were written against the `openai` npm
 package's type definitions (v7.23.0), because OpenAI's docs are blocked from the
 dev sandbox. Tests use a fake OpenAI; the first real call happens on the NAS.
+
+## Pantry scan
+
+"Scan fridge or pantry" (`scanPantry` in `index.html`) sends up to `SCAN_MAX`
+(6) photos, shrunk by `forReading`, to Claude through `store.ask` with
+`SCAN_PROMPT`. There is no new server route, so errors come through `aiError`
+like imports. The reply `{items:[{item, qty, unit, aisle, sure}]}` is cleaned
+by `tidyScan`: lowercase, de-duplicated, aisle validated. It then goes to a
+review sheet. Items with `sure:false` start unticked. Items whose `itemKey`
+(crude singular form) matches something already in the pantry are listed as
+"already on your list" and are never added. A scan only ever adds; it never
+removes pantry items. Photos are not stored. As with imports, nothing is added
+without the review step.
 
 ## Known gaps
 
