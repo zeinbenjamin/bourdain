@@ -249,7 +249,12 @@ frame extraction, recipe photos, drag-to-reorder ingredients in the edit form,
 0.5×–10× batch multiplier, week planner, pantry with "cook from what I have".
 
 Ideas not yet built: nutrition estimates, pantry quantities decremented by
-cooking, a cooking mode with timers, restoring the shopping list.
+cooking, a cooking mode with timers, restoring the shopping list, and
+**AI cover illustrations**. Zein currently makes these by hand for each recipe:
+the recipe export goes into an image model to make a Studio Ghibli-inspired
+cover. Automating that needs a separate image-generation provider, because the
+Claude API reads images but doesn't generate them. That provider's key must
+live only on the server, like the Anthropic one.
 
 ## Known gaps
 
