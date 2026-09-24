@@ -6,6 +6,11 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 1.6.1 — 2026-09-24
+- You can now edit a recipe's description.
+- Tapping Save twice on a slow connection no longer saves the recipe twice. The button says "Saving…" until it's done.
+- Security update to the image library that processes your photos, fridge scans and covers.
+
 ## 1.6.0 — 2026-09-24
 - Photos you add while the server can't be reached are kept on your phone and shown straight away, then uploaded when it's back.
 - The "not synced" count in the header includes photos waiting to upload.

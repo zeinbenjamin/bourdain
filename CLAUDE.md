@@ -114,8 +114,10 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   Nothing in the tests calls a real API or needs a key.
 - Suites: `server` (headers, errors, codes, cover pipeline, sweep), `offline`
   (outbox and photo queue across server outages), `loading` (slow Wi-Fi, Stop,
-  version sheet), `covers` (cover UI, import errors, shrinking), `scan`,
-  `video`.
+  version sheet), `covers` (cover UI, import errors, shrinking), `review`
+  (edit form: description, double-tap Save), `scan`, `video`.
+- `slowProxy` delays: `shell` (index.html), `state` (`/api/state`), `write`
+  (PUT/DELETE).
 
 Timing checks (for example "shows in about 3s") have some slack but assume an
 unloaded machine.
@@ -165,8 +167,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v8"`
-in `public/sw.js` → `v9`, `v10`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v9"`
+in `public/sw.js` → `v10`, `v11`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
