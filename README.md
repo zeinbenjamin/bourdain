@@ -58,10 +58,9 @@ Keeping them as datasets rather than plain folders means snapshots and replicati
 
 ### 4. Install the app
 
-**Apps → Discover → ⋮ (top right) → Install via YAML**, then paste `docker-compose.yml` from this repo with three edits:
+**Apps → Discover → ⋮ (top right) → Install via YAML**, then paste `docker-compose.yml` from this repo with two edits:
 
-- `YOUR-GITHUB-USERNAME` → your username, lowercase
-- `YOUR-POOL` → your pool name
+- `YOUR-POOL` → your pool name (and the dataset paths, if yours are laid out differently)
 - `sk-ant-REPLACE-ME` → your key from [console.anthropic.com](https://console.anthropic.com)
 
 Name the app `bourdain` (lowercase, no spaces) and install. It'll be on `http://YOUR-NAS-IP:8080`.
@@ -148,4 +147,6 @@ That's real work, not a config flag. Fine to leave alone if it's just for you.
 
 **Photos won't upload on a phone** — almost always the HTTPS problem above.
 
-**Container restarts in a loop** — check the dataset paths exist and the container can write to them: `ls -la /mnt/YOUR-POOL/apps/bourdain/`.
+**Container restarts in a loop** — check the YAML has `user: "568:568"`, the dataset paths exist, and the `apps` user can write to them: `ls -la /mnt/YOUR-POOL/apps/bourdain/`.
+
+**Redeploy didn't pick up the new version** — the YAML needs `pull_policy: always`, otherwise Redeploy restarts the image already on the NAS. Check which commit is running with `sudo docker inspect bourdain --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'`.
