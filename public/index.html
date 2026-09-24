@@ -432,7 +432,7 @@ const store = {
     this.flush();
     window.addEventListener("online",()=>this.sync());
     document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") this.sync(); });
-    setInterval(()=>{ if(this.outbox.length||!this.fromServer) this.sync(); },30000);
+    setInterval(()=>{ if(this.outbox.length||photoQueue.pending||!this.fromServer) this.sync(); },30000);
   },
   /* Load everything from the server, then lay unsynced changes over it. */
   async reload(){
@@ -452,6 +452,7 @@ const store = {
   flush(){
     if(this.flushing) return this.flushing;
     this.flushing=(async()=>{
+      await photoQueue.flush(); // photos first, so recipes reach the server pointing at real photo ids
       while(this.outbox.length){
         const op=this.outbox[0];
         const path=`/api/${op.col}/${encodeURIComponent(op.id)}`;
@@ -475,10 +476,16 @@ const store = {
     if(await this.reload()){ this.paint(); if(!(state.view==="import"&&state.draft)) render(); } // don't wipe a half-edited form
   },
   /* Queue a write and try to send it. Resolves true once the server has it, false if it's waiting on this device. */
-  async write(col,id,doc,verb){
+  /* Queue a write without sending it. Used inside flush() itself (the photo queue
+     swapping ids), where awaiting flush() again would wait on itself forever. */
+  enqueue(col,id,doc){
     this.outbox=this.outbox.filter(o=>!(o.col===col&&o.id===id));
     const op={col,id,doc:doc==null?null:JSON.parse(JSON.stringify(doc))};
     this.outbox.push(op); this.saveOutbox(); this.local(); this.paint();
+    return op;
+  },
+  async write(col,id,doc,verb){
+    const op=this.enqueue(col,id,doc);
     const sending=this.flush();
     if(this.online) await sending; // when the server is already known to be down, don't make the user wait on it
     if(op.refused) return false;
@@ -490,7 +497,7 @@ const store = {
   del(col,id){ return this.write(col,id,null,"Removed"); },
   paint(){
     const el=document.getElementById("syncSub"); if(!el) return;
-    const n=this.outbox.length;
+    const n=this.outbox.length+photoQueue.pending;
     el.textContent = n ? `${n} change${n===1?"":"s"} not synced · ` : this.loading ? "Loading… · " : (!this.fromServer||!this.online) ? "Offline · " : "";
   },
   /* Claude, proxied by our server so the API key never reaches the browser */
@@ -506,7 +513,7 @@ const store = {
   async fetchUrl(url){ return api("/api/fetch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url})}); },
   async uploadPhoto(blob){
     const fd=new FormData(); fd.append("photo",blob,"photo.jpg");
-    return api("/api/photos",{method:"POST",body:fd});
+    return api("/api/photos",{method:"POST",body:fd,signal:timeout(30000)});
   },
 };
 function toBase64(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(",")[1]); r.onerror=()=>rej(new Error("read")); r.readAsDataURL(file); }); }
@@ -1153,15 +1160,71 @@ function shrink(file,max=1600){
       c.getContext("2d").drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(u); c.toBlob(b=>b?res(b):rej(new Error("encode")),"image/jpeg",.85); };
     img.onerror=()=>{ URL.revokeObjectURL(u); rej(new Error("decode")); }; img.src=u; });
 }
+/* Upload now if the server answers; otherwise keep the photo on this phone and
+   return a "local-…" id that photoQueue swaps for the real one later. */
 async function uploadPhotos(files){
-  const ids=[];
+  const ids=[]; let queued=0;
   for(const f of files){
-    try{ const blob=await shrink(f); const r=await store.uploadPhoto(blob); ids.push(r.id); }
-    catch(e){ console.warn(e); toast("Couldn't upload that photo"); }
+    let blob; try{ blob=await shrink(f); }catch(e){ console.warn(e); toast("Couldn't read that photo. Try a different one."); continue; }
+    if(store.online){
+      try{ ids.push((await store.uploadPhoto(blob)).id); continue; }
+      catch(e){
+        if(e&&(e.code==="image_failed"||(e.status>=400&&e.status<500))){ toast("The server couldn't use that photo. Try a different one."); continue; }
+        console.warn("photo upload failed, keeping it on this phone",e); store.online=false;
+      }
+    }
+    try{ ids.push(await photoQueue.add(blob)); queued++; }
+    catch(e){ console.warn(e); toast("Couldn't upload that photo, and this phone couldn't keep it for later."); }
   }
+  if(queued) toast(queued===1?"Photo saved on this phone. It'll upload when the server's back.":`${queued} photos saved on this phone. They'll upload when the server's back.`);
   return ids;
 }
-function photoUrl(id){ return "/api/photos/"+id; }
+function photoUrl(id){ return String(id).startsWith("local-") ? (photoQueue.urls[id]||"") : "/api/photos/"+id; }
+
+/* ---------- offline photo queue ----------
+   Photos taken while the server is unreachable wait in IndexedDB (localStorage is
+   far too small for images) under a "local-…" id, shown from a blob URL. store.flush()
+   uploads them first, then swaps the id in every recipe (and an open draft) via
+   store.enqueue, so the recipe write that follows carries the real id.        */
+const photoQueue={
+  urls:{}, dbp:null,
+  get count(){ return Object.keys(this.urls).length; },
+  get pending(){ return Object.keys(this.urls).filter(id=>this.used(id)).length; }, // left-behind draft photos don't count as unsynced
+  open(){
+    return this.dbp ||= new Promise((res,rej)=>{
+      if(!self.indexedDB) return rej(new Error("IndexedDB not available"));
+      const q=indexedDB.open("bourdain-photos",1);
+      q.onupgradeneeded=()=>q.result.createObjectStore("photos",{keyPath:"id"});
+      q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error);
+    });
+  },
+  async run(mode,fn){ const db=await this.open(); return new Promise((res,rej)=>{ const t=db.transaction("photos",mode); const q=fn(t.objectStore("photos")); t.oncomplete=()=>res(q&&q.result); t.onerror=()=>rej(t.error); }); },
+  all(){ return this.run("readonly",st=>st.getAll()); },
+  async init(){ try{ for(const r of await this.all()) this.urls[r.id]=URL.createObjectURL(r.blob); }catch(e){ console.warn("photo queue unavailable",e); } },
+  async add(blob){ const id="local-"+uid(); await this.run("readwrite",st=>st.put({id,blob,added:Date.now()})); this.urls[id]=URL.createObjectURL(blob); store.paint(); return id; },
+  async drop(id){ await this.run("readwrite",st=>st.delete(id)); delete this.urls[id]; store.paint(); },
+  used(id){ return (state.draft&&(state.draft.photos||[]).includes(id)) || Object.values(state.recipes).some(r=>(r.photos||[]).includes(id)); },
+  swap(from,to){ // to=null removes the photo
+    const fix=list=>to?list.map(p=>p===from?to:p):list.filter(p=>p!==from);
+    for(const [rid,r] of Object.entries(state.recipes)) if((r.photos||[]).includes(from)){ r.photos=fix(r.photos); store.enqueue("recipes",rid,r); }
+    if(state.draft&&(state.draft.photos||[]).includes(from)) state.draft.photos=fix(state.draft.photos);
+  },
+  async flush(){
+    if(!this.count) return;
+    let rows; try{ rows=await this.all(); }catch(e){ return; }
+    let changed=false;
+    for(const r of rows){
+      if(!this.used(r.id)){ if(Date.now()-r.added>600000) await this.drop(r.id); continue; } // left behind by a discarded draft
+      try{ const out=await store.uploadPhoto(r.blob); this.swap(r.id,out.id); await this.drop(r.id); changed=true; }
+      catch(e){
+        if(e&&(e.code==="image_failed"||(e.status>=400&&e.status<500))){ this.swap(r.id,null); await this.drop(r.id); changed=true; toast("The server couldn't use one of the saved photos, so it was removed."); }
+        else { store.online=false; return; } // still unreachable: keep the rest for next time
+      }
+    }
+    // Blob URLs stay valid until reload, so nothing on screen breaks; re-render so new ids are used.
+    if(changed && !(state.view==="import"&&state.draft)) render();
+  },
+};
 function coverUrl(id){ return "/api/covers/"+id; }
 
 /* Covers: the server has Claude describe the dish and OpenAI paint it. Takes up to
@@ -1316,6 +1379,7 @@ async function checkForUpdate(){
 navigator.serviceWorker?.register?.("/sw.js").catch(()=>{});
 
 (async()=>{
+  await photoQueue.init(); // before the first render, so photos kept on this phone show
   store.loadLocal();
   render();
   await store.init();

@@ -4,7 +4,7 @@ import Database from "better-sqlite3";
 import sharp from "sharp";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, existsSync, createReadStream, readFileSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { writeFile, readdir, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -316,6 +316,36 @@ app.post("/api/cover", async (req, res) => {
   }
 });
 
+/* Old covers are swept, not deleted inline: a cover can be referenced by a draft
+   that isn't saved yet, or by a save still waiting in a phone's offline queue.
+   So only a .webp no recipe points at AND older than the grace period goes.
+   Photos (.jpg) are the user's own and are never touched.                     */
+const COVER_GRACE_DAYS = Number(process.env.COVER_GRACE_DAYS || 7);
+async function sweepCovers() {
+  const used = new Set();
+  let rows = 0;
+  for (const r of db.prepare("SELECT id, doc FROM recipes").all()) {
+    rows++;
+    try { const c = JSON.parse(r.doc).cover; if (c) used.add(c); }
+    catch { console.warn(`cover sweep skipped: recipe ${r.id} can't be read, so its cover can't be ruled out`); return { skipped: "corrupt_row" }; }
+  }
+  if (!rows) { console.warn("cover sweep skipped: no recipes in the database"); return { skipped: "no_recipes" }; }
+  const cutoff = Date.now() - COVER_GRACE_DAYS * 86_400_000;
+  let removed = 0, kept = 0;
+  for (const f of await readdir(PHOTO_DIR)) {
+    const m = f.match(/^([a-f0-9]{32})\.webp$/);
+    if (!m || used.has(m[1])) continue;
+    const file = path.join(PHOTO_DIR, f);
+    try {
+      if ((await stat(file)).mtimeMs > cutoff) { kept++; continue; }
+      await unlink(file); removed++;
+    } catch (err) { console.warn("cover sweep: couldn't remove", f, err.message); }
+  }
+  if (removed || kept) console.log(`cover sweep: removed ${removed} unused cover${removed === 1 ? "" : "s"}, kept ${kept} newer than ${COVER_GRACE_DAYS} days`);
+  return { removed, kept };
+}
+const runSweep = () => sweepCovers().catch((err) => console.error("cover sweep failed", err));
+
 app.get("/api/covers/:id", (req, res) => {
   if (!/^[a-f0-9]{32}$/.test(req.params.id)) return res.status(400).end();
   const file = path.join(PHOTO_DIR, `${req.params.id}.webp`);
@@ -480,6 +510,9 @@ app.use((err, req, res, _next) => {
 });
 
 process.on("unhandledRejection", (err) => console.error("unhandled rejection", err));
+
+runSweep();
+setInterval(runSweep, 86_400_000).unref();
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Bourdain ${VERSION} (${COMMIT}) on :${PORT}  data=${DATA_DIR}  key=${API_KEY ? "set" : "MISSING"}  images=${OPENAI_KEY ? IMAGE_MODEL + "/" + IMAGE_QUALITY : "no OpenAI key"}`);
