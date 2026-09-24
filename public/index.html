@@ -236,6 +236,12 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .hero{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:0;display:block;margin:12px 0 4px;background:var(--steel)}
 .photos .ph,.photos .add{border-radius:var(--r)}
 .rcard .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+/* Covers are illustrations on a transparent background: show them whole, on the page's own white, never on a grey tile */
+.rcard .thumb.cover{background:var(--paper)}
+.rcard .thumb.cover img{object-fit:contain}
+.hero.cover{aspect-ratio:1/1;object-fit:contain;background:var(--paper);max-width:420px;margin:8px auto 0}
+.coverbox{display:flex;align-items:center;gap:12px;margin:6px 0 4px}
+.coverbox img{width:112px;height:112px;object-fit:contain;background:var(--paper);border:1px solid var(--line);border-radius:var(--r)}
 /* Reorder */
 .ing.reorder li{cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none;grid-template-columns:24px 78px 1fr;background:var(--card);border-radius:8px;border:1px solid var(--line);margin-bottom:4px;padding:8px 8px}
 .ing.reorder li .h{color:var(--ink-3);font-size:18px;line-height:1;text-align:center}
@@ -390,7 +396,7 @@ const API = "";
 async function api(path, opts={}){
   const res = await fetch(API+path, opts);
   if(!res.ok){ let e; try{ e=await res.json(); }catch(_){ e={}; }
-    const err=new Error(e.error||res.statusText); err.code=e.code||("http_"+res.status); err.status=res.status; throw err; }
+    const err=new Error(e.error||res.statusText); err.code=e.code||("http_"+res.status); err.status=res.status; err.detail=e.detail; throw err; }
   return res.status===204? null : res.json();
 }
 const timeout=ms=>AbortSignal.timeout?AbortSignal.timeout(ms):undefined;
@@ -521,7 +527,7 @@ function fmtQty(q){ if(q==null||q==="") return ""; const n=Number(q); if(!isFini
   const fr={0.25:"¼",0.5:"½",0.75:"¾",0.33:"⅓",0.67:"⅔"}; const w=Math.floor(n), f=+(n-w).toFixed(2);
   const fs = fr[f]||""; if(fs) return (w?w:"")+fs; return String(+n.toFixed(2)); }
 function weekLabel(m){ const s=addDays(m,6); return `${m.getDate()} ${MONTHS[m.getMonth()]} – ${s.getDate()} ${MONTHS[s.getMonth()]}`; }
-function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"),2200); }
+function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"),Math.max(2200,msg.length*60)); } // long messages stay up long enough to read
 function hostOf(u){ try{ return new URL(u).hostname.replace(/^www\./,""); }catch(e){ return ""; } }
 function sourceType(u){ const h=hostOf(u); if(/instagram/.test(h))return "instagram"; if(/tiktok/.test(h))return "tiktok"; if(/youtu/.test(h))return "youtube"; if(h)return "web"; return "manual"; }
 
@@ -572,7 +578,8 @@ function renderRecipes(){
     const t=(r.prep_min||0)+(r.cook_min||0);
     const meta=[t?`${t} min`:null, r.servings?`${r.servings} serves`:null, r.source_type&&r.source_type!=="manual"?r.source_type:null].filter(Boolean).join(" · ");
     return `<button class="rcard" data-id="${id}">
-      <div class="thumb">${r.photos&&r.photos.length?`<img src="${photoUrl(r.photos[0])}" alt="">`:esc((r.title||"?").trim()[0]||"?").toUpperCase()}</div>
+      ${r.cover?`<div class="thumb cover"><img src="${coverUrl(r.cover)}" alt=""></div>`
+        :`<div class="thumb">${r.photos&&r.photos.length?`<img src="${photoUrl(r.photos[0])}" alt="">`:esc((r.title||"?").trim()[0]||"?").toUpperCase()}</div>`}
       <div class="body"><h3>${esc(r.title)}</h3><div class="meta">${esc(meta)}</div>
       <div class="tags">${(r.tags||[]).slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div></div></button>`;
   }).join("");
@@ -596,9 +603,9 @@ function renderDetail(){
     ${r.source_url?`<div class="source muted"><a href="${esc(r.source_url)}" target="_blank" rel="noopener">${esc(hostOf(r.source_url)||r.source_url)}</a></div>`:""}
     ${r.description?`<p class="muted">${esc(r.description)}</p>`:""}
     <div class="tags" style="margin-top:8px;display:flex;gap:4px;flex-wrap:wrap">${(r.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>
-    ${r.photos&&r.photos.length?`<img class="hero" src="${photoUrl(r.photos[0])}" alt="">`:""}
-    ${r.photos&&r.photos.length>1?photosHtml(r.photos.slice(1),false):""}
-    <div class="actions"><button class="btn primary" id="addPlan">Add to the week</button><button class="btn" id="addPhoto">Add photo</button></div>
+    ${r.cover?`<img class="hero cover" src="${coverUrl(r.cover)}" alt="">`:r.photos&&r.photos.length?`<img class="hero" src="${photoUrl(r.photos[0])}" alt="">`:""}
+    ${r.cover ? (r.photos&&r.photos.length?photosHtml(r.photos,false):"") : (r.photos&&r.photos.length>1?photosHtml(r.photos.slice(1),false):"")}
+    <div class="actions"><button class="btn primary" id="addPlan">Add to the week</button><button class="btn" id="addPhoto">Add photo</button><button class="btn" id="makeCover">${r.cover?"New cover":"Make cover"}</button></div>
     <h3>Ingredients</h3>
     <div class="scaler"><span class="lab">Batch</span>
       <span class="ctl"><button id="multDown" aria-label="Smaller batch">−</button><span class="amt" id="multAmt"></span><button id="multUp" aria-label="Bigger batch">+</button></span>
@@ -639,6 +646,8 @@ function renderDetail(){
     } });
   };
   el.querySelector("#addPlan").onclick=()=>pickDay(state.detailId);
+  const rid=state.detailId;
+  el.querySelector("#makeCover").onclick=()=>makeCover(r, id=>applyCover(rid,id));
   const ap=el.querySelector("#addPhoto"); if(ap) ap.onclick=async()=>{ const files=await pickPhotos(); if(!files.length) return; toast("Uploading…"); const ids=await uploadPhotos(files); if(!ids.length) return; r.photos=[...(r.photos||[]),...ids]; r.updated_at=new Date().toISOString(); await store.put("recipes",state.detailId,r); renderDetail(); };
 }
 
@@ -689,6 +698,7 @@ document.getElementById("nextWeek").onclick=()=>{ state.week=addDays(state.week,
 function openSheet(html){
   const old=document.getElementById("sheet"); const s=old.cloneNode(false); // drops every handler attached to the previous sheet
   old.replaceWith(s); s.innerHTML=html; s.classList.add("open"); document.getElementById("sheetBg").classList.add("open");
+  document.getElementById("toast").classList.remove("show"); // a leftover toast would sit on top of the sheet
   s.addEventListener("click",e=>{ const b=e.target.closest("[data-act]"); if(!b||!s._acts) return; const fn=s._acts[b.dataset.act]; if(fn) fn(b,e); });
   return s;
 }
@@ -839,8 +849,8 @@ Assume salt, pepper, cooking oil and water are always on hand. Suggest 3 differe
 Reply with ONLY a JSON array of 3 objects: {"title": string, "why": string (one sentence on what it is and why it fits what I have), "missing": [string] (extra items I'd need to buy, empty array if none)}`);
     state.ideas=Array.isArray(ideas)?ideas.slice(0,3):[]; renderIdeas();
   }catch(e){
-    const c=e&&e.code; box.innerHTML="";
-    toast(c==="no_api_key"?"No API key set on the server":c==="rate_limited"?"Too many requests, try in a minute":"Couldn't come up with ideas, try again");
+    box.innerHTML="";
+    toast(aiError(e,"coming up with ideas"));
   } finally { btn.disabled=false; }
 };
 async function writeRecipe(idea,btn){
@@ -851,7 +861,43 @@ async function writeRecipe(idea,btn){
     if(!data||!data.title) throw {code:"empty_completion"};
     state.draft=normalise(data,""); state.draft.photos=[]; state.editingId=null; state.ideas=null;
     show("import"); document.getElementById("main").scrollTop=0;
-  }catch(e){ btn.disabled=false; btn.textContent=old; const c=e&&e.code; toast(c==="rate_limited"?"Too many requests, try in a minute":"Couldn't write that one, try again"); }
+  }catch(e){ btn.disabled=false; btn.textContent=old; toast(aiError(e,"writing that one")); }
+}
+
+/* ---------- AI error messages ----------
+   One place that turns a server error code into something specific to do next.
+   Codes come from callClaude / paintCover in server.js.                      */
+function aiError(e, what="reading that"){
+  const c=e&&e.code, d=e&&e.detail?` (${e.detail})`:"";
+  const m={
+    no_api_key:"No Anthropic API key is set on the server. Add ANTHROPIC_API_KEY to the TrueNAS app and redeploy.",
+    bad_api_key:"The server's Anthropic API key was rejected. Check ANTHROPIC_API_KEY in the TrueNAS app.",
+    no_credit:"The Anthropic account is out of credit. Top it up at console.anthropic.com, then try again.",
+    model_unavailable:`The Claude model set on the server isn't available${d}. Change CLAUDE_MODEL in the TrueNAS app.`,
+    rate_limited:"Too many requests right now. Give it a minute and try again.",
+    overloaded:"Claude is overloaded right now. Try again in a few minutes.",
+    upstream_timeout:"Claude took too long to answer. Try again, or send less at once.",
+    upstream_unreachable:"The server couldn't reach Claude. Check the NAS is online, then try again.",
+    image_rejected:`Claude couldn't accept one of the images${d}. Remove it or use a different screenshot.`,
+    upstream_rejected:`Claude rejected the request${d}.`,
+    too_large:"That's too much to send at once. Use fewer screenshots, or paste just the recipe part.",
+    truncated:"That was too long to finish in one reply. Paste just the recipe part, or use fewer screenshots.",
+    refused:"Claude declined that one. Try different text or screenshots.",
+    invalid_json:"The reply wasn't clean JSON. Try again, it usually works the second time.",
+    no_image_key:"Covers need an OpenAI API key. Add OPENAI_API_KEY to the TrueNAS app and redeploy.",
+    bad_image_key:"The server's OpenAI API key was rejected. Check OPENAI_API_KEY in the TrueNAS app.",
+    no_image_credit:"The OpenAI account is out of credit or quota. Check billing at platform.openai.com.",
+    image_rate_limited:"OpenAI is limiting requests right now. Try again in a minute.",
+    image_refused:`The image model declined that prompt${d}. Try again, or the cover style may need rewording.`,
+    image_request_rejected:`OpenAI rejected the request${d}.`,
+    image_timeout:"The image took too long to paint. Try again.",
+    image_unreachable:"The server couldn't reach OpenAI. Check the NAS is online, then try again.",
+    image_failed:"The image model didn't send a picture back. Try again.",
+    image_upstream_error:"OpenAI had a problem. Try again in a few minutes.",
+  };
+  if(m[c]) return m[c];
+  if(!e||!e.status) return "Couldn't reach the server. Check you're on home Wi-Fi, then try again.";
+  return `Something went wrong ${what}. Try again.`;
 }
 
 /* ---------- import ---------- */
@@ -891,16 +937,25 @@ document.getElementById("srcImgs").addEventListener("change",async e=>{
         const room=Math.max(0,state.imgMax-state.images.length);
         if(!room){ status.className="status err"; status.textContent=`Already at ${state.imgMax} images. Remove one first.`; continue; }
         const sheets=await videoToSheets(f,room,p=>{ status.innerHTML=`<span class="spin"></span>Pulling frames… ${p}%`; });
-        state.images=[...state.images,...sheets];
+        for(const sh of sheets) state.images.push(await forReading(sh));
         status.textContent=`Got ${sheets.length} sheet${sheets.length===1?"":"s"} of frames from the video.`;
       }catch(err){ console.warn(err); status.className="status err"; status.textContent="Couldn't read that video. Try a shorter recording, or take screenshots instead."; }
     } else if(f.type.startsWith("image/")){
-      if(state.images.length<state.imgMax) state.images.push(f);
+      if(state.images.length<state.imgMax) state.images.push(await forReading(f));
+      else { status.className="status err"; status.textContent=`Only ${state.imgMax} images go to the reader. Remove one to add another.`; }
     }
   }
   renderThumbs();
 });
 document.getElementById("thumbs").onclick=e=>{ const b=e.target.closest("[data-rmi]"); if(!b) return; state.images.splice(+b.dataset.rmi,1); renderThumbs(); };
+
+/* Screenshots straight off a phone can be several MB each, which makes the upload
+   slow and can go over the API's per-image limit. 1568px on the long edge is plenty
+   for reading text. If shrinking fails for any reason, send the original. */
+async function forReading(file){
+  try{ const b=await shrink(file,1568); return b.size<file.size ? b : file; }
+  catch(e){ console.warn("couldn't shrink image, sending original",e); return file; }
+}
 
 /* Screen recording -> contact sheets of distinct frames (all on-device) */
 function videoToSheets(file,maxSheets,onProgress){
@@ -910,18 +965,25 @@ function videoToSheets(file,maxSheets,onProgress){
     const url=URL.createObjectURL(file); v.src=url;
     const fail=e=>{ URL.revokeObjectURL(url); reject(e||new Error("video")); };
     v.onerror=()=>fail();
+    let loaded=false; setTimeout(()=>{ if(!loaded) fail(new Error("video never loaded")); },20000);
     v.onloadedmetadata=async()=>{
+      loaded=true;
       try{
         const dur=v.duration; if(!isFinite(dur)||dur<=0) return fail();
         const W=v.videoWidth||720, H=v.videoHeight||1280;
         const fw=540, fh=Math.round(fw*H/W);
         const full=document.createElement("canvas"); full.width=fw; full.height=fh; const fc=full.getContext("2d");
         const tiny=document.createElement("canvas"); tiny.width=48; tiny.height=Math.max(1,Math.round(48*H/W)); const tc=tiny.getContext("2d");
-        const seek=t=>new Promise(res=>{ const done=()=>{ v.removeEventListener("seeked",done); res(); }; v.addEventListener("seeked",done); v.currentTime=Math.min(t,dur-0.05); });
+        // Some iOS recordings never fire "seeked" for certain times; give each seek 3s, then move on.
+        let stuck=0;
+        const seek=t=>new Promise(res=>{ const done=ok=>{ clearTimeout(tm); v.removeEventListener("seeked",onSeeked); if(!ok) stuck++; res(); };
+          const onSeeked=()=>done(true); const tm=setTimeout(()=>done(false),3000);
+          v.addEventListener("seeked",onSeeked); v.currentTime=Math.min(t,dur-0.05); });
         const steps=Math.min(90,Math.max(12,Math.round(dur*2)));
         const kept=[]; let last=null;
         for(let i=0;i<steps;i++){
           await seek(dur*i/steps);
+          if(stuck>=5) throw new Error("video seeking stalled"); // this recording won't seek; stop rather than crawl
           tc.drawImage(v,0,0,tiny.width,tiny.height);
           const px=tc.getImageData(0,0,tiny.width,tiny.height).data;
           let diff=0; if(last){ for(let k=0;k<px.length;k+=4) diff+=Math.abs(px[k]-last[k])+Math.abs(px[k+1]-last[k+1])+Math.abs(px[k+2]-last[k+2]); diff/= (px.length/4)*3; }
@@ -1002,12 +1064,7 @@ async function runParse(){
     btn.disabled=false;
     if(e&&e.name==="AbortError"){ status.className="status"; status.textContent="Stopped. Nothing was imported."; return; }
     status.className="status err";
-    const c=e&&e.code;
-    if(c==="no_api_key") status.textContent="No Anthropic API key is set on the server. Add ANTHROPIC_API_KEY and restart it.";
-    else if(c==="rate_limited") status.textContent="Too many requests right now. Give it a minute and try again.";
-    else if(c==="invalid_json") status.textContent="The reply wasn't clean JSON. Try again, it usually works the second time.";
-    else if(c==="too_large") status.textContent="That's too much to send at once. Use fewer or smaller screenshots, or paste just the recipe part.";
-    else status.textContent="Something went wrong reading that. Try again.";
+    status.textContent=aiError(e,"reading that");
   }
 }
 function normalise(d,url){
@@ -1035,6 +1092,42 @@ async function uploadPhotos(files){
   return ids;
 }
 function photoUrl(id){ return "/api/photos/"+id; }
+function coverUrl(id){ return "/api/covers/"+id; }
+
+/* Covers: the server has Claude describe the dish and OpenAI paint it. Takes up to
+   a minute, so it runs in a sheet with Stop. Closing the sheet lets it finish in
+   the background; onDone still receives the new cover id. */
+async function makeCover(recipe, onDone){
+  if(!recipe.title){ toast("Give the recipe a title first, so there's something to paint."); return; }
+  if(!store.online){ toast("Covers are painted on the server. Try again when you're back on home Wi-Fi."); return; }
+  const ctl=new AbortController();
+  const sh=openSheet(`<h3>Painting the cover</h3>
+    <p class="status" id="coverStatus"><span class="spin"></span>Describing the dish, then painting it. This can take up to a minute.</p>
+    <div class="row" style="margin-top:12px"><button class="btn ghost" data-act="stop">Stop</button></div>`);
+  sheetActions(sh,{ stop:()=>{ ctl.abort(); closeSheet(); toast("Stopped. No cover was made."); } });
+  const mine=()=>sh.isConnected&&sh.classList.contains("open"); // our sheet is still the one on screen
+  const input={ title:recipe.title, description:recipe.description||"", steps:recipe.steps||[],
+    ingredients:(recipe.ingredients||[]).map(i=>({item:i.item, raw_text:i.raw_text})) };
+  try{
+    const out=await api("/api/cover",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({recipe:input}),signal:ctl.signal});
+    if(mine()) closeSheet();
+    await onDone(out.id);
+  }catch(e){
+    if(e&&e.name==="AbortError") return;
+    console.warn("cover failed",e);
+    const msg=aiError(e,"painting the cover");
+    if(mine()){ sh.querySelector("h3").textContent="Couldn't make the cover"; const st=sh.querySelector("#coverStatus"); st.className="status err"; st.textContent=msg;
+      sh.querySelector('[data-act="stop"]').textContent="Close"; sheetActions(sh,{ stop:closeSheet }); }
+    else toast(msg);
+  }
+}
+async function applyCover(recipeId,coverId){
+  const r=state.recipes[recipeId]; if(!r) return;
+  r.cover=coverId; r.updated_at=new Date().toISOString();
+  if(await store.put("recipes",recipeId,r)) toast("Cover added");
+  if(state.view==="detail"&&state.detailId===recipeId) renderDetail();
+  else if(state.view==="recipes") renderRecipes();
+}
 function pickPhotos(){ return new Promise(res=>{ const i=document.createElement("input"); i.type="file"; i.accept="image/*"; i.multiple=true; i.onchange=()=>res([...i.files]); i.click(); }); }
 function photosHtml(ids,editable){
   return `<div class="photos">${(ids||[]).map(id=>`<div class="ph"><img src="${photoUrl(id)}" alt="">${editable?`<button class="x" data-rmp="${id}" aria-label="Remove photo">×</button>`:""}</div>`).join("")}${editable?`<button class="add" data-addp>+ Photo</button>`:""}</div>`;
@@ -1058,6 +1151,9 @@ function renderReview(){
     </div>
     <div class="field"><label>Source link</label><input class="input" id="fUrl" value="${esc(d.source_url||"")}"></div>
     <div class="field"><label>Tags (comma separated)</label><input class="input" id="fTags" value="${esc((d.tags||[]).join(", "))}"></div>
+    <h3>Cover</h3>
+    <div class="coverbox">${d.cover?`<img src="${coverUrl(d.cover)}" alt="Cover">`:""}
+      <div class="row"><button class="btn small" id="revCover">${d.cover?"New cover":"Make cover"}</button>${d.cover?`<button class="btn small ghost" id="revCoverRm">Remove</button>`:""}</div></div>
     <h3>Photos</h3>
     <div id="revPhotos">${photosHtml(d.photos,true)}</div>
     <h3>Ingredients</h3>
@@ -1087,6 +1183,12 @@ function renderReview(){
       tags:el.querySelector("#fTags").value.split(",").map(t=>t.trim().toLowerCase()).filter(Boolean),
       ingredients:rows, steps:el.querySelector("#fSteps").value.split("\n").map(s=>s.trim()).filter(Boolean), notes:el.querySelector("#fNotes").value.trim()};
   };
+  state.reviewCollect=collect; // the cover can finish after a re-render; it must fold into the latest form
+  el.querySelector("#revCover").onclick=()=>makeCover(collect(), id=>{
+    if(state.draft){ state.draft=state.reviewCollect(); state.draft.cover=id; renderReview(); toast("Cover added"); }
+    else if(state.lastSavedId) applyCover(state.lastSavedId,id); // saved while it was painting
+  });
+  const rmc=el.querySelector("#revCoverRm"); if(rmc) rmc.onclick=()=>{ state.draft=collect(); delete state.draft.cover; renderReview(); };
   el.querySelector("#revPhotos").onclick=async e=>{
     const rm=e.target.closest("[data-rmp]"); if(rm){ state.draft=collect(); state.draft.photos=(state.draft.photos||[]).filter(x=>x!==rm.dataset.rmp); renderReview(); return; }
     if(e.target.closest("[data-addp]")){ const files=await pickPhotos(); if(!files.length) return; state.draft=collect(); toast("Uploading…"); const ids=await uploadPhotos(files); state.draft.photos=[...(state.draft.photos||[]),...ids]; renderReview(); }
@@ -1105,7 +1207,7 @@ function renderReview(){
   const save=async()=>{
     const r=collect(); if(!r.title){ toast("Give it a title first"); el.querySelector("#fTitle").focus(); return; }
     const id=state.editingId||uid(); r.created_at=state.editingId? (state.recipes[id]?.created_at||new Date().toISOString()) : new Date().toISOString(); r.updated_at=new Date().toISOString();
-    state.recipes[id]=r; const ok=await store.put("recipes",id,r);
+    state.recipes[id]=r; state.lastSavedId=id; const ok=await store.put("recipes",id,r);
     state.draft=null; state.editingId=null; state.images=[]; document.getElementById("srcText").value=""; document.getElementById("srcUrl").value="";
     if(ok) toast("Saved"); state.detailId=id; show("detail");
   };

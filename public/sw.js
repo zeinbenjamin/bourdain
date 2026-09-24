@@ -1,6 +1,6 @@
 // Caches the shell so the app opens without a connection.
 // API calls always go to the network: recipe data must never be served stale.
-const CACHE = "bourdain-v5";
+const CACHE = "bourdain-v6";
 const SLOW_MS = 3000; // how long to wait for the network before using the cached app
 const SHELL = ["/", "/index.html", "/manifest.webmanifest", "/icon.svg"];
 
@@ -20,8 +20,8 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== location.origin) return;
 
-  // Photos are immutable once written: cache them on first read.
-  if (url.pathname.startsWith("/api/photos/")) {
+  // Photos and covers are immutable once written: cache them on first read.
+  if (url.pathname.startsWith("/api/photos/") || url.pathname.startsWith("/api/covers/")) {
     e.respondWith(
       caches.open(CACHE).then(async (c) => {
         const hit = await c.match(e.request);

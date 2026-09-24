@@ -13,8 +13,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 8080;
 const DATA_DIR = process.env.DATA_DIR || "/data";
 const PHOTO_DIR = path.join(DATA_DIR, "photos");
-const API_KEY = process.env.ANTHROPIC_API_KEY || "";
+// A key still set to the compose file's placeholder counts as missing, so the app says "no key" rather than "key rejected".
+const realKey = (k) => (k && !/REPLACE-ME/.test(k) ? k : "");
+const API_KEY = realKey(process.env.ANTHROPIC_API_KEY);
 const MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-4-6";
+const OPENAI_KEY = realKey(process.env.OPENAI_API_KEY);
+const IMAGE_MODEL = process.env.IMAGE_MODEL || "gpt-image-2";
+const IMAGE_QUALITY = process.env.IMAGE_QUALITY || "medium";
 
 mkdirSync(PHOTO_DIR, { recursive: true });
 
@@ -69,7 +74,7 @@ app.use(express.json({ limit: "30mb" }));
 app.disable("x-powered-by");
 
 app.get("/api/health", (_req, res) =>
-  res.json({ ok: true, hasApiKey: Boolean(API_KEY), version: VERSION, commit: COMMIT })
+  res.json({ ok: true, hasApiKey: Boolean(API_KEY), hasImageKey: Boolean(OPENAI_KEY), version: VERSION, commit: COMMIT })
 );
 
 app.get("/api/version", (_req, res) => res.json({ version: VERSION, commit: COMMIT, changelog: CHANGELOG }));
@@ -133,45 +138,72 @@ app.get("/api/photos/:id", (req, res) => {
     .pipe(res);
 });
 
-/* ---------------- Claude proxy ----------------
+/* ---------------- upstream calls ----------------
+   Every failure from Claude or OpenAI becomes an UpstreamError with a code the
+   client turns into a specific message; retrying only helps for some of them. */
+class UpstreamError extends Error {
+  constructor(status, code, message, detail) { super(message); this.status = status; this.code = code; this.detail = detail; }
+}
+const send = (res, err) => res.status(err.status).json({ error: err.message, code: err.code, ...(err.detail ? { detail: err.detail } : {}) });
+
+// Aborts when the phone stops waiting (Stop button, dropped connection) or after `ms`.
+function upstreamSignal(res, ms) {
+  const client = new AbortController();
+  res.on("close", () => { if (!res.writableFinished) client.abort(); });
+  const timeout = AbortSignal.timeout(ms);
+  return { signal: AbortSignal.any([client.signal, timeout]), clientGone: () => client.signal.aborted, timedOut: () => timeout.aborted };
+}
+
+/* ---------------- Claude ----------------
    The API key lives here and never reaches the browser.               */
+async function callClaude({ content, maxTokens = 16000, up, who = "claude" }) {
+  if (!API_KEY) throw new UpstreamError(503, "no_api_key", "no Anthropic API key configured");
+  let r;
+  try {
+    r = await fetch("https://api.anthropic.com/v1/messages", {
+      signal: up.signal,
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": API_KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, messages: [{ role: "user", content }] }),
+    });
+  } catch (err) {
+    if (up.clientGone()) throw err;
+    if (up.timedOut()) throw new UpstreamError(504, "upstream_timeout", "Claude took too long to answer");
+    console.error(`${who}: could not reach Anthropic`, err.message);
+    throw new UpstreamError(502, "upstream_unreachable", "could not reach the Anthropic API");
+  }
+  if (!r.ok) {
+    const body = await r.text();
+    let msg = ""; try { msg = JSON.parse(body).error?.message || ""; } catch {}
+    console.error(`${who}: anthropic ${r.status}`, body.slice(0, 500));
+    if (r.status === 401 || r.status === 403) throw new UpstreamError(502, "bad_api_key", "the Anthropic API key was rejected");
+    if (r.status === 404) throw new UpstreamError(502, "model_unavailable", `model ${MODEL} is not available`, MODEL);
+    if (r.status === 413) throw new UpstreamError(413, "too_large", "request too large for the Anthropic API");
+    if (r.status === 429) throw new UpstreamError(429, "rate_limited", "rate limited");
+    if (r.status === 529 || r.status === 503) throw new UpstreamError(503, "overloaded", "Claude is overloaded");
+    if (r.status === 400 && /credit balance/i.test(msg)) throw new UpstreamError(402, "no_credit", "the Anthropic account is out of credit");
+    if (r.status === 400 && /image/i.test(msg)) throw new UpstreamError(422, "image_rejected", "an image was rejected", msg.slice(0, 200));
+    if (r.status === 400) throw new UpstreamError(422, "upstream_rejected", "the Anthropic API rejected the request", msg.slice(0, 200));
+    throw new UpstreamError(502, "upstream_error", "the Anthropic API returned an error");
+  }
+  const data = await r.json();
+  if (data.stop_reason === "refusal") throw new UpstreamError(422, "refused", "Claude declined the request");
+  if (data.stop_reason === "max_tokens") throw new UpstreamError(422, "truncated", "Claude's reply was cut off before it finished");
+  return (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
+}
+
 app.post("/api/claude", async (req, res) => {
-  if (!API_KEY) return res.status(503).json({ error: "no API key configured", code: "no_api_key" });
   const { prompt, images } = req.body || {};
   if (!prompt) return res.status(400).json({ error: "no prompt", code: "no_prompt" });
-
   const content = [];
   for (const img of images || []) {
     content.push({ type: "image", source: { type: "base64", media_type: img.media_type || "image/jpeg", data: img.data } });
   }
   content.push({ type: "text", text: prompt });
 
-  // If the phone stops waiting (the Stop button, or a dropped connection), cancel the
-  // upstream call too rather than finishing a recipe nobody will see.
-  const upstream = new AbortController();
-  res.on("close", () => { if (!res.writableFinished) upstream.abort(); });
-
+  const up = upstreamSignal(res, 120_000);
   try {
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
-      signal: upstream.signal,
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({ model: MODEL, max_tokens: 4000, messages: [{ role: "user", content }] }),
-    });
-
-    if (r.status === 429) return res.status(429).json({ error: "rate limited", code: "rate_limited" });
-    if (!r.ok) {
-      const detail = await r.text();
-      console.error("anthropic error", r.status, detail.slice(0, 500));
-      return res.status(502).json({ error: "upstream error", code: "upstream_error" });
-    }
-
-    const data = await r.json();
-    const text = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
+    const text = await callClaude({ content, up });
     const cleaned = text.replace(/^\s*```(?:json)?/i, "").replace(/```\s*$/, "").trim();
     try {
       return res.json({ json: JSON.parse(cleaned), raw: text });
@@ -182,10 +214,116 @@ app.post("/api/claude", async (req, res) => {
       return res.status(422).json({ error: "model did not return JSON", code: "invalid_json", raw: text.slice(0, 500) });
     }
   } catch (err) {
-    if (upstream.signal.aborted) return console.log("claude call cancelled: the client stopped waiting");
+    if (up.clientGone()) return console.log("claude call cancelled: the client stopped waiting");
+    if (err instanceof UpstreamError) return send(res, err);
     console.error("claude call failed", err);
-    res.status(502).json({ error: "could not reach the API", code: "upstream_error" });
+    res.status(502).json({ error: "claude call failed", code: "upstream_error" });
   }
+});
+
+/* ---------------- covers ----------------
+   Claude describes the finished dish from the recipe, then OpenAI paints it in the
+   house style on a transparent background. Covers are stored as WebP (keeps the
+   transparency; the photo pipeline's JPEG would not) next to the photos.      */
+const COVER_STYLE = process.env.COVER_STYLE ||
+  "Make a Ghibli-inspired food icon I can use to display a recipe for the food. " +
+  "I just want the bowl or plate and the cooked final product, nothing else. " +
+  "The background must be fully transparent: no table, no backdrop, no cast shadow, " +
+  "no border or frame, so the dish looks like it is floating. The dish: ";
+
+async function describeDish(recipe, up) {
+  const lines = [
+    `Title: ${recipe.title || ""}`,
+    recipe.description ? `Description: ${recipe.description}` : "",
+    `Ingredients: ${(recipe.ingredients || []).map((i) => i.item || i.raw_text).filter(Boolean).join(", ")}`,
+    `Method: ${(recipe.steps || []).join(" ").slice(0, 3000)}`,
+  ].filter(Boolean).join("\n");
+  const text = await callClaude({
+    who: "cover",
+    maxTokens: 400,
+    up,
+    content: [{ type: "text", text:
+      "Describe what this finished dish looks like when served, in one sentence of at most 40 words, " +
+      "for an illustrator: the main components as they sit on the plate or in the bowl, the garnish, " +
+      "and a serving vessel that suits the cuisine. No people, no table, no background. " +
+      "Reply with only the sentence.\n\n" + lines }],
+  });
+  return text.trim().replace(/^"|"$/g, "");
+}
+
+async function paintCover(prompt, up) {
+  if (!OPENAI_KEY) throw new UpstreamError(503, "no_image_key", "no OpenAI API key configured");
+  const attempt = async (background) => {
+    let r;
+    try {
+      r = await fetch("https://api.openai.com/v1/images/generations", {
+        signal: up.signal,
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${OPENAI_KEY}` },
+        body: JSON.stringify({
+          model: IMAGE_MODEL, prompt: background === "transparent" ? prompt : prompt + " Use a plain pure white (#ffffff) background.",
+          n: 1, size: "1024x1024", quality: IMAGE_QUALITY, background, output_format: "png",
+        }),
+      });
+    } catch (err) {
+      if (up.clientGone()) throw err;
+      if (up.timedOut()) throw new UpstreamError(504, "image_timeout", "the image model took too long");
+      console.error("cover: could not reach OpenAI", err.message);
+      throw new UpstreamError(502, "image_unreachable", "could not reach the OpenAI API");
+    }
+    if (r.ok) {
+      const data = await r.json();
+      const b64 = data.data?.[0]?.b64_json;
+      if (!b64) throw new UpstreamError(502, "image_failed", "the image model returned no image");
+      return Buffer.from(b64, "base64");
+    }
+    const body = await r.text();
+    let e = {}; try { e = JSON.parse(body).error || {}; } catch {}
+    const msg = String(e.message || "").slice(0, 200);
+    console.error(`cover: openai ${r.status}`, body.slice(0, 500));
+    if (r.status === 401 || r.status === 403) throw new UpstreamError(502, "bad_image_key", "the OpenAI API key was rejected");
+    if (r.status === 429 && /quota|billing/i.test(`${e.code} ${e.type} ${msg}`)) throw new UpstreamError(402, "no_image_credit", "the OpenAI account is out of credit or quota");
+    if (r.status === 429) throw new UpstreamError(429, "image_rate_limited", "OpenAI rate limited the request");
+    if (r.status === 400 && /moderation|safety|content.?policy/i.test(`${e.code} ${e.type} ${msg}`)) throw new UpstreamError(422, "image_refused", "the image model declined the prompt", msg);
+    if (r.status === 400 && background === "transparent" && /background|transparen/i.test(msg)) return null; // retry below
+    if (r.status === 400 || r.status === 404) throw new UpstreamError(422, "image_request_rejected", "OpenAI rejected the request", msg);
+    throw new UpstreamError(502, "image_upstream_error", "the OpenAI API returned an error");
+  };
+  // Transparency is a preview feature on gpt-image-2: if the model turns it down, fall
+  // back to a white background, which looks the same because covers sit on white.
+  const png = (await attempt("transparent")) || (await attempt("opaque"));
+  return png;
+}
+
+app.post("/api/cover", async (req, res) => {
+  const recipe = req.body?.recipe;
+  if (!recipe || !recipe.title) return res.status(400).json({ error: "recipe needs a title", code: "no_title" });
+  if (!OPENAI_KEY) return send(res, new UpstreamError(503, "no_image_key", "no OpenAI API key configured"));
+  const up = upstreamSignal(res, 240_000);
+  try {
+    const dish = await describeDish(recipe, up);
+    const png = await paintCover(COVER_STYLE + dish, up);
+    const id = randomUUID().replace(/-/g, "");
+    const webp = await sharp(png).resize(1024, 1024, { fit: "inside", withoutEnlargement: true }).webp({ quality: 88 }).toBuffer();
+    await writeFile(path.join(PHOTO_DIR, `${id}.webp`), webp);
+    console.log(`cover ${id} for "${recipe.title}": ${dish}`);
+    res.json({ id, url: `/api/covers/${id}`, dish });
+  } catch (err) {
+    if (up.clientGone()) return console.log("cover cancelled: the client stopped waiting");
+    if (err instanceof UpstreamError) return send(res, err);
+    console.error("cover failed", err);
+    res.status(500).json({ error: "could not make the cover", code: "cover_failed" });
+  }
+});
+
+app.get("/api/covers/:id", (req, res) => {
+  if (!/^[a-f0-9]{32}$/.test(req.params.id)) return res.status(400).end();
+  const file = path.join(PHOTO_DIR, `${req.params.id}.webp`);
+  if (!existsSync(file)) return res.status(404).end();
+  res.type("image/webp").set("Cache-Control", "public, max-age=31536000, immutable");
+  createReadStream(file)
+    .on("error", (err) => { console.error("cover read failed", req.params.id, err.message); if (!res.headersSent) res.status(500).end(); else res.destroy(); })
+    .pipe(res);
 });
 
 /* ---------------- link fetching ----------------
@@ -344,5 +482,5 @@ app.use((err, req, res, _next) => {
 process.on("unhandledRejection", (err) => console.error("unhandled rejection", err));
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Bourdain ${VERSION} (${COMMIT}) on :${PORT}  data=${DATA_DIR}  key=${API_KEY ? "set" : "MISSING"}`);
+  console.log(`Bourdain ${VERSION} (${COMMIT}) on :${PORT}  data=${DATA_DIR}  key=${API_KEY ? "set" : "MISSING"}  images=${OPENAI_KEY ? IMAGE_MODEL + "/" + IMAGE_QUALITY : "no OpenAI key"}`);
 });
