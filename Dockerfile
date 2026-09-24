@@ -3,8 +3,10 @@ WORKDIR /app
 # better-sqlite3 compiles a native module; sharp pulls prebuilt binaries
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
-COPY package.json ./
-RUN npm install --omit=dev
+# npm ci installs exactly what package-lock.json pins, so a rebuild can't pick up
+# newer dependency versions on its own. It fails if the lockfile is out of date.
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
 
 FROM node:22-bookworm-slim
 WORKDIR /app
