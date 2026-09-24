@@ -9,6 +9,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Bourdain">
 <meta name="theme-color" content="#ffffff">
+<!-- Filled in by server.js when it serves this file, so the app knows which build it is. -->
+<meta name="app-version" content="__APP_VERSION__">
+<meta name="app-commit" content="__APP_COMMIT__">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&family=Libre+Franklin:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
 <style>
@@ -48,6 +51,15 @@ a{color:inherit}
   padding:12px 18px 8px; border-bottom:1px solid var(--rule);
 }
 .top h1{font-size:28px;font-weight:700;letter-spacing:-.02em}
+.brand{background:none;border:0;padding:6px 0;margin:-6px 0;font:inherit;color:inherit;display:inline-flex;align-items:baseline;gap:8px;min-height:44px}
+.brand .ver{font-family:var(--sans);font-size:11px;font-weight:500;color:var(--ink-3);letter-spacing:.02em}
+.rel{border-top:1px solid var(--line);padding:10px 0}
+.rel h4{font-family:var(--sans);font-size:14px;font-weight:700;margin:0 0 4px}
+.rel h4 .faint{font-weight:500;font-size:12px;margin-left:6px}
+.rel ul{margin:0;padding-left:18px;font-size:15px;line-height:1.45}
+.rel li{margin-bottom:3px}
+.vernote{font-family:var(--sans);font-size:13px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--steel);margin:4px 0 8px}
+.vernote.stale{border-color:var(--flame);color:var(--ink)}
 .top .sub{font-family:var(--sans);color:var(--ink-3);font-size:11px;font-weight:500;letter-spacing:.02em}
 .top .sync{color:var(--ink);font-weight:700}
 
@@ -250,7 +262,7 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 <body>
 
 <header class="top">
-  <h1>Bourdain</h1>
+  <h1><button class="brand" id="brand" aria-label="Version and update history">Bourdain<span class="ver" id="verLabel"></span></button></h1>
   <span class="sub"><span id="syncSub" class="sync"></span><span id="topSub"></span></span>
 </header>
 
@@ -1090,6 +1102,34 @@ function renderReview(){
   el.querySelector("#revSave").onclick=save; el.querySelector("#revSave2").onclick=save;
 }
 
+/* ---------- version ---------- */
+const metaOf=n=>{ const v=document.querySelector(`meta[name="${n}"]`)?.content||""; return v.startsWith("__")?"dev":v; };
+const APP={ version:metaOf("app-version"), commit:metaOf("app-commit") };
+document.getElementById("verLabel").textContent="v"+APP.version;
+const isStale=info=>info && (info.version!==APP.version || (info.commit!=="dev" && APP.commit!=="dev" && info.commit!==APP.commit));
+function fmtDate(isoDate){ const [y,m,d]=isoDate.split("-").map(Number); return `${d} ${MONTHS[m-1]} ${y}`; }
+async function openVersion(){
+  const sh=openSheet(`<h3>Bourdain ${esc(APP.version)}</h3><p class="muted small" style="margin:0 0 10px">Build ${esc(APP.commit)}</p>
+    <div id="verBody"><p class="status"><span class="spin"></span>Checking the server…</p></div>
+    <div class="row" style="margin-top:12px"><button class="btn ghost" data-act="close">Close</button></div>`);
+  sheetActions(sh,{ close:closeSheet });
+  let info=null; try{ info=await api("/api/version",{signal:timeout(10000)}); }catch(e){ console.warn("version check failed",e); }
+  const body=sh.querySelector("#verBody"); if(!sh.isConnected||!body) return; // another sheet opened meanwhile
+  if(!info){ body.innerHTML=`<p class="vernote">Couldn't reach the server, so I can't check for a newer version or show the history. Try again when you're back on home Wi-Fi.</p>`; return; }
+  const note = isStale(info)
+    ? `<p class="vernote stale">The server has <strong>${esc(info.version)}</strong> (build ${esc(info.commit)}), but this phone is still running ${esc(APP.version)}. Close the app fully and reopen it to update.</p>`
+    : `<p class="vernote">Up to date with the server.</p>`;
+  const hist=(info.changelog||[]).map(r=>`<div class="rel"><h4>${esc(r.version)}${r.version===APP.version?" · this phone":""}<span class="faint">${esc(fmtDate(r.date))}</span></h4>
+    <ul>${r.notes.map(n=>`<li>${esc(n)}</li>`).join("")}</ul></div>`).join("");
+  body.innerHTML = note + (hist?`<h3 style="font-family:var(--sans);font-size:13px;letter-spacing:.02em;text-transform:uppercase;margin:16px 0 4px">What's changed</h3>${hist}`:"");
+}
+document.getElementById("brand").onclick=openVersion;
+/* Quietly tell the user when the server has a newer build than the one this phone is running. */
+async function checkForUpdate(){
+  try{ const info=await api("/api/version",{signal:timeout(10000)}); if(isStale(info)) toast(`Version ${info.version} is ready. Close and reopen the app to update.`); }
+  catch(e){ /* offline: nothing to compare against */ }
+}
+
 /* ---------- boot ---------- */
 navigator.serviceWorker?.register?.("/sw.js").catch(()=>{});
 
@@ -1097,6 +1137,7 @@ navigator.serviceWorker?.register?.("/sw.js").catch(()=>{});
   render();
   await store.init();
   render();
+  if(store.online) checkForUpdate();
 })();
 </script>
 </body>
