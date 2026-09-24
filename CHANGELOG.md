@@ -6,6 +6,14 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 1.3.1 — 2026-09-24
+- The app opens straight onto your recipes, using the copy saved on this phone, while it checks the server in the background.
+- A new phone with nothing saved yet shows "Loading your recipes…" instead of "Nothing in the book yet".
+- On slow Wi-Fi the app appears after 3 seconds at most, instead of a white screen.
+- The page no longer waits for its fonts before showing anything.
+- The Stop button during an import now really stops it, and the server cancels its request to Claude too.
+- Fixed a crash in the Plan picker when a recipe had no title.
+
 ## 1.3.0 — 2026-09-24
 - Tap the Bourdain title to see which version you're running and this history.
 - If your phone has an older version than the server, the app tells you to close and reopen it.

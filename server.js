@@ -146,8 +146,14 @@ app.post("/api/claude", async (req, res) => {
   }
   content.push({ type: "text", text: prompt });
 
+  // If the phone stops waiting (the Stop button, or a dropped connection), cancel the
+  // upstream call too rather than finishing a recipe nobody will see.
+  const upstream = new AbortController();
+  res.on("close", () => { if (!res.writableFinished) upstream.abort(); });
+
   try {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
+      signal: upstream.signal,
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -176,6 +182,7 @@ app.post("/api/claude", async (req, res) => {
       return res.status(422).json({ error: "model did not return JSON", code: "invalid_json", raw: text.slice(0, 500) });
     }
   } catch (err) {
+    if (upstream.signal.aborted) return console.log("claude call cancelled: the client stopped waiting");
     console.error("claude call failed", err);
     res.status(502).json({ error: "could not reach the API", code: "upstream_error" });
   }

@@ -67,10 +67,15 @@ how data persists, that is the only place to touch.
   so local changes win (last write wins, which is fine for one person). A 4xx
   means the server will never accept that change, so it is dropped with a toast.
   The header shows "N changes not synced" or "Offline".
-- `localStorage["bourdain"]` is a full mirror, used only when `/api/state` fails
-  at startup. Once the server is reachable again the app reloads from it.
+- `localStorage["bourdain"]` is a full mirror, refreshed on every successful
+  load. `store.loadLocal()` renders it immediately at startup; `store.init()`
+  then replaces it with the server's data, or keeps it if the server can't be
+  reached. `store.loading` is true until that finishes. Empty states must check
+  it, so a new phone shows "Loading…" rather than "Nothing in the book yet".
+  After the first load, boot skips re-rendering an import form in progress.
 - Photo uploads are **not** queued. They need the server at the moment you add them.
-- `store.ask(prompt, images)` — proxied Claude call, returns parsed JSON
+- `store.ask(prompt, images, signal)` — proxied Claude call, returns parsed JSON.
+  Aborting `signal` cancels it; the server then aborts its upstream call too.
 - `store.fetchUrl(url)` — server-side page fetch
 - `store.uploadPhoto(blob)` — returns `{id}`
 
@@ -122,12 +127,14 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v4"`
-in `public/sw.js` → `v5`, `v6`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v5"`
+in `public/sw.js` → `v6`, `v7`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
-a redeploy, which looks exactly like a broken build.
+a redeploy, which looks exactly like a broken build. The service worker is
+network-first but falls back to its cached shell after `SLOW_MS` (3s), so on a
+slow connection a new deploy can take one extra open to appear.
 
 **Dependencies are pinned by `package-lock.json`.** The Dockerfile runs `npm ci`,
 which installs exactly what the lockfile says and fails if it doesn't match
@@ -161,11 +168,11 @@ into the next sheet and swallowed its clicks. Route every sheet button through
 **Deletes are queued like any other write, and there are no tombstones.** A
 delete is an outbox entry with `doc: null`. It is replayed over server data on
 load, so a deleted item stays gone until the DELETE lands. Loading does no other
-filtering — whatever is in the database is shown. Removing the last meal from a plan day writes
-`{date, entries: []}` rather than deleting the row. Earlier, pre-repo versions
-may have written `{deleted: true}` rows; the current code does not filter them,
-and an untitled recipe crashes the Plan picker (`pickRecipe` calls
-`title.localeCompare`).
+filtering — whatever is in the database is shown. Removing the last meal from a
+plan day writes `{date, entries: []}` rather than deleting the row. The live
+database was checked on 2026-09-24 and has no `{deleted: true}` rows from the
+pre-repo versions. Code that reads recipes should still treat `title` as
+possibly missing.
 
 **Adding a collection needs server edits too.** In `server.js`: add it to
 `COLLECTIONS` (or writes get a 404), add a `CREATE TABLE` (or writes fail with
@@ -249,7 +256,9 @@ cooking, a cooking mode with timers, restoring the shopping list.
 Found in a review on 2026-09-24 and not yet fixed. Remove each line once it
 is fixed.
 
-- **No loading state or client timeouts.** The app renders the empty "Nothing
-  in the book yet" screen until `/api/state` returns or gives up after 15s and
-  falls back to this phone's copy.
-- **Import "Stop" does nothing.** `parseCtl` is never passed to `fetch`.
+- **Import errors all read "try again"** (#7). Every upstream failure is
+  `upstream_error`, a reply cut off at `max_tokens: 4000` reads as
+  `invalid_json`, and retrying can't fix either.
+- **Screenshots are sent full size** (#8). Only photos are shrunk; a large PNG
+  can exceed the API's per-image limit.
+- **Video frame extraction can hang** (#10) if a `seeked` event never fires.
