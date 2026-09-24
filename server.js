@@ -29,9 +29,15 @@ db.exec(`
 `);
 
 const COLLECTIONS = new Set(["recipes", "plan", "pantry", "shop"]);
-const readAll = (t) => Object.fromEntries(
-  db.prepare(`SELECT id, doc FROM ${t}`).all().map((r) => [r.id, JSON.parse(r.doc)])
-);
+// One unreadable row must not take the whole app down, so skip it and say which.
+const readAll = (t) => {
+  const out = {};
+  for (const r of db.prepare(`SELECT id, doc FROM ${t}`).all()) {
+    try { out[r.id] = JSON.parse(r.doc); }
+    catch (err) { console.error(`skipping corrupt row ${t}/${r.id}:`, err.message); }
+  }
+  return out;
+};
 
 /* ---------------- app ---------------- */
 const app = express();
@@ -92,7 +98,13 @@ app.get("/api/photos/:id", (req, res) => {
   const file = path.join(PHOTO_DIR, `${req.params.id}.jpg`);
   if (!existsSync(file)) return res.status(404).end();
   res.type("image/jpeg").set("Cache-Control", "public, max-age=31536000, immutable");
-  createReadStream(file).pipe(res);
+  createReadStream(file)
+    .on("error", (err) => {
+      // Without this handler a read error would crash the whole process.
+      console.error("photo read failed", req.params.id, err.message);
+      if (!res.headersSent) res.status(500).end(); else res.destroy();
+    })
+    .pipe(res);
 });
 
 /* ---------------- Claude proxy ----------------
@@ -259,9 +271,42 @@ app.post("/api/fetch", async (req, res) => {
   res.json({ text, recipeJson });
 });
 
-/* ---------------- static ---------------- */
-app.use(express.static(path.join(__dirname, "public"), { maxAge: "1h" }));
-app.get(/.*/, (_req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
+/* ---------------- errors ----------------
+   Every /api failure answers in JSON with a code the client can act on,
+   never Express's HTML error page.                                     */
+app.use("/api", (_req, res) => res.status(404).json({ error: "no such endpoint", code: "not_found" }));
+
+function describe(err) {
+  if (err.type === "entity.too.large" || err.code === "LIMIT_FILE_SIZE")
+    return [413, "too_large", "request too large"];
+  if (err.type === "entity.parse.failed") return [400, "bad_json", "request body is not valid JSON"];
+  if (err.code === "SQLITE_READONLY" || err.code === "SQLITE_CANTOPEN" || err.code === "SQLITE_PERM")
+    return [500, "db_readonly", "database is not writable; check the container runs as 568:568"];
+  if (err.code === "SQLITE_FULL" || err.code === "ENOSPC") return [500, "disk_full", "the NAS dataset is full"];
+  if (err.code === "SQLITE_BUSY" || err.code === "SQLITE_LOCKED") return [503, "db_busy", "database is busy, try again"];
+  return [err.status || err.statusCode || 500, "server_error", "unexpected server error"];
+}
+
+/* ---------------- static ----------------
+   The app shell must be revalidated on every load, or a phone keeps the old
+   app after a redeploy. no-cache still allows a cheap 304 via the ETag.   */
+const revalidate = (res) => res.set("Cache-Control", "no-cache");
+app.use(express.static(path.join(__dirname, "public"), {
+  maxAge: "1h",
+  setHeaders: (res, file) => { if (/\.html$|[\\/]sw\.js$/.test(file)) revalidate(res); },
+}));
+app.get(/.*/, (_req, res) => { revalidate(res); res.sendFile(path.join(__dirname, "public", "index.html")); });
+
+// Last, so it catches errors from every route above.
+app.use((err, req, res, _next) => {
+  const [status, code, error] = describe(err);
+  // A 4xx is the request's fault, so the message is enough; a 5xx gets the full stack.
+  console.error(`${req.method} ${req.path} failed (${code}):`, status >= 500 ? err : err.message);
+  if (res.headersSent) return res.destroy();
+  res.status(status).json({ error, code });
+});
+
+process.on("unhandledRejection", (err) => console.error("unhandled rejection", err));
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Bourdain on :${PORT}  data=${DATA_DIR}  key=${API_KEY ? "set" : "MISSING"}`);

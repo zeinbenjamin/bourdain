@@ -391,8 +391,10 @@ const store = {
   async init(){
     try{ this.outbox=JSON.parse(localStorage.getItem(OUTBOX_KEY)||"[]"); }catch(_){ this.outbox=[]; }
     if(!await this.reload()){
-      console.warn("server unreachable, using this device's copy");
-      toast("Can't reach the server. Changes are kept on this phone and sync when it's back.");
+      console.warn("couldn't load from the server, using this device's copy");
+      const e=this.loadError;
+      toast(e&&e.status ? `The server is up but couldn't load your recipes (${e.code}). Showing this phone's copy; check the server logs.`
+        : "Can't reach the server. Changes are kept on this phone and sync when it's back.");
       try{ const raw=localStorage.getItem("bourdain"); if(raw){ const j=JSON.parse(raw);
         Object.assign(state,{recipes:j.recipes||{},plan:j.plan||{},shop:j.shop||{},pantry:j.pantry||{}}); } }catch(_){}
       this.applyOutbox();
@@ -412,7 +414,7 @@ const store = {
       this.applyOutbox();
       this.online=true; this.fromServer=true; this.local();
       return true;
-    }catch(e){ console.warn("load failed",e); this.online=false; return false; }
+    }catch(e){ console.warn("load failed",e); this.loadError=e; this.online=false; return false; }
   },
   applyOutbox(){ for(const op of this.outbox){ if(!state[op.col]) continue; if(op.doc==null) delete state[op.col][op.id]; else state[op.col][op.id]=op.doc; } },
   local(){ try{ localStorage.setItem("bourdain", JSON.stringify({recipes:state.recipes, plan:state.plan, shop:state.shop, pantry:state.pantry})); }catch(e){} },
@@ -982,7 +984,7 @@ async function runParse(){
     if(c==="no_api_key") status.textContent="No Anthropic API key is set on the server. Add ANTHROPIC_API_KEY and restart it.";
     else if(c==="rate_limited") status.textContent="Too many requests right now. Give it a minute and try again.";
     else if(c==="invalid_json") status.textContent="The reply wasn't clean JSON. Try again, it usually works the second time.";
-    else if(c==="prompt_too_large") status.textContent="That's too much text at once. Paste just the recipe part.";
+    else if(c==="too_large") status.textContent="That's too much to send at once. Use fewer or smaller screenshots, or paste just the recipe part.";
     else status.textContent="Something went wrong reading that. Try again.";
   }
 }

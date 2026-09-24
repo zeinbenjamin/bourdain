@@ -97,9 +97,17 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v1"`
-in `public/sw.js` → `v2`, `v3`. Forget this and the phone keeps serving the old
-app after a redeploy, which looks exactly like a broken build.
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v3"`
+in `public/sw.js` → `v4`, `v5`. This makes the phone install the new worker and
+drop the old cache. `index.html` and `sw.js` are served with
+`Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
+that way: a long `maxAge` on either one means the phone keeps the old app after
+a redeploy, which looks exactly like a broken build.
+
+**Dependencies are pinned by `package-lock.json`.** The Dockerfile runs `npm ci`,
+which installs exactly what the lockfile says and fails if it doesn't match
+`package.json`. When adding or upgrading a dependency, run `npm install` locally
+and commit the updated lockfile, or the Actions build fails.
 
 **The container must run as UID 568.** TrueNAS datasets with "app permissions"
 are owned by the `apps` user (568), not node's default 1000. The Dockerfile
@@ -138,6 +146,15 @@ and an untitled recipe crashes the Plan picker (`pickRecipe` calls
 `COLLECTIONS` (or writes get a 404), add a `CREATE TABLE` (or writes fail with
 a 500), and add it to the `/api/state` response. In `index.html`: add it to
 `state` and to both branches of `store.init()` and to `store.local()`.
+
+**Server errors are JSON with a `code`.** Every `/api` failure goes through the
+error handler at the bottom of `server.js`, which maps it to
+`{error, code}`: `bad_json`, `too_large`, `db_readonly`, `disk_full`,
+`db_busy`, `not_found` or `server_error`. Unknown `/api` paths get a JSON 404
+rather than `index.html`. Add a new case to `describe()` rather than returning an
+HTML page, and let the client switch on `code`. `readAll` skips a row it can't
+parse and logs `skipping corrupt row <table>/<id>`, so one bad row can't blank
+the app.
 
 **Adding fields is safe; renaming is not.** Old recipes simply lack new fields —
 treat missing as empty. Renaming an existing field orphans every stored recipe
@@ -208,12 +225,6 @@ Found in a review on 2026-09-24 and not yet fixed. Remove each line once it
 is fixed.
 
 - **No loading state or client timeouts.** The app renders the empty "Nothing
-  in the book yet" screen until `/api/state` returns, however long that takes.
+  in the book yet" screen until `/api/state` returns or gives up after 15s and
+  falls back to this phone's copy.
 - **Import "Stop" does nothing.** `parseCtl` is never passed to `fetch`.
-- **The build ignores the lockfile.** The Dockerfile copies only
-  `package.json` and runs `npm install`, not `npm ci`.
-- **`index.html` and `sw.js` are served with `maxAge: 1h`**, so a phone can
-  keep the old app for up to an hour after a redeploy, even after a cache bump.
-- **The server has no error handler of its own.** Synchronous errors return
-  Express's HTML 500. One corrupt row makes `/api/state` fail, and the client
-  then reports "Server unreachable".
