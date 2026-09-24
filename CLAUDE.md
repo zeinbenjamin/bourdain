@@ -74,7 +74,16 @@ how data persists, that is the only place to touch.
   reached. `store.loading` is true until that finishes. Empty states must check
   it, so a new phone shows "Loading…" rather than "Nothing in the book yet".
   After the first load, boot skips re-rendering an import form in progress.
-- Photo uploads are **not** queued. They need the server at the moment you add them.
+- Photos added while the server is unreachable go into `photoQueue` (IndexedDB
+  `bourdain-photos`, because localStorage is too small for images) under a
+  `local-…` id, and are displayed from a blob URL. `photoUrl()` handles both
+  kinds of id. `store.flush()` runs `photoQueue.flush()` **first**: it uploads
+  each photo, swaps the id in every recipe and any open draft, and queues the
+  recipe writes with `store.enqueue()`. It must not use `store.put()`, which
+  awaits `flush()` and would wait on itself. A queued photo that no recipe or
+  draft uses (a discarded draft) is not counted as unsynced and is dropped after
+  10 minutes. A 4xx or `image_failed` from the server removes the photo rather
+  than retrying it forever.
 - `store.ask(prompt, images, signal)` — proxied Claude call, returns parsed JSON.
   Aborting `signal` cancels it; the server then aborts its upstream call too.
 - `store.fetchUrl(url)` — server-side page fetch
@@ -86,6 +95,30 @@ how data persists, that is the only place to touch.
 
 **The Anthropic and OpenAI API keys live only on the server.** Neither may appear
 in `index.html` or any client-visible file.
+
+## Testing
+
+`npm test` runs every suite in `tests/` (under 2 minutes). `node tests/<name>.test.mjs`
+runs one, and `npm test -- scan` runs those whose name starts with "scan".
+**Run it before every push that touches the app, and add checks for anything you
+change.** Each suite starts the real `server.js` on its own port with a
+throwaway data dir, and drives the real app in headless Chromium (Playwright,
+a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
+
+- `tests/lib.mjs`: `startServer` (stop/restart to fake the server going
+  down), `slowProxy` (fake slow Wi-Fi), `openBrowser`, and the `suite`
+  PASS/FAIL collector.
+- `tests/mock-apis.mjs`: fake Claude and OpenAI, loaded with `--import`. It is
+  driven per call by `setMode({claude, image, scan, claudeDelay, imageDelay})`
+  and logs what was sent (`MOCK_CLAUDE_REQ`, `MOCK_IMG_REQ`, `MOCK_SCAN`).
+  Nothing in the tests calls a real API or needs a key.
+- Suites: `server` (headers, errors, codes, cover pipeline, sweep), `offline`
+  (outbox and photo queue across server outages), `loading` (slow Wi-Fi, Stop,
+  version sheet), `covers` (cover UI, import errors, shrinking), `scan`,
+  `video`.
+
+Timing checks (for example "shows in about 3s") have some slack but assume an
+unloaded machine.
 
 ## Deploy loop
 
@@ -132,8 +165,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v7"`
-in `public/sw.js` → `v8`, `v9`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v8"`
+in `public/sw.js` → `v9`, `v10`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -264,8 +297,7 @@ and photo scanning.
 
 Ideas not yet built: nutrition estimates, pantry quantities decremented by
 cooking, a cooking mode with timers, restoring the shopping list, and
-a cleanup for cover files orphaned when a cover is replaced or a draft is
-discarded (a few hundred KB each; nothing deletes them yet).
+a cleanup for unused photos (`.jpg`); unused covers are already swept.
 
 ## Pinned for v2
 
@@ -291,7 +323,12 @@ writes one sentence describing the served dish. It is appended to `COVER_STYLE`
 (Zein's own prompt, adapted for a transparent background), and OpenAI's
 `/v1/images/generations` paints it: `IMAGE_MODEL` (default `gpt-image-2`),
 `IMAGE_QUALITY` (default `medium`), 1024×1024, `background: "transparent"`,
-PNG. Transparency is a preview feature on `gpt-image-2`. If OpenAI rejects it,
+PNG. The server sweeps unused covers (`sweepCovers`) at startup and daily. It
+deletes a `.webp` only if no recipe's `cover` points at it and it is older than
+`COVER_GRACE_DAYS` (7). The grace period covers unsaved drafts and saves still
+in a phone's outbox. The sweep is skipped entirely if any recipe row is
+unreadable or there are no recipes, since either would make every cover look
+unused. It never touches photos (`.jpg`). Transparency is a preview feature on `gpt-image-2`. If OpenAI rejects it,
 `paintCover` retries once with an opaque white background, which looks the same
 because covers are always shown on `--paper` white. The PNG is stored as WebP
 (keeps alpha; the photo pipeline's JPEG would not) in the photos dataset as
@@ -321,6 +358,5 @@ without the review step.
 Found in a review on 2026-09-24 and not yet fixed. Remove each line once it
 is fixed.
 
-- **Photo uploads aren't queued offline** (#12). They fail visibly instead.
 - **`/api/fetch` can reach LAN addresses** (#14). Only matters if the app is ever
   exposed beyond the home network.

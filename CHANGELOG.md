@@ -6,6 +6,11 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 1.6.0 — 2026-09-24
+- Photos you add while the server can't be reached are kept on your phone and shown straight away, then uploaded when it's back.
+- The "not synced" count in the header includes photos waiting to upload.
+- Old cover images that no recipe uses any more are cleared off the NAS after a week. Your own photos are never deleted.
+
 ## 1.5.0 — 2026-09-24
 - New: Scan fridge or pantry. Take a few photos and the app lists the food it can see, so you don't have to type it.
 - Nothing is added until you've checked the list. Everything starts ticked except items marked "not sure".
