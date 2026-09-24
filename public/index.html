@@ -13,7 +13,10 @@
 <meta name="app-version" content="__APP_VERSION__">
 <meta name="app-commit" content="__APP_COMMIT__">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&family=Libre+Franklin:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Loaded without blocking the first paint: on a slow connection the app shows in
+     Georgia/Helvetica first and switches to the real fonts when they arrive. -->
+<link media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&family=Libre+Franklin:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
 <style>
 :root{
   --paper:#FFFFFF; --card:#FFFFFF; --ink:#121212; --ink-2:#363636; --ink-3:#727272;
@@ -379,7 +382,7 @@ const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov
 const state = {
   recipes:{}, plan:{}, shop:{}, pantry:{}, ideas:null,
   week:mondayOf(new Date()), view:"recipes", query:"", tag:null,
-  detailId:null, mult:1, draft:null, editingId:null, images:[], imgMax:4, canImages:false, fetchedImage:null,
+  detailId:null, mult:1, draft:null, editingId:null, images:[], imgMax:4,
 };
 
 /* ---------- persistence (server API) ---------- */
@@ -400,18 +403,23 @@ const store = {
   online:false,      // did the last request reach the server?
   fromServer:false,  // is state loaded from the server, or only from this device's copy?
   outbox:[], flushing:null,
-  async init(){
+  loading:true,      // true until the first load from the server succeeds or gives up
+  /* Show this phone's copy straight away, so opening the app never starts on an empty screen. */
+  loadLocal(){
     try{ this.outbox=JSON.parse(localStorage.getItem(OUTBOX_KEY)||"[]"); }catch(_){ this.outbox=[]; }
+    try{ const raw=localStorage.getItem("bourdain"); if(raw){ const j=JSON.parse(raw);
+      Object.assign(state,{recipes:j.recipes||{},plan:j.plan||{},shop:j.shop||{},pantry:j.pantry||{}}); } }catch(_){}
+    this.applyOutbox();
+    this.paint();
+  },
+  async init(){
     if(!await this.reload()){
       console.warn("couldn't load from the server, using this device's copy");
       const e=this.loadError;
       toast(e&&e.status ? `The server is up but couldn't load your recipes (${e.code}). Showing this phone's copy; check the server logs.`
         : "Can't reach the server. Changes are kept on this phone and sync when it's back.");
-      try{ const raw=localStorage.getItem("bourdain"); if(raw){ const j=JSON.parse(raw);
-        Object.assign(state,{recipes:j.recipes||{},plan:j.plan||{},shop:j.shop||{},pantry:j.pantry||{}}); } }catch(_){}
-      this.applyOutbox();
     }
-    state.canImages=true; state.imgMax=4;
+    this.loading=false;
     this.paint();
     this.flush();
     window.addEventListener("online",()=>this.sync());
@@ -475,16 +483,16 @@ const store = {
   paint(){
     const el=document.getElementById("syncSub"); if(!el) return;
     const n=this.outbox.length;
-    el.textContent = n ? `${n} change${n===1?"":"s"} not synced · ` : (!this.fromServer||!this.online) ? "Offline · " : "";
+    el.textContent = n ? `${n} change${n===1?"":"s"} not synced · ` : this.loading ? "Loading… · " : (!this.fromServer||!this.online) ? "Offline · " : "";
   },
   /* Claude, proxied by our server so the API key never reaches the browser */
-  async ask(prompt, images){
+  async ask(prompt, images, signal){
     const body={prompt};
     if(images&&images.length){
       body.images=[];
       for(const f of images){ body.images.push({ media_type:f.type||"image/jpeg", data:await toBase64(f) }); }
     }
-    const out=await api("/api/claude",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const out=await api("/api/claude",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal});
     return out.json;
   },
   async fetchUrl(url){ return api("/api/fetch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url})}); },
@@ -554,6 +562,7 @@ function renderRecipes(){
     return hay.includes(q);
   }).sort((a,b)=>(b[1].created_at||"").localeCompare(a[1].created_at||""));
   const el=document.getElementById("rlist");
+  if (!Object.keys(state.recipes).length && store.loading){ el.innerHTML=`<div class="empty"><span class="spin"></span>Loading your recipes…</div>`; return; }
   if (!Object.keys(state.recipes).length){
     el.innerHTML=`<div class="empty"><h3>Nothing in the book yet</h3>Import a recipe from a link, caption or screenshot, or add one by hand with the + button.<div style="margin-top:14px"><button class="btn primary" data-go="import">Import a recipe</button></div></div>`;
     el.querySelector("[data-go]").onclick=()=>show("import"); return;
@@ -688,7 +697,7 @@ function closeSheet(){ document.getElementById("sheet").classList.remove("open")
 document.getElementById("sheetBg").onclick=closeSheet;
 
 function pickRecipe(dateISO){
-  const list=Object.entries(state.recipes).sort((a,b)=>a[1].title.localeCompare(b[1].title));
+  const list=Object.entries(state.recipes).sort((a,b)=>(a[1].title||"").localeCompare(b[1].title||""));
   if(!list.length){ toast("No recipes yet"); return; }
   const s=openSheet(`<h3>Add to ${DAYS[(new Date(dateISO+"T00:00").getDay()+6)%7]} ${new Date(dateISO+"T00:00").getDate()}</h3>
     <input class="input" id="pickQ" placeholder="Search" style="margin-bottom:8px">
@@ -788,6 +797,7 @@ async function pantryAdd(){
 function renderPantry(){
   const el=document.getElementById("pantryList");
   const items=Object.values(state.pantry);
+  if(!items.length && store.loading){ el.innerHTML=`<div class="empty" style="margin-top:16px"><span class="spin"></span>Loading your pantry…</div>`; renderIdeas(); return; }
   if(!items.length){ el.innerHTML=`<div class="empty" style="margin-top:16px"><h3>The shelves are bare</h3>Add what's in your fridge and cupboards, then ask for something to cook.</div>`; renderIdeas(); return; }
   const groups={}; items.forEach(i=>{ (groups[i.aisle]=groups[i.aisle]||[]).push(i); });
   const order=[...AISLES,...Object.keys(groups).filter(a=>!AISLES.includes(a))];
@@ -864,7 +874,6 @@ function renderImport(){
   const form=document.getElementById("importForm"), rev=document.getElementById("review");
   if(state.draft){ form.hidden=true; rev.hidden=false; renderReview(); return; }
   form.hidden=false; rev.hidden=true;
-  const status=document.getElementById("importStatus");
   document.getElementById("imgField").style.display = "";
   document.getElementById("btnFetch").hidden = false;
   document.getElementById("fetchHint").hidden = false;
@@ -937,7 +946,7 @@ function videoToSheets(file,maxSheets,onProgress){
     v.load();
   });
 }
-document.getElementById("btnClear").onclick=()=>{ state.fetchedImage=null; document.getElementById("srcUrl").value=""; document.getElementById("srcText").value=""; state.images=[]; renderThumbs(); const s=document.getElementById("importStatus"); s.className="status"; s.textContent=""; };
+document.getElementById("btnClear").onclick=()=>{ document.getElementById("srcUrl").value=""; document.getElementById("srcText").value=""; state.images=[]; renderThumbs(); const s=document.getElementById("importStatus"); s.className="status"; s.textContent=""; };
 
 let parseCtl=null;
 document.getElementById("btnFetch").onclick=async()=>{
@@ -953,7 +962,6 @@ document.getElementById("btnFetch").onclick=async()=>{
       btn.disabled=false; return;
     }
     document.getElementById("srcText").value = f.text.slice(0,20000);
-    state.fetchedImage = null;
     if(f.recipeJson){
       // The page carried schema.org recipe data. Hand the reader that instead of the
       // whole page: exact title, times and ingredient lines, nothing else to wade through.
@@ -980,18 +988,20 @@ document.getElementById("btnParse").onclick=()=>runParse();
 async function runParse(){
   const url=document.getElementById("srcUrl").value.trim(), text=document.getElementById("srcText").value.trim();
   const status=document.getElementById("importStatus"); const btn=document.getElementById("btnParse");
-  if(!text && !state.images.length){ status.className="status err"; status.textContent="Paste some text or add a screenshot first. This app can't open links itself, so the recipe has to come as text or images."; return; }
+  if(!text && !state.images.length){ status.className="status err"; status.textContent="Paste the recipe text or add a screenshot first. For a link, paste it above and tap Fetch & read."; return; }
   parseCtl=new AbortController();
   btn.disabled=true; status.className="status"; status.innerHTML=`<span class="spin"></span>Reading the recipe… <button class="btn small ghost" id="stopParse">Stop</button>`;
   status.querySelector("#stopParse").onclick=()=>parseCtl.abort();
   let input = PARSE_PROMPT + (url?`Source URL: ${url}\n\n`:"") + (text?text.slice(0,20000):"(no text — read the screenshots)");
   try{
-    const data = await store.ask(input, state.images);
+    const data = await store.ask(input, state.images, parseCtl.signal);
     if(!data || data.error || !data.title){ status.className="status err"; status.textContent="Couldn't find a recipe in that. Try pasting more of the caption or a clearer screenshot."; btn.disabled=false; return; }
-    state.draft=normalise(data,url); state.draft.image_url=state.fetchedImage||""; state.fetchedImage=null; state.editingId=null;
+    state.draft=normalise(data,url); state.editingId=null;
     status.textContent=""; btn.disabled=false; renderImport(); document.getElementById("main").scrollTop=0;
   }catch(e){
-    btn.disabled=false; status.className="status err";
+    btn.disabled=false;
+    if(e&&e.name==="AbortError"){ status.className="status"; status.textContent="Stopped. Nothing was imported."; return; }
+    status.className="status err";
     const c=e&&e.code;
     if(c==="no_api_key") status.textContent="No Anthropic API key is set on the server. Add ANTHROPIC_API_KEY and restart it.";
     else if(c==="rate_limited") status.textContent="Too many requests right now. Give it a minute and try again.";
@@ -1134,9 +1144,10 @@ async function checkForUpdate(){
 navigator.serviceWorker?.register?.("/sw.js").catch(()=>{});
 
 (async()=>{
+  store.loadLocal();
   render();
   await store.init();
-  render();
+  if(!(state.view==="import"&&state.draft)) render(); // don't wipe a form the user started while it loaded
   if(store.online) checkForUpdate();
 })();
 </script>
