@@ -267,6 +267,23 @@ cooking, a cooking mode with timers, restoring the shopping list, and
 a cleanup for cover files orphaned when a cover is replaced or a draft is
 discarded (a few hundred KB each; nothing deletes them yet).
 
+## Pinned for v2
+
+Decided 2026-09-24: not now. The most likely trigger for 2.0.0 is **pantry
+amounts that go down when you cook**. That needs every pantry item to carry a
+real amount in a consistent unit, which old free-text items like "greek
+yoghurt" don't have, so existing data must be converted. Other v2-sized ideas:
+household sharing (a user id on every row, plus auth), an ingredient catalogue
+(every recipe ingredient re-linked), and moving blobs to real columns. Features
+that only add fields stay 1.x: cooking mode, shopping list, nutrition, meal
+slots, a redesign.
+
+A v2 release needs: a ZFS snapshot first, because a redeploy can't undo a data
+conversion; a one-time migration on server start, gated by a stored data
+version; and handling for **old-format writes still sitting in a phone's
+outbox**. Those arrive after the migration, so the server must convert them or
+the client must finish syncing before it switches format.
+
 ## Covers
 
 `POST /api/cover` takes the recipe and returns `{id}`. Claude (`describeDish`)
