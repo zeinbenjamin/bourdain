@@ -49,6 +49,7 @@ a{color:inherit}
 }
 .top h1{font-size:28px;font-weight:700;letter-spacing:-.02em}
 .top .sub{font-family:var(--sans);color:var(--ink-3);font-size:11px;font-weight:500;letter-spacing:.02em}
+.top .sync{color:var(--ink);font-weight:700}
 
 main{flex:1; overflow-y:auto; padding:0 0 84px}
 section.view{display:none; padding:16px 18px 24px; max-width:760px; margin:0 auto; width:100%}
@@ -250,7 +251,7 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 
 <header class="top">
   <h1>Bourdain</h1>
-  <span class="sub" id="topSub"></span>
+  <span class="sub"><span id="syncSub" class="sync"></span><span id="topSub"></span></span>
 </header>
 
 <main id="main">
@@ -374,36 +375,93 @@ const API = "";
 async function api(path, opts={}){
   const res = await fetch(API+path, opts);
   if(!res.ok){ let e; try{ e=await res.json(); }catch(_){ e={}; }
-    const err=new Error(e.error||res.statusText); err.code=e.code||("http_"+res.status); throw err; }
+    const err=new Error(e.error||res.statusText); err.code=e.code||("http_"+res.status); err.status=res.status; throw err; }
   return res.status===204? null : res.json();
 }
+const timeout=ms=>AbortSignal.timeout?AbortSignal.timeout(ms):undefined;
+/* Every write goes into a persistent outbox first and leaves it only once the
+   server has accepted it, so nothing is lost to a dropped connection, a reload,
+   or starting the app offline. Unsynced changes are replayed over server data
+   on load, so they win. Last write wins: fine for one person. */
+const OUTBOX_KEY="bourdain.outbox";
 const store = {
-  online:false, assets:{ upload:true }, sample:true, mcp:true,
+  online:false,      // did the last request reach the server?
+  fromServer:false,  // is state loaded from the server, or only from this device's copy?
+  outbox:[], flushing:null,
   async init(){
-    try{
-      const data = await api("/api/state");
-      state.recipes=data.recipes||{}; state.plan=data.plan||{}; state.shop=data.shop||{}; state.pantry=data.pantry||{};
-      this.online=true;
-    }catch(e){
-      console.warn("server unreachable, using this device only", e);
-      this.online=false; toast("Server unreachable — working offline on this device");
+    try{ this.outbox=JSON.parse(localStorage.getItem(OUTBOX_KEY)||"[]"); }catch(_){ this.outbox=[]; }
+    if(!await this.reload()){
+      console.warn("server unreachable, using this device's copy");
+      toast("Can't reach the server. Changes are kept on this phone and sync when it's back.");
       try{ const raw=localStorage.getItem("bourdain"); if(raw){ const j=JSON.parse(raw);
         Object.assign(state,{recipes:j.recipes||{},plan:j.plan||{},shop:j.shop||{},pantry:j.pantry||{}}); } }catch(_){}
+      this.applyOutbox();
     }
     state.canImages=true; state.imgMax=4;
+    this.paint();
+    this.flush();
+    window.addEventListener("online",()=>this.sync());
+    document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") this.sync(); });
+    setInterval(()=>{ if(this.outbox.length||!this.fromServer) this.sync(); },30000);
   },
+  /* Load everything from the server, then lay unsynced changes over it. */
+  async reload(){
+    try{
+      const data=await api("/api/state",{signal:timeout(15000)});
+      state.recipes=data.recipes||{}; state.plan=data.plan||{}; state.shop=data.shop||{}; state.pantry=data.pantry||{};
+      this.applyOutbox();
+      this.online=true; this.fromServer=true; this.local();
+      return true;
+    }catch(e){ console.warn("load failed",e); this.online=false; return false; }
+  },
+  applyOutbox(){ for(const op of this.outbox){ if(!state[op.col]) continue; if(op.doc==null) delete state[op.col][op.id]; else state[op.col][op.id]=op.doc; } },
   local(){ try{ localStorage.setItem("bourdain", JSON.stringify({recipes:state.recipes, plan:state.plan, shop:state.shop, pantry:state.pantry})); }catch(e){} },
-  async put(col,id,data){
-    this.local();
-    if(!this.online) return;
-    try{ await api(`/api/${col}/${encodeURIComponent(id)}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)}); }
-    catch(e){ console.warn("save failed",e); toast("Couldn't save to the server, kept on this device"); }
+  saveOutbox(){ try{ localStorage.setItem(OUTBOX_KEY, JSON.stringify(this.outbox)); }catch(e){ console.warn("outbox not saved",e); } },
+  /* Send queued writes in order. Stops at the first network or server failure and
+     keeps the rest; a 4xx means the server will never accept it, so it is dropped. */
+  flush(){
+    if(this.flushing) return this.flushing;
+    this.flushing=(async()=>{
+      while(this.outbox.length){
+        const op=this.outbox[0];
+        const path=`/api/${op.col}/${encodeURIComponent(op.id)}`;
+        try{
+          await api(path, op.doc==null ? {method:"DELETE",signal:timeout(15000)}
+            : {method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(op.doc),signal:timeout(15000)});
+          this.online=true;
+        }catch(e){
+          if(e.status>=400&&e.status<500){ op.refused=true; console.error("server refused a change, dropping it",op,e); toast("The server refused one change, so it wasn't kept. Check it and try again."); }
+          else { console.warn("sync failed, will retry",e); this.online=false; break; }
+        }
+        const i=this.outbox.indexOf(op); if(i>=0){ this.outbox.splice(i,1); this.saveOutbox(); } // may already be superseded by a newer write
+      }
+    })().finally(()=>{ this.flushing=null; this.paint(); });
+    return this.flushing;
   },
-  async del(col,id){
-    this.local();
-    if(!this.online) return;
-    try{ await api(`/api/${col}/${encodeURIComponent(id)}`,{method:"DELETE"}); }
-    catch(e){ console.warn("delete failed",e); toast("Couldn't remove it on the server"); }
+  /* Retry pending writes; if we started from this device's copy, pick up the server's once it's reachable. */
+  async sync(){
+    await this.flush();
+    if(this.outbox.length||this.fromServer) return;
+    if(await this.reload()){ this.paint(); if(!(state.view==="import"&&state.draft)) render(); } // don't wipe a half-edited form
+  },
+  /* Queue a write and try to send it. Resolves true once the server has it, false if it's waiting on this device. */
+  async write(col,id,doc,verb){
+    this.outbox=this.outbox.filter(o=>!(o.col===col&&o.id===id));
+    const op={col,id,doc:doc==null?null:JSON.parse(JSON.stringify(doc))};
+    this.outbox.push(op); this.saveOutbox(); this.local(); this.paint();
+    const sending=this.flush();
+    if(this.online) await sending; // when the server is already known to be down, don't make the user wait on it
+    if(op.refused) return false;
+    if(!this.outbox.includes(op)) return true;
+    toast(`${verb} on this phone. It'll sync when the server's back.`);
+    return false;
+  },
+  put(col,id,data){ return this.write(col,id,data,"Saved"); },
+  del(col,id){ return this.write(col,id,null,"Removed"); },
+  paint(){
+    const el=document.getElementById("syncSub"); if(!el) return;
+    const n=this.outbox.length;
+    el.textContent = n ? `${n} change${n===1?"":"s"} not synced · ` : (!this.fromServer||!this.online) ? "Offline · " : "";
   },
   /* Claude, proxied by our server so the API key never reaches the browser */
   async ask(prompt, images){
@@ -551,9 +609,10 @@ function renderDetail(){
     sheetActions(sh,{ no:closeSheet, yes:async()=>{
       const id=state.detailId; closeSheet();
       delete state.recipes[id];
-      for(const k of Object.keys(state.plan)){ const day=state.plan[k]; const before=day.entries.length; day.entries=day.entries.filter(e=>e.recipeId!==id); if(day.entries.length!==before) await savePlanDay(k,day); }
-      await store.del("recipes",id);
-      toast("Deleted"); show("recipes");
+      let ok=true;
+      for(const k of Object.keys(state.plan)){ const day=state.plan[k]; const before=day.entries.length; day.entries=day.entries.filter(e=>e.recipeId!==id); if(day.entries.length!==before) ok=await savePlanDay(k,day)&&ok; }
+      ok=await store.del("recipes",id)&&ok;
+      if(ok) toast("Deleted"); show("recipes");
     } });
   };
   el.querySelector("#addPlan").onclick=()=>pickDay(state.detailId);
@@ -562,7 +621,7 @@ function renderDetail(){
 
 /* ---------- plan ---------- */
 function planDay(dateISO){ return state.plan[dateISO]||{date:dateISO,entries:[]}; }
-async function savePlanDay(dateISO,day){ if(day.entries.length){ state.plan[dateISO]=day; await store.put("plan",dateISO,day); } else { delete state.plan[dateISO]; await store.put("plan",dateISO,{date:dateISO,entries:[]}); } }
+async function savePlanDay(dateISO,day){ if(day.entries.length){ state.plan[dateISO]=day; return store.put("plan",dateISO,day); } delete state.plan[dateISO]; return store.put("plan",dateISO,{date:dateISO,entries:[]}); }
 
 function renderPlan(){
   document.getElementById("weekTitle").textContent = weekLabel(state.week);
@@ -597,7 +656,7 @@ function slotSheet(k,ix){
   sheetActions(sh,{
     minus:()=>bump(-1), plus:()=>bump(1), done:closeSheet,
     open:()=>{ closeSheet(); if(state.detailId!==en.recipeId) state.mult=1; state.detailId=en.recipeId; show("detail"); },
-    remove:async()=>{ day.entries.splice(ix,1); await savePlanDay(k,day); closeSheet(); renderPlan(); toast("Removed"); },
+    remove:async()=>{ day.entries.splice(ix,1); const ok=await savePlanDay(k,day); closeSheet(); renderPlan(); if(ok) toast("Removed"); },
   });
 }
 document.getElementById("prevWeek").onclick=()=>{ state.week=addDays(state.week,-7); show(state.view); };
@@ -622,7 +681,7 @@ function pickRecipe(dateISO){
     <div id="pickList">${list.map(([id,r])=>`<button class="opt" data-act="pick" data-id="${id}">${esc(r.title)}<small>${r.servings?`Serves ${r.servings}`:""}</small></button>`).join("")}</div>`);
   s.querySelector("#pickQ").oninput=e=>{ const q=e.target.value.toLowerCase(); s.querySelectorAll(".opt").forEach(o=>o.hidden=!o.textContent.toLowerCase().includes(q)); };
   sheetActions(s,{ pick:async o=>{ const r=state.recipes[o.dataset.id]; if(!r) return;
-    const day=planDay(dateISO); day.entries.push({recipeId:o.dataset.id, servings:r.servings||2}); await savePlanDay(dateISO,day); closeSheet(); renderPlan(); toast("Added"); } });
+    const day=planDay(dateISO); day.entries.push({recipeId:o.dataset.id, servings:r.servings||2}); const ok=await savePlanDay(dateISO,day); closeSheet(); renderPlan(); if(ok) toast("Added"); } });
 }
 function pickDay(recipeId){
   const r=state.recipes[recipeId];
@@ -631,7 +690,7 @@ function pickDay(recipeId){
   sheetActions(s,{
     pw:()=>{ state.week=addDays(state.week,-7); pickDay(recipeId); },
     nw:()=>{ state.week=addDays(state.week,7); pickDay(recipeId); },
-    day:async o=>{ const k=o.dataset.k; if(!k) return; const day=planDay(k); day.entries.push({recipeId, servings:Math.max(1,Math.round((r.servings||2)*(state.mult||1)))}); await savePlanDay(k,day); closeSheet(); toast(`Added to ${DAYS[(new Date(k+"T00:00").getDay()+6)%7]}`); },
+    day:async o=>{ const k=o.dataset.k; if(!k) return; const day=planDay(k); day.entries.push({recipeId, servings:Math.max(1,Math.round((r.servings||2)*(state.mult||1)))}); const ok=await savePlanDay(k,day); closeSheet(); if(ok) toast(`Added to ${DAYS[(new Date(k+"T00:00").getDay()+6)%7]}`); },
   });
 }
 
@@ -743,7 +802,7 @@ document.getElementById("pantryClear").onclick=()=>{
   if(!Object.keys(state.pantry).length) return;
   const sh=openSheet(`<h3>Clear the pantry?</h3><p class="muted small">Every item on the list goes.</p>
     <div class="row" style="margin-top:12px"><button class="btn danger" data-act="yes">Clear it</button><button class="btn ghost" data-act="no">Keep it</button></div>`);
-  sheetActions(sh,{ no:closeSheet, yes:async()=>{ const ids=Object.keys(state.pantry); state.pantry={}; closeSheet(); renderPantry(); for(const id of ids) await store.del("pantry",id); toast("Pantry cleared"); } });
+  sheetActions(sh,{ no:closeSheet, yes:async()=>{ const ids=Object.keys(state.pantry); state.pantry={}; closeSheet(); renderPantry(); let ok=true; for(const id of ids) ok=await store.del("pantry",id)&&ok; if(ok) toast("Pantry cleared"); } });
 };
 document.getElementById("cookFrom").onclick=async()=>{
   const btn=document.getElementById("cookFrom"); const box=document.getElementById("ideas");
@@ -1022,9 +1081,9 @@ function renderReview(){
   const save=async()=>{
     const r=collect(); if(!r.title){ toast("Give it a title first"); el.querySelector("#fTitle").focus(); return; }
     const id=state.editingId||uid(); r.created_at=state.editingId? (state.recipes[id]?.created_at||new Date().toISOString()) : new Date().toISOString(); r.updated_at=new Date().toISOString();
-    state.recipes[id]=r; await store.put("recipes",id,r);
+    state.recipes[id]=r; const ok=await store.put("recipes",id,r);
     state.draft=null; state.editingId=null; state.images=[]; document.getElementById("srcText").value=""; document.getElementById("srcUrl").value="";
-    toast("Saved"); state.detailId=id; show("detail");
+    if(ok) toast("Saved"); state.detailId=id; show("detail");
   };
   el.querySelector("#revSave").onclick=save; el.querySelector("#revSave2").onclick=save;
 }

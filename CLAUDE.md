@@ -55,9 +55,21 @@ servings}]}`. `shop` is keyed by week-start date. `pantry` is keyed by item id.
 Everything goes through the `store` object in `index.html`. If you are changing
 how data persists, that is the only place to touch.
 
-- `store.put(col, id, doc)` / `store.del(col, id)` — writes, with a localStorage
-  mirror. The mirror is only *read* when `/api/state` fails at startup; it is
-  never synced back to the server. See "Known gaps" below.
+- `store.put(col, id, doc)` / `store.del(col, id)` — writes. Each one goes into
+  a persistent **outbox** (`localStorage["bourdain.outbox"]`) and leaves it only
+  once the server accepts it. They resolve `true` when the server has the change
+  and `false` when it is waiting on this device; `store` toasts the "waiting"
+  case itself, so callers only toast success, and only when the result is `true`.
+  Never toast "Saved" unconditionally after a write.
+- Sync: `store.flush()` sends the outbox in order, retrying on the `online`
+  event, when the app comes back to the foreground, and every 30s while anything
+  is pending. On load, unsynced outbox entries are laid over the server's data,
+  so local changes win (last write wins, which is fine for one person). A 4xx
+  means the server will never accept that change, so it is dropped with a toast.
+  The header shows "N changes not synced" or "Offline".
+- `localStorage["bourdain"]` is a full mirror, used only when `/api/state` fails
+  at startup. Once the server is reachable again the app reloads from it.
+- Photo uploads are **not** queued. They need the server at the moment you add them.
 - `store.ask(prompt, images)` — proxied Claude call, returns parsed JSON
 - `store.fetchUrl(url)` — server-side page fetch
 - `store.uploadPhoto(blob)` — returns `{id}`
@@ -101,10 +113,10 @@ every open precisely because an earlier version attached listeners that survived
 into the next sheet and swallowed its clicks. Route every sheet button through
 `data-act` + `sheetActions()`. Never attach ad-hoc `onclick` to sheet contents.
 
-**Deletes are not retried and there are no tombstones.** `store.del` sends a
-real DELETE; if it fails it shows a toast and nothing else, so the item comes
-back on the next load. Loading does no filtering at all — whatever is in the
-database is shown. Removing the last meal from a plan day writes
+**Deletes are queued like any other write, and there are no tombstones.** A
+delete is an outbox entry with `doc: null`. It is replayed over server data on
+load, so a deleted item stays gone until the DELETE lands. Loading does no other
+filtering — whatever is in the database is shown. Removing the last meal from a plan day writes
 `{date, entries: []}` rather than deleting the row. Earlier, pre-repo versions
 may have written `{deleted: true}` rows; the current code does not filter them,
 and an untitled recipe crashes the Plan picker (`pickRecipe` calls
@@ -183,12 +195,6 @@ cooking, a cooking mode with timers, restoring the shopping list.
 Found in a review on 2026-09-24 and not yet fixed. Remove each line once it
 is fixed.
 
-- **Failed saves look like successes.** `store.put` toasts "Couldn't save to
-  the server, kept on this device", but callers immediately toast "Saved"
-  (or "Deleted") over it.
-- **Offline edits are lost.** When the server answers at startup its data
-  replaces the local mirror, and the next write overwrites the mirror.
-  Nothing made offline, or in a failed PUT, reaches the server.
 - **No loading state or client timeouts.** The app renders the empty "Nothing
   in the book yet" screen until `/api/state` returns, however long that takes.
 - **Import "Stop" does nothing.** `parseCtl` is never passed to `fetch`.
