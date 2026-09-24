@@ -31,7 +31,8 @@ A recipe:
 {
   title, description, servings, prep_min, cook_min, notes,
   source_url, source_type,          // web | instagram | tiktok | youtube | manual
-  photos: [assetId],                // first one is the hero image
+  photos: [assetId],                // first one is the hero image, unless there's a cover
+  cover: assetId,                   // optional AI illustration, served from /api/covers/:id (WebP)
   tags: [string],
   ingredients: [{
     raw_text,                       // the line as originally written, kept for re-parsing
@@ -78,9 +79,13 @@ how data persists, that is the only place to touch.
   Aborting `signal` cancels it; the server then aborts its upstream call too.
 - `store.fetchUrl(url)` — server-side page fetch
 - `store.uploadPhoto(blob)` — returns `{id}`
+- `makeCover(recipe, onDone)` — POSTs to `/api/cover` and calls `onDone(coverId)`.
+  It runs in a sheet with Stop. If the sheet is dismissed it finishes in the
+  background, so `onDone` must re-resolve its target. See `applyCover` and
+  `state.reviewCollect`.
 
-**The Anthropic API key lives only on the server.** It must never appear in
-`index.html` or any client-visible file.
+**The Anthropic and OpenAI API keys live only on the server.** Neither may appear
+in `index.html` or any client-visible file.
 
 ## Deploy loop
 
@@ -127,8 +132,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v5"`
-in `public/sw.js` → `v6`, `v7`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v6"`
+in `public/sw.js` → `v7`, `v8`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -178,6 +183,14 @@ possibly missing.
 `COLLECTIONS` (or writes get a 404), add a `CREATE TABLE` (or writes fail with
 a 500), and add it to the `/api/state` response. In `index.html`: add it to
 `state` and to both branches of `store.init()` and to `store.local()`.
+
+**Upstream failures have specific codes, and the client has one message table.**
+`callClaude()` and `paintCover()` in `server.js` throw `UpstreamError` with codes
+such as `bad_api_key`, `no_credit`, `model_unavailable`, `overloaded`,
+`truncated`, `refused`, `image_rejected`, `no_image_key` and `image_refused`.
+Some carry a short `detail` from the provider. `aiError(e)` in `index.html` maps
+every code to a message saying what to do next. When you add a code, add its
+message there. Don't add another "try again" branch at a call site.
 
 **Server errors are JSON with a `code`.** Every `/api` failure goes through the
 error handler at the bottom of `server.js`, which maps it to
@@ -245,25 +258,38 @@ restoring it is adding the tab button back and changing `.tabs`
 `grid-template-columns:repeat(4,1fr)` to `repeat(5,1fr)`.
 
 Live features: link fetch and AI import with review screen, screen-recording
-frame extraction, recipe photos, drag-to-reorder ingredients in the edit form,
+frame extraction, recipe photos, AI cover illustrations (on request), drag-to-reorder ingredients in the edit form,
 0.5×–10× batch multiplier, week planner, pantry with "cook from what I have".
 
 Ideas not yet built: nutrition estimates, pantry quantities decremented by
 cooking, a cooking mode with timers, restoring the shopping list, and
-**AI cover illustrations**. Zein currently makes these by hand for each recipe:
-the recipe export goes into an image model to make a Studio Ghibli-inspired
-cover. Automating that needs a separate image-generation provider, because the
-Claude API reads images but doesn't generate them. That provider's key must
-live only on the server, like the Anthropic one.
+a cleanup for cover files orphaned when a cover is replaced or a draft is
+discarded (a few hundred KB each; nothing deletes them yet).
+
+## Covers
+
+`POST /api/cover` takes the recipe and returns `{id}`. Claude (`describeDish`)
+writes one sentence describing the served dish. It is appended to `COVER_STYLE`
+(Zein's own prompt, adapted for a transparent background), and OpenAI's
+`/v1/images/generations` paints it: `IMAGE_MODEL` (default `gpt-image-2`),
+`IMAGE_QUALITY` (default `medium`), 1024×1024, `background: "transparent"`,
+PNG. Transparency is a preview feature on `gpt-image-2`. If OpenAI rejects it,
+`paintCover` retries once with an opaque white background, which looks the same
+because covers are always shown on `--paper` white. The PNG is stored as WebP
+(keeps alpha; the photo pipeline's JPEG would not) in the photos dataset as
+`<id>.webp`.
+
+Display rule: a cover is shown whole (`object-fit: contain`) on `--paper`, never
+on the grey `--steel` tile and never cropped. That rule is what makes the dish
+look like it's floating. The API calls were written against the `openai` npm
+package's type definitions (v7.23.0), because OpenAI's docs are blocked from the
+dev sandbox. Tests use a fake OpenAI; the first real call happens on the NAS.
 
 ## Known gaps
 
 Found in a review on 2026-09-24 and not yet fixed. Remove each line once it
 is fixed.
 
-- **Import errors all read "try again"** (#7). Every upstream failure is
-  `upstream_error`, a reply cut off at `max_tokens: 4000` reads as
-  `invalid_json`, and retrying can't fix either.
-- **Screenshots are sent full size** (#8). Only photos are shrunk; a large PNG
-  can exceed the API's per-image limit.
-- **Video frame extraction can hang** (#10) if a `seeked` event never fires.
+- **Photo uploads aren't queued offline** (#12). They fail visibly instead.
+- **`/api/fetch` can reach LAN addresses** (#14). Only matters if the app is ever
+  exposed beyond the home network.

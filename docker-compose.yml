@@ -3,6 +3,7 @@
 # Before you do, replace:
 #   YOUR-POOL             with your ZFS pool name (and adjust the dataset paths to match yours)
 #   sk-ant-...            with your Anthropic API key
+#   sk-...                with your OpenAI API key (only needed for recipe covers)
 #
 # Create these two datasets first (Datasets -> Add Dataset):
 #   /mnt/YOUR-POOL/apps/bourdain/data
@@ -21,6 +22,11 @@ services:
     environment:
       ANTHROPIC_API_KEY: "sk-ant-REPLACE-ME"
       CLAUDE_MODEL: "claude-sonnet-4-6"
+      # Recipe covers: Claude describes the dish, OpenAI paints it. Leave the key as-is
+      # to run without covers; the Make cover button then says the key is missing.
+      OPENAI_API_KEY: "sk-REPLACE-ME"
+      IMAGE_MODEL: "gpt-image-2"
+      IMAGE_QUALITY: "medium"
       DATA_DIR: "/data"
       PORT: "8080"
     ports:

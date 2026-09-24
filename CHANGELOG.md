@@ -6,6 +6,16 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 1.4.0 — 2026-09-24
+- New: tap Make cover on a recipe to get an illustrated cover in your usual style, floating on the page with no background.
+- Covers show whole on the recipe card and at the top of the recipe, and your own photos stay underneath.
+- You can make a cover while reviewing an import, make a new one any time, or remove it.
+- When an import fails, the message now says what went wrong and what to do: a missing or rejected key, no credit, Claude overloaded, a reply that was cut off, or an image it couldn't accept.
+- Long recipes no longer get cut off partway through reading.
+- Screenshots are shrunk on your phone before sending, so imports upload faster.
+- A screen recording that won't play properly now stops with a message instead of spinning forever.
+- Messages stay on screen long enough to read.
+
 ## 1.3.1 — 2026-09-24
 - The app opens straight onto your recipes, using the copy saved on this phone, while it checks the server in the background.
 - A new phone with nothing saved yet shows "Loading your recipes…" instead of "Nothing in the book yet".
