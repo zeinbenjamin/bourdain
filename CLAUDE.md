@@ -122,7 +122,8 @@ on the right that opens the recipe picker. When the week shown is the current on
 under it. The note keeps its space on other weeks, so the days don't jump. A planned meal
 (`.slot`) shows `miniThumb(r)` (the recipe card's picture rule at 40px: cover whole
 on white, else first photo cropped, else the first letter), then the title, which
-wraps in full rather than truncating, with the servings under it.
+wraps in full rather than truncating. Servings are not shown on the row; tapping
+the meal opens `slotSheet`, where they're changed.
 
 **Recipe list sort and filter** (`listPrefs`, `sortRecipes`, `keepRecipe`)
 are remembered per phone in `localStorage["bourdain.listPrefs"]`. A recipe card
@@ -208,8 +209,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v16"`
-in `public/sw.js` → `v17`, `v18`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v17"`
+in `public/sw.js` → `v18`, `v19`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
