@@ -147,7 +147,8 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   version sheet), `covers` (cover UI, import errors, shrinking), `review`
   (edit form: description, double-tap Save), `cook` (cook mode, ratings,
   cook log), `timers` (fake clock via `page.clock`), `list` (sort, filter,
-  cards), `scan`, `video`.
+  cards), `layout` (measured gaps and tap targets at phone width), `scan`,
+  `video`.
 - `slowProxy` delays: `shell` (index.html), `state` (`/api/state`), `write`
   (PUT/DELETE).
 
@@ -199,8 +200,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v12"`
-in `public/sw.js` → `v13`, `v14`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v13"`
+in `public/sw.js` → `v14`, `v15`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -317,6 +318,10 @@ never inline.
 ## Conventions
 
 - Mobile first. It is used on a phone, standing in a kitchen. Tap targets ≥ 44px.
+  A small glyph like "×" gets a 44px box (a negative margin keeps the glyph where
+  it was). No inline `style="margin…"` on layout: it silently beats the
+  stylesheet. When you fix spacing, add a measured check to
+  `tests/layout.test.mjs`.
 - Plain DOM. No React, no jQuery, no state library.
 - Patterns already in the file: `render()` dispatches by `state.view`;
   `esc()` on every interpolated string; `toast()` for feedback;

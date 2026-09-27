@@ -6,6 +6,13 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 1.7.3 — 2026-09-27
+- Pantry: proper spacing between the buttons, your ideas and the list, and "Tonight's options" now matches the other headings.
+- Pantry: the × to remove an item is easier to tap, the Add button is no longer squashed, and the example in the box fits.
+- The + button next to search is a proper circle.
+- On a recipe, the gap between the stars and the description is tidied up.
+- The date shows in the header as soon as the app opens.
+
 ## 1.7.2 — 2026-09-27
 - On recipe cards, the Michelin stars now sit on their own line under the title, above the time, servings and source. Recipes without stars skip that line.
 
