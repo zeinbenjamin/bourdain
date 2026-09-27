@@ -1,0 +1,53 @@
+// Spacing and tap-target checks measured in the real layout (phone width), so
+// fixes like the Pantry gaps in 1.7.3 can't quietly regress.
+import { suite, startServer, openBrowser, openApp, sleep } from "./lib.mjs";
+
+const { check, finish } = suite("layout");
+let s, b;
+try {
+  s = await startServer({ port: 19201 });
+  b = await openBrowser();
+  const { page, errors } = b;
+  await s.put("recipes", "a", { title: "Leek soup", description: "Silky and peppery.", rating: 2, servings: 4, prep_min: 10, cook_min: 25, tags: ["soup"], cooks: [{ date: "2026-09-20", at: "x" }],
+    ingredients: [{ item: "leek", quantity: 3, unit: "whole" }], steps: ["Soften for 8 minutes."], photos: [], created_at: "2026-09-01" });
+  for (const [id, item] of [["p1", "lemons"], ["p2", "rice"]]) await s.put("pantry", id, { id, item, aisle: id === "p1" ? "produce" : "pantry" });
+  await openApp(page, s.url);
+  const box = (sel) => page.evaluate((q) => { const e = document.querySelector(q); if (!e) return null; const r = e.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, w: r.width, h: r.height }; }, sel);
+
+  check("header date shows on first open", /\w{3} \d{1,2} \w{3}/.test(await page.textContent("#topSub")), await page.textContent("#topSub"));
+  const plus = await box("#btnManual");
+  check("'+' next to search is a 46px circle", Math.round(plus.w) === 46 && Math.round(plus.h) === 46, JSON.stringify(plus));
+
+  // --- pantry
+  await page.click('#tabs button[data-view="pantry"]');
+  const actions = await box("#view-pantry .actions"), firstAisle = await box("#pantryList .aisle h3");
+  check("pantry: at least 16px between the buttons and the list", firstAisle.top - actions.bottom >= 16, `${Math.round(firstAisle.top - actions.bottom)}px`);
+  const add = await box("#pantryAddBtn"), input = await box("#pantryAdd");
+  check("pantry: Add button same height as the box, not squashed", Math.abs(add.h - input.h) <= 1 && add.w >= 72, JSON.stringify({ add, input }));
+  check("pantry: hint fits the box", await page.evaluate(() => { const i = document.getElementById("pantryAdd"); const c = document.createElement("canvas").getContext("2d"); const cs = getComputedStyle(i); c.font = `${cs.fontSize} ${cs.fontFamily}`; return c.measureText(i.placeholder).width <= i.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight); }));
+  const x = await box("#pantryList .x");
+  check("pantry: × remove buttons are 44px", Math.round(x.w) >= 44 && Math.round(x.h) >= 44, JSON.stringify(x));
+  const row = await box("#pantryList .item");
+  check("pantry: × tap area stays on screen, × lined up with the row's edge", x.right <= 390 - 4 && Math.abs((x.left + x.right) / 2 - (row.right - 10)) <= 6, JSON.stringify({ x, rowRight: row.right }));
+  await page.evaluate(() => { state.ideas = [{ title: "Lemon rice", why: "Bright and quick.", missing: [] }]; renderIdeas(); });
+  const ideas = await box("#ideas"), aisle2 = await box("#pantryList .aisle h3");
+  check("pantry: gap between the ideas and the list", aisle2.top - ideas.bottom >= 16, `${Math.round(aisle2.top - ideas.bottom)}px`);
+  const [ih, ah] = await page.evaluate(() => [".ideas-head h3", ".aisle h3"].map((q) => { const cs = getComputedStyle(document.querySelector(q)); return `${cs.fontSize}/${cs.letterSpacing}/${cs.fontWeight}`; }));
+  check("pantry: 'Tonight's options' styled like the other headings", ih === ah, `${ih} vs ${ah}`);
+  await page.evaluate(() => { state.pantry = {}; state.ideas = null; renderPantry(); });
+  const empty = await box("#pantryList .empty"), acts = await box("#view-pantry .actions");
+  check("pantry: empty message sits 16-30px under the buttons", empty.top - acts.bottom >= 16 && empty.top - acts.bottom <= 30, `${Math.round(empty.top - acts.bottom)}px`);
+  await page.reload(); await page.waitForFunction(() => !store.loading);
+
+  // --- recipe page
+  await page.click('#tabs button[data-view="recipes"]'); await page.click(".rcard");
+  const stats = await box("#cookStats"), desc = await box("#view-detail p.muted");
+  check("recipe page: no big gap between the stars line and the description", desc.top - stats.bottom <= 12, `${Math.round(desc.top - stats.bottom)}px`);
+
+  // --- edit form
+  await page.click("#edit");
+  const handle = await box(".ingrow .h");
+  check("edit form: drag handle on one line", handle.h < 30, JSON.stringify(handle));
+  check("no page errors", errors.length === 0, errors.join(" | "));
+  finish();
+} catch (e) { finish(e); } finally { await b?.browser.close(); await s?.cleanup(); }
