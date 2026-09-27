@@ -77,6 +77,9 @@ try {
       mini: m && { cover: m.classList.contains("cover"), img: m.querySelector("img")?.getAttribute("src") || null, letter: m.textContent, w: m.getBoundingClientRect().width, fit: m.querySelector("img") ? getComputedStyle(m.querySelector("img")).objectFit : null } };
   }));
   check("plan: long meal names wrap in full, no '…'", slots[0].lines >= 2 && !slots[0].clipped && slots[0].text.endsWith("white beans"), JSON.stringify(slots[0]));
+  check("plan: meals don't show the serves count", await page.evaluate(() => [...document.querySelectorAll("#days .slot")].every((b) => !/serves/i.test(b.textContent))), await page.textContent("#days .slot"));
+  const titleMid = await page.evaluate(() => { const b = document.querySelector("#days .slot:nth-child(2)"), t = b.querySelector(".t").getBoundingClientRect(), m = b.querySelector(".mini").getBoundingClientRect(); return Math.abs((t.top + t.bottom) / 2 - (m.top + m.bottom) / 2); });
+  check("plan: one-line name is centred on its picture", titleMid <= 2, `${titleMid}px off`);
   check("plan: every meal has a mini picture", slots.every((x) => x.mini && Math.round(x.mini.w) === 40), JSON.stringify(slots.map((x) => x.mini)));
   check("plan: cover shown whole, on white", slots[1].mini.cover && slots[1].mini.img === "/api/covers/" + "c".repeat(32) && slots[1].mini.fit === "contain", JSON.stringify(slots[1].mini));
   check("plan: no cover or photo → first letter", slots[0].mini.letter === "G" && !slots[0].mini.img && slots[3].mini.letter === "?", JSON.stringify([slots[0].mini, slots[3].mini]));

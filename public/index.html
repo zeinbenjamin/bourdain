@@ -183,9 +183,7 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .slot .mini img{width:100%;height:100%;object-fit:cover;display:block}
 .slot .mini.cover{background:var(--paper)}
 .slot .mini.cover img{object-fit:contain}
-.slot .txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.slot .t{font-family:var(--serif);font-weight:600;font-size:16px;line-height:1.25;overflow-wrap:anywhere}
-.slot .sv{font-family:var(--sans);font-size:12px;color:var(--ink-3);white-space:nowrap}
+.slot .t{flex:1;min-width:0;font-family:var(--serif);font-weight:600;font-size:16px;line-height:1.25;overflow-wrap:anywhere}
 .addslot{width:44px;height:44px;border:1px solid var(--line);background:none;border-radius:999px;padding:0;color:var(--flame);font-family:var(--sans);font-size:24px;font-weight:400;line-height:1}
 
 /* Picker sheet */
@@ -1008,7 +1006,7 @@ function renderPlan(){
     const d=addDays(state.week,i), k=iso(d), day=planDay(k);
     const slots=day.entries.map((e,ix)=>{
       const r=state.recipes[e.recipeId];
-      return `<button class="slot" data-slot="${k}" data-ix="${ix}">${miniThumb(r)}<span class="txt"><span class="t">${esc(r?(r.title||"Untitled"):"(deleted recipe)")}</span><span class="sv">${e.servings} serves</span></span></button>`;
+      return `<button class="slot" data-slot="${k}" data-ix="${ix}">${miniThumb(r)}<span class="t">${esc(r?(r.title||"Untitled"):"(deleted recipe)")}</span></button>`;
     }).join("");
     return `<div class="day ${k===today?"today":""}"><div class="dn"><span class="w">${n}</span><span class="d">${d.getDate()}</span></div>
       <div class="slots">${slots}</div><button class="addslot" data-add="${k}" aria-label="Add a meal to ${n} ${d.getDate()}">+</button></div>`;
