@@ -52,7 +52,10 @@ try {
   check("plan: this week shows '(this week)' and the range in the accent colour", pl.noteVis === "visible" && pl.note === "(this week)" && pl.title === pl.fc, JSON.stringify(pl));
   const navBefore = await box("#view-plan .weeknav"), prevBtn = await box("#prevWeek");
   check("plan: week arrows are 44px", Math.round(prevBtn.w) >= 44 && Math.round(prevBtn.h) >= 44, JSON.stringify(prevBtn));
+  const todaySub = await page.textContent("#topSub");
+  check("plan: header shows today's date, not the week", /^\w{3} \d{1,2} \w{3}$/.test(todaySub), todaySub);
   await page.click("#nextWeek");
+  check("plan: header date stays on today after changing week", (await page.textContent("#topSub")) === todaySub, await page.textContent("#topSub"));
   const other = await page.evaluate(() => ({ vis: getComputedStyle(document.getElementById("weekNote")).visibility, title: getComputedStyle(document.getElementById("weekTitle")).color }));
   const navAfter = await box("#view-plan .weeknav");
   check("plan: next week has no note and plain ink", other.vis === "hidden" && other.title !== pl.fc, JSON.stringify(other));

@@ -613,7 +613,7 @@ function show(view){
   document.querySelectorAll("section.view").forEach(s=>s.classList.toggle("active", s.id==="view-"+view));
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.view===view || ((view==="detail"||view==="cook")&&b.dataset.view==="recipes")));
   const sub=document.getElementById("topSub");
-  const now=new Date(); sub.textContent = view==="plan"||view==="shop" ? weekLabel(state.week) : `${DAYS[(now.getDay()+6)%7]} ${now.getDate()} ${MONTHS[now.getMonth()]}`;
+  const now=new Date(); sub.textContent = `${DAYS[(now.getDay()+6)%7]} ${now.getDate()} ${MONTHS[now.getMonth()]}`;
   document.getElementById("main").scrollTop=0;
   if(view!=="cook") wake.release();
   render();

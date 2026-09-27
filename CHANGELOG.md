@@ -6,6 +6,9 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 1.7.5 — 2026-09-27
+- Plan: the top right shows today's date, like the other tabs, instead of the week you're looking at.
+
 ## 1.7.4 — 2026-09-27
 - Plan: each day has a small + button instead of "+ Add a meal", so the week is less cluttered.
 - Plan: the current week's dates are in red with "(this week)" underneath, so you can tell at a glance.
