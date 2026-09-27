@@ -179,9 +179,13 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
   border-radius:var(--r); padding:8px 10px; min-width:0;
 }
 .slot{width:100%;text-align:left;color:inherit;min-height:44px}
-.slot .t{flex:1;min-width:0;font-family:var(--serif);font-weight:600;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slot .mini{flex:none;width:40px;height:40px;border-radius:4px;overflow:hidden;background:var(--steel);display:flex;align-items:center;justify-content:center;color:var(--ink-3);font-family:var(--serif);font-weight:700;font-size:18px}
+.slot .mini img{width:100%;height:100%;object-fit:cover;display:block}
+.slot .mini.cover{background:var(--paper)}
+.slot .mini.cover img{object-fit:contain}
+.slot .txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.slot .t{font-family:var(--serif);font-weight:600;font-size:16px;line-height:1.25;overflow-wrap:anywhere}
 .slot .sv{font-family:var(--sans);font-size:12px;color:var(--ink-3);white-space:nowrap}
-.slot .chev{color:var(--ink-3);font-size:18px;line-height:1}
 .addslot{width:44px;height:44px;border:1px solid var(--line);background:none;border-radius:999px;padding:0;color:var(--flame);font-family:var(--sans);font-size:24px;font-weight:400;line-height:1}
 
 /* Picker sheet */
@@ -989,6 +993,12 @@ function historySheet(recipeId){
 function planDay(dateISO){ return state.plan[dateISO]||{date:dateISO,entries:[]}; }
 async function savePlanDay(dateISO,day){ if(day.entries.length){ state.plan[dateISO]=day; return store.put("plan",dateISO,day); } delete state.plan[dateISO]; return store.put("plan",dateISO,{date:dateISO,entries:[]}); }
 
+// Small version of the recipe card's picture: cover whole on white, else first photo, else the first letter.
+function miniThumb(r){
+  if(r&&r.cover) return `<span class="mini cover"><img src="${coverUrl(r.cover)}" alt=""></span>`;
+  if(r&&r.photos&&r.photos.length) return `<span class="mini"><img src="${photoUrl(r.photos[0])}" alt=""></span>`;
+  return `<span class="mini">${esc(((r&&r.title)||"?").trim()[0]||"?").toUpperCase()}</span>`;
+}
 function renderPlan(){
   document.getElementById("weekTitle").textContent = weekLabel(state.week);
   const today=iso(new Date());
@@ -998,7 +1008,7 @@ function renderPlan(){
     const d=addDays(state.week,i), k=iso(d), day=planDay(k);
     const slots=day.entries.map((e,ix)=>{
       const r=state.recipes[e.recipeId];
-      return `<button class="slot" data-slot="${k}" data-ix="${ix}"><span class="t">${esc(r?r.title:"(deleted recipe)")}</span><span class="sv">${e.servings} serves</span><span class="chev">›</span></button>`;
+      return `<button class="slot" data-slot="${k}" data-ix="${ix}">${miniThumb(r)}<span class="txt"><span class="t">${esc(r?(r.title||"Untitled"):"(deleted recipe)")}</span><span class="sv">${e.servings} serves</span></span></button>`;
     }).join("");
     return `<div class="day ${k===today?"today":""}"><div class="dn"><span class="w">${n}</span><span class="d">${d.getDate()}</span></div>
       <div class="slots">${slots}</div><button class="addslot" data-add="${k}" aria-label="Add a meal to ${n} ${d.getDate()}">+</button></div>`;

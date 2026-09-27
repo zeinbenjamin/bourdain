@@ -6,6 +6,10 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 1.7.6 — 2026-09-27
+- Plan: each planned meal shows a small picture on the left: its cover, or its first photo, the same as on the recipe card.
+- Plan: long recipe names wrap onto more lines instead of being cut off with "…". The servings sit underneath.
+
 ## 1.7.5 — 2026-09-27
 - Plan: the top right shows today's date, like the other tabs, instead of the week you're looking at.
 
