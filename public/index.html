@@ -266,6 +266,28 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .ideas-head{display:flex;justify-content:space-between;align-items:center;margin:16px 0 0}
 .scanlist .item .lbl small{display:block;font-family:var(--sans);font-size:12px;color:var(--ink-3)}
 .scanlist .have{font-family:var(--sans);font-size:12.5px;color:var(--ink-3);margin:10px 0 0}
+/* Cook mode */
+.cookbar{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--flame);border-radius:var(--r);padding:8px 10px 8px 12px;margin:0 0 12px;font-family:var(--sans);font-size:13px}
+.cookbar strong{font-weight:700}
+.cooklist{list-style:none;padding:0;margin:0}
+.cooklist li{border-bottom:1px solid var(--line)}
+.cooklist .sec{font-family:var(--sans);font-weight:700;font-size:13px;letter-spacing:.02em;text-transform:uppercase;padding:14px 0 4px;border:0}
+.ck{display:flex;align-items:flex-start;gap:12px;width:100%;min-height:48px;padding:11px 2px;background:none;border:0;text-align:left;font:inherit;color:inherit}
+.ck .box{flex:none;width:24px;height:24px;margin-top:1px;border:1.5px solid var(--ink);border-radius:var(--r);display:flex;align-items:center;justify-content:center;font-family:var(--sans);font-size:15px;line-height:1;color:var(--paper)}
+.ck.done .box{background:var(--ink)}
+.ck.done .box::after{content:"✓"}
+.ck.done .txt{text-decoration:line-through;color:var(--ink-3)}
+.ck .q{font-weight:600}
+.ck .n{display:block;font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:.02em;text-transform:uppercase;color:var(--ink-3);margin-bottom:2px}
+.steps-ck .txt{font-size:19px;line-height:1.5}
+.ck.current{box-shadow:inset 3px 0 0 var(--flame);padding-left:12px}
+.ck.current .n{color:var(--flame)}
+.cookstats{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:none;border:0;padding:6px 0;margin:2px 0;font-family:var(--sans);font-size:13px;color:var(--ink-2);text-align:left;min-height:44px}
+.stars-ink{font-family:var(--sans);letter-spacing:.08em;color:var(--ink)}
+.rate .opt.on{box-shadow:inset 3px 0 0 var(--flame);padding-left:12px}
+.cooks{list-style:none;padding:0;margin:8px 0 0}
+.cooks li{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding:6px 0;font-family:var(--sans);font-size:14px}
+.cooks .x{border:0;background:none;color:var(--ink-3);font-size:18px;min-width:44px;min-height:44px}
 .toast{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:9px 14px;border-radius:var(--r);font-family:var(--sans);font-size:13px;z-index:30;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
 </style>
@@ -285,12 +307,16 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
       <input class="input" id="search" type="search" placeholder="Search recipes or ingredients" autocomplete="off">
       <button class="btn" id="btnManual" title="Add a recipe by hand">+</button>
     </div>
+    <div id="cookBanner"></div>
     <div class="chips" id="tagChips"></div>
     <div class="rlist" id="rlist"></div>
   </section>
 
   <!-- DETAIL -->
   <section class="view detail" id="view-detail"></section>
+
+  <!-- COOK -->
+  <section class="view detail" id="view-cook"></section>
 
   <!-- PLAN -->
   <section class="view" id="view-plan">
@@ -544,10 +570,11 @@ function sourceType(u){ const h=hostOf(u); if(/instagram/.test(h))return "instag
 function show(view){
   state.view=view;
   document.querySelectorAll("section.view").forEach(s=>s.classList.toggle("active", s.id==="view-"+view));
-  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.view===view || (view==="detail"&&b.dataset.view==="recipes")));
+  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.view===view || ((view==="detail"||view==="cook")&&b.dataset.view==="recipes")));
   const sub=document.getElementById("topSub");
   const now=new Date(); sub.textContent = view==="plan"||view==="shop" ? weekLabel(state.week) : `${DAYS[(now.getDay()+6)%7]} ${now.getDate()} ${MONTHS[now.getMonth()]}`;
   document.getElementById("main").scrollTop=0;
+  if(view!=="cook") wake.release();
   render();
 }
 document.getElementById("tabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(b) show(b.dataset.view); });
@@ -560,6 +587,7 @@ function render(){
   if (state.view==="shop") renderShop();
   if (state.view==="pantry") renderPantry();
   if (state.view==="import") renderImport();
+  if (state.view==="cook") renderCook();
 }
 
 function allTags(){ const c={}; Object.values(state.recipes).forEach(r=>(r.tags||[]).forEach(t=>c[t]=(c[t]||0)+1)); return Object.entries(c).sort((a,b)=>b[1]-a[1]).map(x=>x[0]); }
@@ -576,6 +604,7 @@ function renderRecipes(){
     const hay=[r.title,r.description,...(r.tags||[]),...(r.ingredients||[]).map(i=>i.item||i.raw_text)].join(" ").toLowerCase();
     return hay.includes(q);
   }).sort((a,b)=>(b[1].created_at||"").localeCompare(a[1].created_at||""));
+  paintCookBanner();
   const el=document.getElementById("rlist");
   if (!Object.keys(state.recipes).length && store.loading){ el.innerHTML=`<div class="empty"><span class="spin"></span>Loading your recipes…</div>`; return; }
   if (!Object.keys(state.recipes).length){
@@ -585,7 +614,7 @@ function renderRecipes(){
   if (!list.length){ el.innerHTML=`<div class="empty">No recipes match that.</div>`; return; }
   el.innerHTML=list.map(([id,r])=>{
     const t=(r.prep_min||0)+(r.cook_min||0);
-    const meta=[t?`${t} min`:null, r.servings?`${r.servings} serves`:null, r.source_type&&r.source_type!=="manual"?r.source_type:null].filter(Boolean).join(" · ");
+    const meta=[r.rating?"★".repeat(r.rating):null, t?`${t} min`:null, r.servings?`${r.servings} serves`:null, (r.cooks||[]).length?`cooked ${(r.cooks||[]).length}×`:null, r.source_type&&r.source_type!=="manual"?r.source_type:null].filter(Boolean).join(" · ");
     return `<button class="rcard" data-id="${id}">
       ${r.cover?`<div class="thumb cover"><img src="${coverUrl(r.cover)}" alt=""></div>`
         :`<div class="thumb">${r.photos&&r.photos.length?`<img src="${photoUrl(r.photos[0])}" alt="">`:esc((r.title||"?").trim()[0]||"?").toUpperCase()}</div>`}
@@ -609,12 +638,13 @@ function renderDetail(){
       <div class="row"><button class="btn small" id="edit">Edit</button><button class="btn small danger" id="del">Delete</button></div></div>
     <h2>${esc(r.title)}</h2>
     <div class="meta">${esc(meta)}</div>
+    <button class="cookstats" id="cookStats" aria-label="Rating and cooking history">${cookStatsHtml(r)}</button>
     ${r.source_url?`<div class="source muted"><a href="${esc(r.source_url)}" target="_blank" rel="noopener">${esc(hostOf(r.source_url)||r.source_url)}</a></div>`:""}
     ${r.description?`<p class="muted">${esc(r.description)}</p>`:""}
     <div class="tags" style="margin-top:8px;display:flex;gap:4px;flex-wrap:wrap">${(r.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>
     ${r.cover?`<img class="hero cover" src="${coverUrl(r.cover)}" alt="">`:r.photos&&r.photos.length?`<img class="hero" src="${photoUrl(r.photos[0])}" alt="">`:""}
     ${r.cover ? (r.photos&&r.photos.length?photosHtml(r.photos,false):"") : (r.photos&&r.photos.length>1?photosHtml(r.photos.slice(1),false):"")}
-    <div class="actions"><button class="btn primary" id="addPlan">Add to the week</button><button class="btn" id="addPhoto">Add photo</button><button class="btn" id="makeCover">${r.cover?"New cover":"Make cover"}</button></div>
+    <div class="actions"><button class="btn primary" id="cookThis">${cooking.get()?.recipeId===state.detailId?"Continue cooking":"Cook this"}</button><button class="btn" id="addPlan">Add to the week</button><button class="btn" id="addPhoto">Add photo</button><button class="btn" id="makeCover">${r.cover?"New cover":"Make cover"}</button></div>
     <h3>Ingredients</h3>
     <div class="scaler"><span class="lab">Batch</span>
       <span class="ctl"><button id="multDown" aria-label="Smaller batch">−</button><span class="amt" id="multAmt"></span><button id="multUp" aria-label="Bigger batch">+</button></span>
@@ -655,9 +685,141 @@ function renderDetail(){
     } });
   };
   el.querySelector("#addPlan").onclick=()=>pickDay(state.detailId);
+  el.querySelector("#cookThis").onclick=()=>startCooking(state.detailId);
+  el.querySelector("#cookStats").onclick=()=>historySheet(state.detailId);
   const rid=state.detailId;
   el.querySelector("#makeCover").onclick=()=>makeCover(r, id=>applyCover(rid,id));
   const ap=el.querySelector("#addPhoto"); if(ap) ap.onclick=async()=>{ const files=await pickPhotos(); if(!files.length) return; toast("Uploading…"); const ids=await uploadPhotos(files); if(!ids.length) return; r.photos=[...(r.photos||[]),...ids]; r.updated_at=new Date().toISOString(); await store.put("recipes",state.detailId,r); renderDetail(); };
+}
+
+/* ---------- cooking ----------
+   "Cook this" opens a checklist of the recipe's ingredients and steps. Progress is
+   kept on this phone (localStorage), not the server, so ticking is instant and
+   works offline, and it survives the phone locking or the app reloading. Only
+   finishing writes to the recipe: a dated entry in `cooks` and, optionally, the
+   Michelin-style `rating` (0–3). One cook at a time. */
+const COOK_KEY="bourdain.cooking";
+const cooking={
+  get(){ try{ return JSON.parse(localStorage.getItem(COOK_KEY)||"null"); }catch(_){ return null; } },
+  set(c){ try{ localStorage.setItem(COOK_KEY,JSON.stringify(c)); }catch(_){} },
+  clear(){ try{ localStorage.removeItem(COOK_KEY); }catch(_){} },
+};
+const MICHELIN=[
+  {n:0, label:"No stars", hint:"Fine, but nothing special"},
+  {n:1, label:"★", hint:"Very good cooking"},
+  {n:2, label:"★★", hint:"Excellent, worth a detour"},
+  {n:3, label:"★★★", hint:"Exceptional, worth a special journey"},
+];
+/* Keeps the screen on while cooking, where supported. The browser drops the lock
+   whenever the app is hidden, so it's re-requested on return. */
+const wake={
+  lock:null,
+  async hold(){ try{ if(!this.lock && navigator.wakeLock) { this.lock=await navigator.wakeLock.request("screen"); this.lock.addEventListener?.("release",()=>{ this.lock=null; }); } }catch(e){ this.lock=null; } },
+  release(){ try{ this.lock?.release(); }catch(_){} this.lock=null; },
+};
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible"&&state.view==="cook") wake.hold(); });
+
+function cookStatsHtml(r){
+  const n=(r.cooks||[]).length, last=n?r.cooks[n-1].date:null;
+  const stars=r.rating?`<span class="stars-ink">${"★".repeat(r.rating)}</span>`:(r.rating===0?"No stars":"Not rated yet");
+  const times=n?`Cooked ${n===1?"once":n+" times"} · last ${fmtDate(last)}`:"Never cooked";
+  return `${stars} <span>·</span> <span>${esc(times)}</span>`;
+}
+function paintCookBanner(){
+  const el=document.getElementById("cookBanner"); const c=cooking.get(); const r=c&&state.recipes[c.recipeId];
+  if(!r){ el.innerHTML=""; return; }
+  el.innerHTML=`<div class="cookbar"><span>Still cooking <strong>${esc(r.title)}</strong></span><button class="btn small primary" id="cookResume">Continue</button></div>`;
+  el.querySelector("#cookResume").onclick=()=>{ state.detailId=c.recipeId; show("cook"); };
+}
+function startCooking(recipeId){
+  const cur=cooking.get(), curR=cur&&state.recipes[cur.recipeId];
+  const begin=()=>{ cooking.set({recipeId, mult:state.mult||1, started:new Date().toISOString(), ing:[], steps:[]}); state.detailId=recipeId; show("cook"); };
+  if(cur && cur.recipeId===recipeId && curR){ show("cook"); return; } // carry on where you left off
+  if(cur && curR){
+    const sh=openSheet(`<h3>Still cooking ${esc(curR.title)}</h3><p class="muted small">Starting this one stops that cook without logging it.</p>
+      <div class="row" style="margin-top:12px"><button class="btn primary" data-act="switch">Start this one</button><button class="btn ghost" data-act="back">Back to ${esc(curR.title)}</button></div>`);
+    sheetActions(sh,{ switch:()=>{ closeSheet(); begin(); }, back:()=>{ closeSheet(); state.detailId=cur.recipeId; show("cook"); } });
+    return;
+  }
+  begin();
+}
+function renderCook(){
+  const el=document.getElementById("view-cook"); const c=cooking.get(); const r=c&&state.recipes[c.recipeId];
+  if(!r){ cooking.clear(); el.innerHTML=`<div class="empty">Nothing is cooking right now.</div>`; return; }
+  wake.hold();
+  const m=c.mult||1, steps=r.steps||[];
+  const nextStep=steps.findIndex((_,i)=>!c.steps.includes(i));
+  let ing="", lastSec=null;
+  (r.ingredients||[]).forEach((i,ix)=>{
+    if((i.section||"")!==lastSec && i.section) ing+=`<li class="sec">${esc(i.section)}</li>`;
+    lastSec=i.section||"";
+    const q=scaleQty(i.quantity,m), amount=[fmtQty(q), i.unit&&i.unit!=="whole"?i.unit:""].filter(Boolean).join(" ");
+    ing+=`<li><button class="ck ${c.ing.includes(ix)?"done":""}" data-ing="${ix}"><span class="box"></span><span class="txt">${amount?`<span class="q">${esc(amount)}</span> `:""}${esc(i.item||i.raw_text)}${i.prep?`, ${esc(i.prep)}`:""}${i.optional?` <span class="faint">(optional)</span>`:""}</span></button></li>`;
+  });
+  el.innerHTML=`
+    <div class="detail-head"><button class="btn small ghost" id="cookBack">‹ Recipe</button><span class="kicker">Cooking${m!==1?` · ${m}× batch`:""}</span></div>
+    <h2>${esc(r.title)}</h2>
+    <div class="meta" id="cookProgress"></div>
+    <h3>Ingredients</h3><ul class="cooklist" id="cookIng">${ing||`<li class="faint" style="padding:10px 0">No ingredients listed.</li>`}</ul>
+    <h3>Method</h3><ol class="cooklist steps-ck" id="cookSteps">${steps.map((t,ix)=>`<li><button class="ck ${c.steps.includes(ix)?"done":""} ${ix===nextStep?"current":""}" data-step="${ix}"><span class="box"></span><span class="txt"><span class="n">Step ${ix+1}</span>${esc(t)}</span></button></li>`).join("")||`<li class="faint" style="padding:10px 0">No steps listed.</li>`}</ol>
+    <div class="actions"><button class="btn primary" id="cookFinish">Finished cooking</button><button class="btn ghost" id="cookStop">Stop without saving</button></div>`;
+  const progress=()=>{ const cc=cooking.get(); el.querySelector("#cookProgress").textContent=`${cc.ing.length} of ${(r.ingredients||[]).length} ingredients · ${cc.steps.length} of ${steps.length} steps done`; };
+  progress();
+  // Toggle in place rather than re-rendering, so the page doesn't jump while you cook.
+  const toggle=(key,ix,btn)=>{ const cc=cooking.get(); if(!cc) return; const list=cc[key]; const at=list.indexOf(ix);
+    if(at>=0) list.splice(at,1); else list.push(ix); cooking.set(cc); btn.classList.toggle("done",at<0);
+    if(key==="steps"){ const next=steps.findIndex((_,i)=>!cc.steps.includes(i)); el.querySelectorAll("[data-step]").forEach(b=>b.classList.toggle("current",+b.dataset.step===next)); }
+    progress(); };
+  el.querySelector("#cookIng").onclick=e=>{ const b=e.target.closest("[data-ing]"); if(b) toggle("ing",+b.dataset.ing,b); };
+  el.querySelector("#cookSteps").onclick=e=>{ const b=e.target.closest("[data-step]"); if(b) toggle("steps",+b.dataset.step,b); };
+  el.querySelector("#cookBack").onclick=()=>{ state.detailId=c.recipeId; show("detail"); };
+  el.querySelector("#cookStop").onclick=()=>{
+    const sh=openSheet(`<h3>Stop cooking?</h3><p class="muted small">Your ticks are cleared and this cook isn't logged.</p>
+      <div class="row" style="margin-top:12px"><button class="btn danger" data-act="yes">Stop without saving</button><button class="btn ghost" data-act="no">Keep cooking</button></div>`);
+    sheetActions(sh,{ no:closeSheet, yes:()=>{ closeSheet(); cooking.clear(); state.detailId=c.recipeId; show("detail"); toast("Stopped. Nothing was logged."); } });
+  };
+  el.querySelector("#cookFinish").onclick=()=>finishSheet(c.recipeId);
+}
+function ratingOpts(current){
+  return `<div class="rate">${MICHELIN.map(o=>`<button class="opt ${current===o.n?"on":""}" data-act="rate" data-n="${o.n}">${o.label}<small>${o.hint}</small></button>`).join("")}</div>`;
+}
+function finishSheet(recipeId){
+  const r=state.recipes[recipeId]; if(!r) return;
+  let picked=r.rating??null;
+  const sh=openSheet(`<h3>How was it?</h3><p class="muted small" style="margin:0 0 6px">Rate ${esc(r.title)}, Michelin-style. You can skip this and rate it later.</p>
+    ${ratingOpts(picked)}
+    <div class="row" style="margin-top:14px"><button class="btn primary" data-act="save">Log this cook</button><button class="btn ghost" data-act="back">Keep cooking</button></div>`);
+  sheetActions(sh,{
+    rate:b=>{ picked=+b.dataset.n; sh.querySelectorAll('[data-act="rate"]').forEach(o=>o.classList.toggle("on",+o.dataset.n===picked)); },
+    back:closeSheet,
+    save:async()=>{
+      closeSheet();
+      const c=cooking.get(); const now=new Date();
+      r.cooks=[...(r.cooks||[]), {date:iso(now), at:now.toISOString(), mult:(c&&c.recipeId===recipeId&&c.mult)||1}];
+      if(picked!==null) r.rating=picked;
+      r.updated_at=now.toISOString();
+      cooking.clear(); state.detailId=recipeId;
+      const ok=await store.put("recipes",recipeId,r);
+      show("detail");
+      if(ok) toast(`Logged. That's cook number ${r.cooks.length}.`);
+    },
+  });
+}
+/* Tap the stats line on a recipe: re-rate it, and see or correct the dates it was cooked. */
+function historySheet(recipeId){
+  const r=state.recipes[recipeId]; if(!r) return;
+  const cooks=(r.cooks||[]).map((c,i)=>({...c,i})).reverse();
+  const sh=openSheet(`<h3>${esc(r.title)}</h3><p class="muted small" style="margin:0 0 6px">Michelin rating</p>
+    ${ratingOpts(r.rating??null)}
+    <p class="muted small" style="margin:16px 0 0">${cooks.length?`Cooked ${cooks.length===1?"once":cooks.length+" times"}`:"Not cooked yet. Tap Cook this on the recipe to start."}</p>
+    ${cooks.length?`<ul class="cooks">${cooks.map(c=>`<li><span>${esc(fmtDate(c.date))}${c.mult&&c.mult!==1?` · ${c.mult}× batch`:""}</span><button class="x" data-act="rm" data-i="${c.i}" aria-label="Remove this date">×</button></li>`).join("")}</ul>`:""}
+    <div class="row" style="margin-top:12px"><button class="btn ghost" data-act="done">Done</button></div>`);
+  const save=async msg=>{ r.updated_at=new Date().toISOString(); const ok=await store.put("recipes",recipeId,r); if(state.view==="detail") renderDetail(); if(ok&&msg) toast(msg); };
+  sheetActions(sh,{
+    done:closeSheet,
+    rate:async b=>{ r.rating=+b.dataset.n; sh.querySelectorAll('[data-act="rate"]').forEach(o=>o.classList.toggle("on",+o.dataset.n===r.rating)); await save(r.rating?`Rated ${"★".repeat(r.rating)}`:"Rated: no stars"); },
+    rm:async b=>{ const i=+b.dataset.i; const c=r.cooks[i]; r.cooks=r.cooks.filter((_,k)=>k!==i); await save(`Removed ${fmtDate(c.date)}`); historySheet(recipeId); },
+  });
 }
 
 /* ---------- plan ---------- */
@@ -690,13 +852,14 @@ function slotSheet(k,ix){
   const sh=openSheet(`<h3>${esc(r?r.title:"(deleted recipe)")}</h3><p class="muted small">${DAYS[(d.getDay()+6)%7]} ${d.getDate()} ${MONTHS[d.getMonth()]}</p>
     <div class="row" style="justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line)"><span>Serves</span>
       <span class="row"><button class="btn small" data-act="minus" aria-label="Fewer serves">−</button><strong id="svN" style="min-width:24px;text-align:center">${en.servings}</strong><button class="btn small" data-act="plus" aria-label="More serves">+</button></span></div>
-    ${r?`<button class="opt" data-act="open">Open recipe</button>`:""}
+    ${r?`<button class="opt" data-act="cook">Cook it now</button><button class="opt" data-act="open">Open recipe</button>`:""}
     <button class="opt" data-act="remove" style="color:var(--red)">Remove from this day</button>
     <div class="row" style="margin-top:12px"><button class="btn ghost" data-act="done">Done</button></div>`);
   const bump=async n=>{ en.servings=Math.max(1,en.servings+n); sh.querySelector("#svN").textContent=en.servings; await savePlanDay(k,day); renderPlan(); };
   sheetActions(sh,{
     minus:()=>bump(-1), plus:()=>bump(1), done:closeSheet,
     open:()=>{ closeSheet(); if(state.detailId!==en.recipeId) state.mult=1; state.detailId=en.recipeId; show("detail"); },
+    cook:()=>{ closeSheet(); const r2=state.recipes[en.recipeId]; state.detailId=en.recipeId; state.mult=r2&&r2.servings?Math.max(0.5,Math.round(en.servings/r2.servings*2)/2):1; startCooking(en.recipeId); },
     remove:async()=>{ day.entries.splice(ix,1); const ok=await savePlanDay(k,day); closeSheet(); renderPlan(); if(ok) toast("Removed"); },
   });
 }

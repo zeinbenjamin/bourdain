@@ -6,6 +6,14 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 1.7.0 — 2026-09-27
+- New: Cook this. Open a recipe, tap Cook this, and tick off ingredients and steps as you go. The next step is highlighted, and the screen stays on while you cook.
+- Your progress is kept if the phone locks or the app closes. A "Still cooking" bar takes you straight back.
+- When you finish, the date is logged and you can give the recipe a Michelin-style rating: no stars, ★, ★★ or ★★★.
+- Each recipe shows its stars, how many times you've cooked it and when you last did. Tap that line to change the rating or remove a date logged by mistake.
+- Recipe cards show the stars and the cook count too.
+- Cook it now from a planned meal, at the servings you planned.
+
 ## 1.6.1 — 2026-09-24
 - You can now edit a recipe's description.
 - Tapping Save twice on a slow connection no longer saves the recipe twice. The button says "Saving…" until it's done.
