@@ -63,6 +63,26 @@ try {
   await page.click("#prevWeek");
   const day = await box("#days .day"), addBtn = await box("#days .day .addslot");
   check("plan: '+' sits at the right edge of the day row", Math.abs(addBtn.right - day.right) <= 1 && addBtn.top - day.top <= 14, JSON.stringify({ day, addBtn }));
+  // planned meals: mini picture and titles that wrap instead of "…" (1.7.6)
+  await page.evaluate(() => {
+    const k = iso(state.week);
+    state.recipes.long = { title: "Grandma's slow-roasted lamb shoulder with anchovy, rosemary and white beans", servings: 6, photos: [] };
+    state.recipes.cov = { title: "Leek soup", cover: "c".repeat(32), photos: ["d".repeat(32)] };
+    state.plan[k] = { date: k, entries: [{ recipeId: "long", servings: 6 }, { recipeId: "cov", servings: 2 }, { recipeId: "a", servings: 4 }, { recipeId: "gone", servings: 2 }] };
+    renderPlan();
+  });
+  const slots = await page.evaluate(() => [...document.querySelectorAll("#days .slot")].map((b) => {
+    const t = b.querySelector(".t"), m = b.querySelector(".mini"), cs = getComputedStyle(t);
+    return { text: t.textContent, lines: Math.round(t.getBoundingClientRect().height / parseFloat(cs.lineHeight)), clipped: t.scrollWidth > t.clientWidth || cs.textOverflow === "ellipsis",
+      mini: m && { cover: m.classList.contains("cover"), img: m.querySelector("img")?.getAttribute("src") || null, letter: m.textContent, w: m.getBoundingClientRect().width, fit: m.querySelector("img") ? getComputedStyle(m.querySelector("img")).objectFit : null } };
+  }));
+  check("plan: long meal names wrap in full, no '…'", slots[0].lines >= 2 && !slots[0].clipped && slots[0].text.endsWith("white beans"), JSON.stringify(slots[0]));
+  check("plan: every meal has a mini picture", slots.every((x) => x.mini && Math.round(x.mini.w) === 40), JSON.stringify(slots.map((x) => x.mini)));
+  check("plan: cover shown whole, on white", slots[1].mini.cover && slots[1].mini.img === "/api/covers/" + "c".repeat(32) && slots[1].mini.fit === "contain", JSON.stringify(slots[1].mini));
+  check("plan: no cover or photo → first letter", slots[0].mini.letter === "G" && !slots[0].mini.img && slots[3].mini.letter === "?", JSON.stringify([slots[0].mini, slots[3].mini]));
+  await page.evaluate(() => { state.recipes.a.photos = ["d".repeat(32)]; renderPlan(); });
+  const ph = await page.evaluate(() => { const i = document.querySelectorAll("#days .slot .mini")[2].querySelector("img"); return { src: i?.getAttribute("src"), fit: i && getComputedStyle(i).objectFit }; });
+  check("plan: photo when there's no cover, cropped to the square", ph.src === "/api/photos/" + "d".repeat(32) && ph.fit === "cover", JSON.stringify(ph));
   await page.click("#days .day .addslot");
   await page.waitForSelector(".sheet-bg.open");
   check("plan: '+' opens the recipe picker", await page.isVisible(".sheet-bg.open"));
