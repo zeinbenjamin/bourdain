@@ -97,13 +97,29 @@ how data persists, that is the only place to touch.
 
 **Cook sessions live only on the phone.** `cooking` in `index.html` keeps the
 single in-progress cook in `localStorage["bourdain.cooking"]` as
-`{recipeId, mult, started, ing:[index], steps:[index]}`, so ticking is instant,
+`{recipeId, mult, started, ing:[index], steps:[index], timers:[{id, label, secs, ends, done}]}`, so ticking is instant,
 works offline and survives reloads. Nothing is written to the server until
 **Finished cooking**, which appends to `recipe.cooks` (and sets `rating` if one
 was picked) with a normal `store.put`. The cooking screen (`state.view ===
 "cook"`, `renderCook`) toggles ticks in place instead of re-rendering, so the
 page never jumps while you cook. `wake` holds a Screen Wake Lock while it's open
 and releases it in `show()` for any other view.
+
+**Cook timers** (`timers`, `parseDurations`) turn durations in a step's text
+into timer buttons. Handled: "8-10 mins" (starts at the lower number),
+"1 hour 30 minutes", "1½ hours", "30 seconds". A timer stores its `ends`
+timestamp, not a countdown, so it stays correct across reloads and sleep. A 1s
+ticker runs only while a timer is live, and `timers.tick()` also runs on boot
+and whenever the app becomes visible again. On expiry: a "Time's up" sheet,
+`navigator.vibrate` and three Web Audio beeps. Browsers allow sound only after
+a tap and forget that on reload, so a capture-phase `pointerdown` listener calls
+`timers.unlock()` whenever a cook is in progress. There are no background
+notifications; the wake lock keeps the screen on in cook mode instead.
+
+**Recipe list sort and filter** (`listPrefs`, `sortRecipes`, `keepRecipe`)
+are remembered per phone in `localStorage["bourdain.listPrefs"]`. Cards show
+Michelin stars but deliberately not the cook count; that is only on the recipe
+page.
 
 **The Anthropic and OpenAI API keys live only on the server.** Neither may appear
 in `index.html` or any client-visible file.
@@ -128,7 +144,8 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   (outbox and photo queue across server outages), `loading` (slow Wi-Fi, Stop,
   version sheet), `covers` (cover UI, import errors, shrinking), `review`
   (edit form: description, double-tap Save), `cook` (cook mode, ratings,
-  cook log), `scan`, `video`.
+  cook log), `timers` (fake clock via `page.clock`), `list` (sort, filter,
+  cards), `scan`, `video`.
 - `slowProxy` delays: `shell` (index.html), `state` (`/api/state`), `write`
   (PUT/DELETE).
 
@@ -180,8 +197,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v10"`
-in `public/sw.js` → `v11`, `v12`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v11"`
+in `public/sw.js` → `v12`, `v13`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -277,8 +294,16 @@ quantities occasionally. Do not add a path that saves straight to the library.
 New York Times palette and typography. Source Serif for headlines and body
 (stands in for Imperial), Libre Franklin for all UI furniture — section heads,
 meta lines, buttons, tabs, form fields. Pure white ground, `#121212` ink, two
-grey tiers, NYT slate blue `#326891` as the only accent, red for destructive
-actions only.
+grey tiers, and **Michelin red `#D3072B`** (`--flame`) as the only accent, chosen
+by Zein on 2026-09-27 to match the Michelin star. It replaced NYT slate blue.
+Destructive actions use `--red` (`#D0021B`), which is nearly the same colour, so
+a destructive button must always say what it does ("Delete recipe", "Stop
+without saving"), never rely on colour alone.
+
+**Ratings use the real Michelin star**: the six-petal `#mstar` SVG symbol at the
+top of `<body>`, drawn with `currentColor`. Render stars only through
+`stars(n)`, never with "★" characters. Toasts are plain text, so they say
+"Rated 2 Michelin stars".
 
 **Light mode is forced.** The dark palette was removed and `color-scheme: light`
 is pinned, because the app looked wrong following the phone's dark setting.
@@ -308,12 +333,12 @@ restoring it is adding the tab button back and changing `.tabs`
 Live features: link fetch and AI import with review screen, screen-recording
 frame extraction, recipe photos, AI cover illustrations (on request), drag-to-reorder ingredients in the edit form,
 0.5×–10× batch multiplier, week planner, pantry with "cook from what I have"
-and photo scanning, cook mode with a checklist, Michelin-style ratings and a
-per-recipe cook log.
+and photo scanning, cook mode with a checklist and step timers, Michelin
+ratings, a per-recipe cook log, and sorting and filtering of the recipe list.
 
 Ideas not yet built: nutrition estimates, pantry quantities decremented by
-cooking, timers in cook mode, sorting or filtering recipes by rating or by
-most cooked, restoring the shopping list, and
+cooking, timer alerts while the phone is locked (would need push
+notifications), restoring the shopping list, and
 a cleanup for unused photos (`.jpg`); unused covers are already swept.
 
 ## Pinned for v2

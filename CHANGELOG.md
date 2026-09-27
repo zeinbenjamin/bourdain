@@ -6,6 +6,13 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 1.7.1 — 2026-09-27
+- Ratings now use real Michelin stars, and the app's accent colour is Michelin red.
+- Recipe cards no longer show how many times you've cooked something. It's still on the recipe page.
+- Timers in cook mode: any step that mentions a time, like "simmer for 20 minutes", gets a button that starts a countdown. When it's up, your phone buzzes and beeps and shows which step it was.
+- Timers keep going if the phone locks or the app reloads, and several can run at once. "+ Timer" starts one of your own.
+- Sort recipes by newest, A to Z, most stars, most cooked, recently cooked or quickest, and filter by stars, never cooked or 30 minutes or less. The app remembers your choice.
+
 ## 1.7.0 — 2026-09-27
 - New: Cook this. Open a recipe, tap Cook this, and tick off ingredients and steps as you go. The next step is highlighted, and the screen stays on while you cook.
 - Your progress is kept if the phone locks or the app closes. A "Still cooking" bar takes you straight back.

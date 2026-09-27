@@ -57,7 +57,7 @@ try {
   check("cook logged with today's date and batch", r.cooks && r.cooks.length === 1 && r.cooks[0].date === today && r.cooks[0].mult === 2, JSON.stringify(r.cooks));
   check("rating saved (2 stars)", r.rating === 2);
   check("confirms 'cook number 1'", /cook number 1/.test(await page.textContent("#toast")));
-  check("recipe page: ★★ · Cooked once · last <today>", /★★/.test(await page.textContent("#cookStats")) && /Cooked once · last/.test(await page.textContent("#cookStats")));
+  check("recipe page: 2 Michelin stars · Cooked once · last <today>", (await page.locator("#cookStats .mstar").count()) === 2 && /Cooked once · last/.test(await page.textContent("#cookStats")));
   check("session cleared after finishing", (await page.evaluate(() => localStorage.getItem("bourdain.cooking"))) === null && (await page.textContent("#cookThis")) === "Cook this");
 
   // --- cook again, skip rating: rating kept, count goes up
@@ -68,7 +68,8 @@ try {
   r = await server("soup");
   check("second cook logged, rating unchanged", r.cooks.length === 2 && r.rating === 2);
   await page.click("#back");
-  check("card shows ★★ and 'cooked 2×'", /★★/.test(await page.textContent('.rcard[data-id="soup"] .meta')) && /cooked 2×/.test(await page.textContent('.rcard[data-id="soup"] .meta')), await page.textContent('.rcard[data-id="soup"] .meta'));
+  check("card shows 2 Michelin stars and no cook count", (await page.locator('.rcard[data-id="soup"] .meta .mstar').count()) === 2 && !/cooked/i.test(await page.textContent('.rcard[data-id="soup"]')), await page.textContent('.rcard[data-id="soup"] .meta'));
+  check("stars are drawn in the Michelin red", (await page.evaluate(() => getComputedStyle(document.querySelector('.rcard[data-id="soup"] .mstars')).color)) === "rgb(211, 7, 43)");
 
   // --- history sheet: re-rate and remove a mistaken date
   await page.click('.rcard:has-text("Leek soup")'); await page.click("#cookStats"); await page.waitForSelector("#sheet.open .cooks");
@@ -79,7 +80,7 @@ try {
   r = await server("soup");
   check("removing a date keeps the other", r.cooks.length === 1 && (await page.locator("#sheet .cooks li").count()) === 1);
   await page.click('#sheet [data-act="done"]');
-  check("recipe page updated: ★★★ · Cooked once", /★★★/.test(await page.textContent("#cookStats")) && /Cooked once/.test(await page.textContent("#cookStats")));
+  check("recipe page updated: 3 Michelin stars · Cooked once", (await page.locator("#cookStats .mstar").count()) === 3 && /Cooked once/.test(await page.textContent("#cookStats")));
 
   // --- stop without saving
   await page.click("#cookThis"); await page.waitForSelector("#cookIng"); await page.click('[data-step="0"]');
