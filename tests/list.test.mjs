@@ -54,9 +54,14 @@ try {
 
   // cards
   await filter("all");
-  check("cards: Michelin stars shown (3 for Apple pie)", (await page.locator('.rcard[data-id="a"] .mstar').count()) === 3);
+  check("cards: Michelin stars shown (3 for Apple pie)", (await page.locator('.rcard[data-id="a"] .cstars .mstar').count()) === 3);
   check("cards: 'No stars' and unrated show none", (await page.locator('.rcard[data-id="c"] .mstar').count()) === 0 && (await page.locator('.rcard[data-id="d"] .mstar').count()) === 0);
   check("cards: no cook count anywhere", !/cooked/i.test(await page.textContent("#rlist")));
+  const rows = (id) => page.$$eval(`.rcard[data-id="${id}"] .body > *`, (els) => els.map((e) => e.className || e.tagName.toLowerCase()));
+  check("starred card: title, stars row, details row, tags, in that order", JSON.stringify(await rows("a")) === '["h3","cstars","meta","tags"]', JSON.stringify(await rows("a")));
+  check("stars and details on separate lines", await page.evaluate(() => { const c = document.querySelector('.rcard[data-id="a"]'); return c.querySelector(".cstars").getBoundingClientRect().bottom <= c.querySelector(".meta").getBoundingClientRect().top + 1; }));
+  check("details row has no stars inside it", (await page.locator('.rcard[data-id="a"] .meta .mstar').count()) === 0 && /80 min/.test(await page.textContent('.rcard[data-id="a"] .meta')));
+  check("unstarred card: no stars row at all", JSON.stringify(await rows("d")) === '["h3","meta","tags"]' && JSON.stringify(await rows("c")) === '["h3","meta","tags"]', JSON.stringify(await rows("d")));
   check("sort and filter controls are 44px tall", (await page.evaluate(() => Math.min(...[...document.querySelectorAll(".listctl select")].map((x) => x.getBoundingClientRect().height)))) >= 44);
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();

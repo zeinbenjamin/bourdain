@@ -6,6 +6,9 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 1.7.2 — 2026-09-27
+- On recipe cards, the Michelin stars now sit on their own line under the title, above the time, servings and source. Recipes without stars skip that line.
+
 ## 1.7.1 — 2026-09-27
 - Ratings now use real Michelin stars, and the app's accent colour is Michelin red.
 - Recipe cards no longer show how many times you've cooked something. It's still on the recipe page.

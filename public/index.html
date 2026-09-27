@@ -269,7 +269,8 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 /* Cook mode */
 .mstars{display:inline-flex;align-items:center;gap:.15em;vertical-align:-.18em;color:var(--flame)}
 .mstar{width:1.15em;height:1.15em;display:block}
-.rcard .meta .mstars{margin-right:4px}
+.rcard .cstars{margin:2px 0 3px;line-height:1}
+.rcard .cstars .mstars{font-size:15px;vertical-align:0}
 .listctl{display:flex;gap:8px;margin:0 0 10px}
 .listctl select{flex:1;min-height:44px;font-size:14px}
 .tmrs{display:flex;flex-wrap:wrap;gap:6px;padding:0 0 12px 36px}
@@ -652,7 +653,7 @@ function renderRecipes(){
     return `<button class="rcard" data-id="${id}">
       ${r.cover?`<div class="thumb cover"><img src="${coverUrl(r.cover)}" alt=""></div>`
         :`<div class="thumb">${r.photos&&r.photos.length?`<img src="${photoUrl(r.photos[0])}" alt="">`:esc((r.title||"?").trim()[0]||"?").toUpperCase()}</div>`}
-      <div class="body"><h3>${esc(r.title)}</h3><div class="meta">${r.rating?stars(r.rating):""}${esc(meta)}</div>
+      <div class="body"><h3>${esc(r.title)}</h3>${r.rating?`<div class="cstars">${stars(r.rating)}</div>`:""}${meta?`<div class="meta">${esc(meta)}</div>`:""}
       <div class="tags">${(r.tags||[]).slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div></div></button>`;
   }).join("");
   el.onclick=e=>{ const c=e.target.closest(".rcard"); if(c){ if(state.detailId!==c.dataset.id) state.mult=1; state.detailId=c.dataset.id; show("detail"); } };
