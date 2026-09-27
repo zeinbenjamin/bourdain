@@ -33,6 +33,8 @@ A recipe:
   source_url, source_type,          // web | instagram | tiktok | youtube | manual
   photos: [assetId],                // first one is the hero image, unless there's a cover
   cover: assetId,                   // optional AI illustration, served from /api/covers/:id (WebP)
+  rating: 0|1|2|3,                  // optional Michelin-style stars; 0 = rated "no stars", missing = not rated
+  cooks: [{date, at, mult}],        // one per finished cook: local ISO date, timestamp, batch multiplier
   tags: [string],
   ingredients: [{
     raw_text,                       // the line as originally written, kept for re-parsing
@@ -93,6 +95,16 @@ how data persists, that is the only place to touch.
   background, so `onDone` must re-resolve its target. See `applyCover` and
   `state.reviewCollect`.
 
+**Cook sessions live only on the phone.** `cooking` in `index.html` keeps the
+single in-progress cook in `localStorage["bourdain.cooking"]` as
+`{recipeId, mult, started, ing:[index], steps:[index]}`, so ticking is instant,
+works offline and survives reloads. Nothing is written to the server until
+**Finished cooking**, which appends to `recipe.cooks` (and sets `rating` if one
+was picked) with a normal `store.put`. The cooking screen (`state.view ===
+"cook"`, `renderCook`) toggles ticks in place instead of re-rendering, so the
+page never jumps while you cook. `wake` holds a Screen Wake Lock while it's open
+and releases it in `show()` for any other view.
+
 **The Anthropic and OpenAI API keys live only on the server.** Neither may appear
 in `index.html` or any client-visible file.
 
@@ -115,7 +127,8 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
 - Suites: `server` (headers, errors, codes, cover pipeline, sweep), `offline`
   (outbox and photo queue across server outages), `loading` (slow Wi-Fi, Stop,
   version sheet), `covers` (cover UI, import errors, shrinking), `review`
-  (edit form: description, double-tap Save), `scan`, `video`.
+  (edit form: description, double-tap Save), `cook` (cook mode, ratings,
+  cook log), `scan`, `video`.
 - `slowProxy` delays: `shell` (index.html), `state` (`/api/state`), `write`
   (PUT/DELETE).
 
@@ -167,8 +180,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v9"`
-in `public/sw.js` → `v10`, `v11`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v10"`
+in `public/sw.js` → `v11`, `v12`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -295,10 +308,12 @@ restoring it is adding the tab button back and changing `.tabs`
 Live features: link fetch and AI import with review screen, screen-recording
 frame extraction, recipe photos, AI cover illustrations (on request), drag-to-reorder ingredients in the edit form,
 0.5×–10× batch multiplier, week planner, pantry with "cook from what I have"
-and photo scanning.
+and photo scanning, cook mode with a checklist, Michelin-style ratings and a
+per-recipe cook log.
 
 Ideas not yet built: nutrition estimates, pantry quantities decremented by
-cooking, a cooking mode with timers, restoring the shopping list, and
+cooking, timers in cook mode, sorting or filtering recipes by rating or by
+most cooked, restoring the shopping list, and
 a cleanup for unused photos (`.jpg`); unused covers are already swept.
 
 ## Pinned for v2
