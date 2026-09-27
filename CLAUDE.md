@@ -117,8 +117,10 @@ a tap and forget that on reload, so a capture-phase `pointerdown` listener calls
 notifications; the wake lock keeps the screen on in cook mode instead.
 
 **Recipe list sort and filter** (`listPrefs`, `sortRecipes`, `keepRecipe`)
-are remembered per phone in `localStorage["bourdain.listPrefs"]`. Cards show
-Michelin stars but deliberately not the cook count; that is only on the recipe
+are remembered per phone in `localStorage["bourdain.listPrefs"]`. A recipe card
+reads top to bottom: title, a `.cstars` row with the Michelin stars (omitted
+entirely when the recipe has none), the `.meta` row (time · serves · source), and
+tags. Cards deliberately don't show the cook count; that is only on the recipe
 page.
 
 **The Anthropic and OpenAI API keys live only on the server.** Neither may appear
@@ -197,8 +199,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v11"`
-in `public/sw.js` → `v12`, `v13`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v12"`
+in `public/sw.js` → `v13`, `v14`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after

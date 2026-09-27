@@ -68,8 +68,8 @@ try {
   r = await server("soup");
   check("second cook logged, rating unchanged", r.cooks.length === 2 && r.rating === 2);
   await page.click("#back");
-  check("card shows 2 Michelin stars and no cook count", (await page.locator('.rcard[data-id="soup"] .meta .mstar').count()) === 2 && !/cooked/i.test(await page.textContent('.rcard[data-id="soup"]')), await page.textContent('.rcard[data-id="soup"] .meta'));
-  check("stars are drawn in the Michelin red", (await page.evaluate(() => getComputedStyle(document.querySelector('.rcard[data-id="soup"] .mstars')).color)) === "rgb(211, 7, 43)");
+  check("card shows 2 Michelin stars and no cook count", (await page.locator('.rcard[data-id="soup"] .cstars .mstar').count()) === 2 && !/cooked/i.test(await page.textContent('.rcard[data-id="soup"]')), await page.textContent('.rcard[data-id="soup"] .meta'));
+  check("stars are drawn in the Michelin red", (await page.evaluate(() => getComputedStyle(document.querySelector('.rcard[data-id="soup"] .cstars .mstars')).color)) === "rgb(211, 7, 43)");
 
   // --- history sheet: re-rate and remove a mistaken date
   await page.click('.rcard:has-text("Leek soup")'); await page.click("#cookStats"); await page.waitForSelector("#sheet.open .cooks");
