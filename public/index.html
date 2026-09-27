@@ -160,8 +160,13 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 /* Plan */
 .weeknav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .weeknav h2{font-size:22px;font-weight:700;letter-spacing:-.01em}
+.weeknav .btn{width:44px;height:44px;padding:0;flex:none;font-size:20px;line-height:1}
+.wk{text-align:center;min-width:0}
+.wk .note{display:block;font-family:var(--sans);font-size:12px;font-weight:500;color:var(--flame);margin-top:2px;visibility:hidden}
+.weeknav.current h2{color:var(--flame)}
+.weeknav.current .note{visibility:visible}
 .days{display:flex;flex-direction:column;gap:0}
-.day{display:grid;grid-template-columns:56px 1fr;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.day{display:grid;grid-template-columns:56px 1fr 44px;gap:12px;align-items:start;padding:12px 0;border-top:1px solid var(--line)}
 .day:last-child{border-bottom:1px solid var(--line)}
 .day.today .dn{color:var(--flame)}
 .dn{line-height:1}
@@ -177,7 +182,7 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .slot .t{flex:1;min-width:0;font-family:var(--serif);font-weight:600;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .slot .sv{font-family:var(--sans);font-size:12px;color:var(--ink-3);white-space:nowrap}
 .slot .chev{color:var(--ink-3);font-size:18px;line-height:1}
-.addslot{border:1px dashed var(--line);background:none;border-radius:var(--r);padding:9px;color:var(--flame);font-family:var(--sans);font-size:13px;font-weight:500;text-align:left}
+.addslot{width:44px;height:44px;border:1px solid var(--line);background:none;border-radius:999px;padding:0;color:var(--flame);font-family:var(--sans);font-size:24px;font-weight:400;line-height:1}
 
 /* Picker sheet */
 .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:20;display:none}
@@ -358,7 +363,7 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
   <section class="view" id="view-plan">
     <div class="weeknav">
       <button class="btn small" id="prevWeek" aria-label="Previous week">‹</button>
-      <h2 id="weekTitle"></h2>
+      <div class="wk"><h2 id="weekTitle"></h2><span class="note" id="weekNote">(this week)</span></div>
       <button class="btn small" id="nextWeek" aria-label="Next week">›</button>
     </div>
     <div class="days" id="days"></div>
@@ -987,6 +992,7 @@ async function savePlanDay(dateISO,day){ if(day.entries.length){ state.plan[date
 function renderPlan(){
   document.getElementById("weekTitle").textContent = weekLabel(state.week);
   const today=iso(new Date());
+  document.querySelector("#view-plan .weeknav").classList.toggle("current", iso(state.week)===iso(mondayOf(new Date())));
   const el=document.getElementById("days");
   el.innerHTML = DAYS.map((n,i)=>{
     const d=addDays(state.week,i), k=iso(d), day=planDay(k);
@@ -995,7 +1001,7 @@ function renderPlan(){
       return `<button class="slot" data-slot="${k}" data-ix="${ix}"><span class="t">${esc(r?r.title:"(deleted recipe)")}</span><span class="sv">${e.servings} serves</span><span class="chev">›</span></button>`;
     }).join("");
     return `<div class="day ${k===today?"today":""}"><div class="dn"><span class="w">${n}</span><span class="d">${d.getDate()}</span></div>
-      <div class="slots">${slots}<button class="addslot" data-add="${k}">+ Add a meal</button></div></div>`;
+      <div class="slots">${slots}</div><button class="addslot" data-add="${k}" aria-label="Add a meal to ${n} ${d.getDate()}">+</button></div>`;
   }).join("");
   el.onclick=async e=>{
     const a=e.target.closest("[data-add]"); if(a){ pickRecipe(a.dataset.add); return; }

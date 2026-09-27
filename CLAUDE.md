@@ -116,6 +116,11 @@ a tap and forget that on reload, so a capture-phase `pointerdown` listener calls
 `timers.unlock()` whenever a cook is in progress. There are no background
 notifications; the wake lock keeps the screen on in cook mode instead.
 
+**Plan tab** (`renderPlan`): each day row has a round "+" (`.addslot`, `data-add`)
+on the right that opens the recipe picker. When the week shown is the current one,
+`.weeknav` gets `current`: the date range turns `--flame` and "(this week)" shows
+under it. The note keeps its space on other weeks, so the days don't jump.
+
 **Recipe list sort and filter** (`listPrefs`, `sortRecipes`, `keepRecipe`)
 are remembered per phone in `localStorage["bourdain.listPrefs"]`. A recipe card
 reads top to bottom: title, a `.cstars` row with the Michelin stars (omitted
@@ -200,8 +205,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v13"`
-in `public/sw.js` → `v14`, `v15`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v14"`
+in `public/sw.js` → `v15`, `v16`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after

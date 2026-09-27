@@ -39,6 +39,32 @@ try {
   check("pantry: empty message sits 16-30px under the buttons", empty.top - acts.bottom >= 16 && empty.top - acts.bottom <= 30, `${Math.round(empty.top - acts.bottom)}px`);
   await page.reload(); await page.waitForFunction(() => !store.loading);
 
+  // --- plan (1.7.4)
+  await page.click('#tabs button[data-view="plan"]');
+  const pl = await page.evaluate(() => {
+    const t = document.getElementById("weekTitle"), n = document.getElementById("weekNote");
+    const flame = getComputedStyle(document.documentElement).getPropertyValue("--flame").trim();
+    const probe = document.createElement("i"); probe.style.color = flame; document.body.append(probe); const fc = getComputedStyle(probe).color; probe.remove();
+    return { fc, title: getComputedStyle(t).color, note: n.textContent, noteVis: getComputedStyle(n).visibility, adds: [...document.querySelectorAll("[data-add]")].map((b) => ({ t: b.textContent.trim(), label: b.getAttribute("aria-label"), w: b.getBoundingClientRect().width, h: b.getBoundingClientRect().height })) };
+  });
+  check("plan: one '+' per day, no 'Add a meal' text", pl.adds.length === 7 && pl.adds.every((a) => a.t === "+"), JSON.stringify(pl.adds[0]));
+  check("plan: '+' buttons are 44px and say which day", pl.adds.every((a) => Math.round(a.w) >= 44 && Math.round(a.h) >= 44 && /^Add a meal to \w{3} \d{1,2}$/.test(a.label)), JSON.stringify(pl.adds[0]));
+  check("plan: this week shows '(this week)' and the range in the accent colour", pl.noteVis === "visible" && pl.note === "(this week)" && pl.title === pl.fc, JSON.stringify(pl));
+  const navBefore = await box("#view-plan .weeknav"), prevBtn = await box("#prevWeek");
+  check("plan: week arrows are 44px", Math.round(prevBtn.w) >= 44 && Math.round(prevBtn.h) >= 44, JSON.stringify(prevBtn));
+  await page.click("#nextWeek");
+  const other = await page.evaluate(() => ({ vis: getComputedStyle(document.getElementById("weekNote")).visibility, title: getComputedStyle(document.getElementById("weekTitle")).color }));
+  const navAfter = await box("#view-plan .weeknav");
+  check("plan: next week has no note and plain ink", other.vis === "hidden" && other.title !== pl.fc, JSON.stringify(other));
+  check("plan: changing week doesn't move the days", Math.abs(navAfter.h - navBefore.h) < 1, `${navBefore.h} → ${navAfter.h}`);
+  await page.click("#prevWeek");
+  const day = await box("#days .day"), addBtn = await box("#days .day .addslot");
+  check("plan: '+' sits at the right edge of the day row", Math.abs(addBtn.right - day.right) <= 1 && addBtn.top - day.top <= 14, JSON.stringify({ day, addBtn }));
+  await page.click("#days .day .addslot");
+  await page.waitForSelector(".sheet-bg.open");
+  check("plan: '+' opens the recipe picker", await page.isVisible(".sheet-bg.open"));
+  await page.reload(); await page.waitForFunction(() => !store.loading);
+
   // --- recipe page
   await page.click('#tabs button[data-view="recipes"]'); await page.click(".rcard");
   const stats = await box("#cookStats"), desc = await box("#view-detail p.muted");

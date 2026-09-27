@@ -6,6 +6,11 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 1.7.4 — 2026-09-27
+- Plan: each day has a small + button instead of "+ Add a meal", so the week is less cluttered.
+- Plan: the current week's dates are in red with "(this week)" underneath, so you can tell at a glance.
+- Plan: the ‹ and › week buttons are bigger and easier to tap.
+
 ## 1.7.3 — 2026-09-27
 - Pantry: proper spacing between the buttons, your ideas and the list, and "Tonight's options" now matches the other headings.
 - Pantry: the × to remove an item is easier to tap, the Add button is no longer squashed, and the example in the box fits.
