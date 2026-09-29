@@ -404,9 +404,8 @@ Decided 2026-09-24: not now. The most likely trigger for 2.0.0 is **pantry
 amounts that go down when you cook**. That needs every pantry item to carry a
 real amount in a consistent unit, which old free-text items like "greek
 yoghurt" don't have, so existing data must be converted. Other v2-sized ideas:
-household sharing (a user id on every row, plus auth; this is also when the
-Archives becomes a shared feed of who cooked what, which needs a `by` user id on
-each `cooks` entry — old entries without one belong to Zein), an ingredient catalogue
+household sharing (now planned as per-person multi-user; the full design,
+agreed 2026-09-29 and not yet built, is in `docs/multi-user.md`), an ingredient catalogue
 (every recipe ingredient re-linked), and moving blobs to real columns. Features
 that only add fields stay 1.x: cooking mode, shopping list, nutrition, meal
 slots, a redesign.
