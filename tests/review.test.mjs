@@ -1,6 +1,6 @@
 // The review / edit form: the description can be edited, and tapping Save twice on
 // a slow connection saves one recipe, not two.
-import { suite, startServer, slowProxy, openBrowser, openApp, sleep } from "./lib.mjs";
+import { suite, startServer, slowProxy, openBrowser, openApp, sleep, addRecipe } from "./lib.mjs";
 
 const { check, finish } = suite("review form");
 let s, px, b;
@@ -22,7 +22,7 @@ try {
   check("rest of the recipe untouched", (await s.state()).recipes.r1.ingredients[0].raw_text === "2 leeks");
 
   // --- a new recipe starts with an empty description box
-  await page.click('#tabs button[data-view="recipes"]'); await page.click("#btnManual");
+  await addRecipe(page, "manual");
   check("new recipe: empty description box", (await page.inputValue("#fDesc")) === "");
 
   // --- double tap on Save while the connection is slow

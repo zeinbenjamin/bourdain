@@ -100,4 +100,10 @@ export async function openApp(page, url) {
   await page.waitForFunction(() => !store.loading);
 }
 
+// The Recipes "+" asks how to add one: "import" (the import form) or "manual" (a blank recipe).
+export async function addRecipe(page, how) {
+  await page.click('#tabs button[data-view="recipes"]'); await page.click("#btnManual");
+  await page.click(`#sheet [data-act="${how}"]`);
+}
+
 export const swCacheName = async () => (await import("node:fs")).readFileSync(path.join(ROOT, "public/sw.js"), "utf8").match(/const CACHE = "([^"]+)"/)[1];

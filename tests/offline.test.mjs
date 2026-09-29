@@ -1,7 +1,7 @@
 // Offline behaviour end to end: the write outbox (saves, deletes, pantry) and the
 // photo queue, across the server going down, app reloads, and the server returning.
 import sharp from "sharp";
-import { suite, startServer, openBrowser, sleep } from "./lib.mjs";
+import { suite, startServer, openBrowser, sleep, addRecipe } from "./lib.mjs";
 
 const { check, finish } = suite("offline");
 let s, b;
@@ -15,7 +15,7 @@ try {
   const reconnect = async () => { await s.restart(); await page.evaluate(() => window.dispatchEvent(new Event("online"))); await sleep(1500); };
   const jpeg = async (c) => ({ name: "photo.jpg", mimeType: "image/jpeg", buffer: await sharp({ create: { width: 1200, height: 900, channels: 3, background: c } }).jpeg().toBuffer() });
   const newRecipe = async (title) => {
-    await page.click('#tabs button[data-view="recipes"]'); await page.click("#btnManual");
+    await addRecipe(page, "manual");
     await page.fill("#fTitle", title); await page.locator(".ingrow [data-f=item]").first().fill("leek");
   };
 
