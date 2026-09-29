@@ -68,7 +68,7 @@ Everything goes through the `store` object in `index.html`. If you are changing
 how data persists, that is the only place to touch.
 
 - `store.put(col, id, doc)` / `store.del(col, id)` — writes. Each one goes into
-  a persistent **outbox** (`localStorage["bourdain.outbox"]`) and leaves it only
+  a persistent **outbox** (`localStorage["bourdain.outbox:<userId>"]`) and leaves it only
   once the server accepts it. They resolve `true` when the server has the change
   and `false` when it is waiting on this device; `store` toasts the "waiting"
   case itself, so callers only toast success, and only when the result is `true`.
