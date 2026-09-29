@@ -111,6 +111,14 @@ try {
   const row = await page.$$eval(".people .person", (bs) => bs.map((x) => x.lastElementChild.textContent.trim()));
   check("People row: You first, then Sam", JSON.stringify(row) === JSON.stringify(["You", "Sam"]), JSON.stringify(row));
   check("your own photo in the row", Boolean(await page.$('.people .person:first-child .av img')));
+  d2 = db(); d2.prepare("UPDATE users SET name = 'Sam Taylor-Jones' WHERE id = 'sam'").run(); d2.close();
+  await page.evaluate(() => { people.at = 0; people.list = null; }); await page.reload(); await page.waitForFunction(() => !store.loading);
+  await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector('.people .person[data-person="sam"]'); await sleep(300);
+  const full = await page.$eval('.people .person[data-person="sam"]', (x) => ({ shown: x.lastElementChild.textContent.trim(), label: x.getAttribute("aria-label") }));
+  check("People row: first names only, the full name still read out", full.shown === "Sam" && full.label === "Sam Taylor-Jones", JSON.stringify(full));
+  d2 = db(); d2.prepare("UPDATE users SET name = 'Sam' WHERE id = 'sam'").run(); d2.close();
+  await page.reload(); await page.waitForFunction(() => !store.loading);
+  await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector(".people .person"); await sleep(500);
   const statsEvery = await page.$$eval(".stat b", (xs) => xs.map((x) => x.textContent));
   const feedEvery = await page.$$eval(".feed .slot", (xs) => xs.map((x) => x.textContent.replace(/\s+/g, " ").trim()));
   check("Everyone: Sam's cooks in the feed, with his name", /Everyone/.test(await page.textContent(".seg .on")) && feedEvery.filter((t) => /Chicken katsu curry.*Sam/.test(t)).length === 2 && feedEvery.some((t) => /Tarka dal.*Sam/.test(t)) && feedEvery.some((t) => /Leek soup.*You/.test(t)), JSON.stringify(feedEvery));

@@ -6,6 +6,9 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.3.2 — 2026-09-29
+- The People row at the top of the Archives shows first names only. Tap someone to see their full name on their profile.
+
 ## 2.3.1 — 2026-09-29
 - When Bourdain doesn't recognise your network, the red bar now says which address it sees your device as, so you can check it against TRUSTED_NETS. The owner's view says the same instead of "check the server logs".
 - The server log also records each refused address, once a minute, with the networks it trusts.
