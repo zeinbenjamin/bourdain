@@ -381,6 +381,41 @@ If something's wrong: stop the app, roll the `data` dataset back to
 - **Export:** "Export my data" in the version sheet, for Zein's own backups and
   for any pilot user who asks for their data.
 
+## What 2.1.0 built
+
+As planned, with these decisions made while building it:
+
+- **Still single-user.** Every request is Zein until 2.3, so other people can't
+  sign in yet. The tests put "Sam" and "Ava" straight into the database, the
+  way the server suite already inserts rows. There is no test-only way to be
+  someone else.
+- **The welcome is for Zein too.** Zein has no name after 2.0, so the first open
+  of 2.1 asks for one. The name is suggested from the email ("zein.b@…" →
+  "Zein"), a photo is optional, and **Later** puts it off until the next open.
+  **Edit profile** is in the version sheet and on your own profile.
+- **Alone, the Archives look as before.** The People row and **Everyone / Just
+  me** only appear once someone else has a name, so Zein sees no change until a
+  pilot user joins. Only named people are listed. Emails are never sent to
+  anyone else.
+- **The feed:** your own cooks always come from the phone's copy (current, and
+  there offline). Everyone else's come from `/api/feed`, refreshed when older
+  than a minute. If that fails, a line says it's showing just your cooks. The
+  stats and Most cooked are always yours.
+- **Profiles** show name, photo, counts, the 5 most recent cooks and all their
+  recipes as cards. Your own profile has **Edit profile**.
+- **Someone else's recipe** (`view "theirs"`) is read-only: the batch scaler
+  works, but there's no Edit, Delete, Cook this, Add to the week, photo or cover.
+  It has one red button, **Add to my recipes**, or **In your recipes ›** once
+  you have a copy. Back returns to wherever it was opened from: the profile,
+  the Archives, search, or your copy's "From Sam's recipes ›" line.
+- **A copy** is made on the server (`POST /api/copy`), since it needs the other
+  person's recipe. So it needs the server; offline, it says so.
+- **Extra route:** `GET /api/people/:id/recipes/:rid` opens a single recipe,
+  from the feed or a search result.
+- **Tests:** `tests/people.test.mjs`, including a check that the Archives don't
+  keep asking the server when you're alone. A render loop there was caught
+  while building.
+
 ## Stages
 
 Each stage ships and gets used before the next.
@@ -388,8 +423,8 @@ Each stage ships and gets used before the next.
 | Version | What |
 |---|---|
 | **1.10.1** ✅ | Groundwork: the old app ignores 2.0-shaped data (needed for rollback). Shipped; see "What 1.10.1 set up". |
-| **2.0.0** 🔨 | The migration. Owners on every row, users table, `/api/me`, per-user offline copy, Export. Still only Zein: every request is Zein, and Cloudflare traffic is refused until 2.3. The app looks the same. Built 2026-09-29, waiting to be merged and deployed. |
-| **2.1.0** | Everything about seeing other people (merged from the planned 2.1 and 2.2 on 2026-09-29, since both change the Archives): profiles (name, photo, welcome screen), People row, read-only recipes, Add to my recipes, search across everyone's books, and the Archives feed with names and avatars, Everyone / Just me. |
+| **2.0.0** ✅ | The migration. Owners on every row, users table, `/api/me`, per-user offline copy, Export. Still only Zein: every request is Zein, and Cloudflare traffic is refused until 2.3. The app looks the same. Shipped 2026-09-29. |
+| **2.1.0** 🔨 | Built 2026-09-29, waiting to be merged; see "What 2.1.0 built". Everything about seeing other people (merged from the planned 2.1 and 2.2 on 2026-09-29, since both change the Archives): profiles (name, photo, welcome screen), People row, read-only recipes, Add to my recipes, search across everyone's books, and the Archives feed with names and avatars, Everyone / Just me. |
 | **2.2.0** | `/api/ai` with server-side prompts, usage log, limits, admin screen, activity log. |
 | **2.3.0** | #14, upload cap, "Signed out" handling, Cloudflare token verification. |
 | — | Set up Cloudflare Tunnel + Access (no code). Zein signs in through it first, then with a second test email, then invites the pilot users. |

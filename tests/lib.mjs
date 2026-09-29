@@ -30,7 +30,9 @@ export function suite(name) {
 
 // Starts server.js on `port` with a fresh data dir. mock: true loads tests/mock-apis.mjs
 // in place of api.anthropic.com / api.openai.com; setMode() drives its behaviour.
-export async function startServer({ port, env = {}, mock = false, dataDir } = {}) {
+// named: give the owner a name straight away (2.1 shows a welcome sheet until they have
+// one, which would sit over every other suite's clicks). The people suite turns it off.
+export async function startServer({ port, env = {}, mock = false, dataDir, named = true } = {}) {
   const data = dataDir || mkdtempSync(path.join(tmpdir(), "bourdain-test-"));
   const modeFile = path.join(data, "mock-mode.json");
   writeFileSync(modeFile, "{}");
@@ -51,6 +53,10 @@ export async function startServer({ port, env = {}, mock = false, dataDir } = {}
     throw new Error("server did not start:\n" + log);
   };
   await launch();
+  if (named) {
+    const me = await (await fetch(url + "/api/me")).json();
+    if (!me.name) await fetch(url + "/api/me", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Test Owner" }) });
+  }
   const s = {
     url, data,
     log: () => log,

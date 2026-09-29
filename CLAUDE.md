@@ -29,7 +29,9 @@ Four collections, each stored as JSON blobs keyed by **(owner, id)**: `recipes`,
 owns it. The server sets `owner` from who's asking (`req.user`), never from the
 phone, and every read and write is scoped to it. Alongside them:
 - `users (id, email, name, photo, is_admin, created_at, last_seen)`. The owner
-  is the `is_admin` user, created from `OWNER_EMAIL`.
+  is the `is_admin` user, created from `OWNER_EMAIL`. `name` is null until the
+  person picks one in the welcome sheet; only named people are shown to others,
+  and emails never are.
 - `meta (key, value)`, holding `data_version`.
 
 See **Data version** under Gotchas.
@@ -44,6 +46,7 @@ A recipe:
   cover: assetId,                   // optional AI illustration, served from /api/covers/:id (WebP)
   rating: 0|1|2|3,                  // optional Michelin-style stars; 0 = rated "no stars", missing = not rated
   cooks: [{date, at, mult}],        // one per finished cook: local ISO date, timestamp, batch multiplier
+  copied_from: {owner, id, name, title}, // set on a copy made with Add to my recipes (2.1); the credit line
   tags: [string],
   ingredients: [{
     raw_text,                       // the line as originally written, kept for re-parsing
@@ -68,7 +71,7 @@ Everything goes through the `store` object in `index.html`. If you are changing
 how data persists, that is the only place to touch.
 
 - `store.put(col, id, doc)` / `store.del(col, id)` — writes. Each one goes into
-  a persistent **outbox** (`localStorage["bourdain.outbox"]`) and leaves it only
+  a persistent **outbox** (`localStorage["bourdain.outbox:<userId>"]`) and leaves it only
   once the server accepts it. They resolve `true` when the server has the change
   and `false` when it is waiting on this device; `store` toasts the "waiting"
   case itself, so callers only toast success, and only when the result is `true`.
@@ -180,8 +183,31 @@ Plan's day-row style. Nothing is stored for it: it is read from each recipe's
 `cooks`, so deleting a recipe or removing a date in its cook log takes those
 cooks off the Archives. A recipe opened from here sets `state.detailFrom =
 "timeline"`, so its Back says "‹ Archives" and the Archives tab stays lit;
-`show()` clears it for any other view. Each entry has `who: "me"`, a placeholder
-for the shared feed planned with multi-user (see **Pinned for v2**).
+`show()` clears it for any other view. Since 2.1 the Archives also show other
+people (see **Other people** below).
+
+**Other people (2.1)** (`people`, `avatar()`, `feed`, `others`, `openTheirs`/
+`renderTheirs`, `openPerson`/`renderPerson`, `profileSheet`):
+- **The server** (`/api/people`, `/api/people/:id[/recipes/:rid]`,
+  `/api/copy`, `/api/search`, `/api/feed`, `PUT /api/me`) lets everyone read
+  everyone's recipes and cooks, and write only their own.
+- **Archives.** The People row and **Everyone / Just me** (per phone,
+  `bourdain.archivesWho`) appear only once someone else has a name. Your cooks
+  come from the phone's copy; everyone else's from `/api/feed`. `people.stale()`
+  and `feed.stale()` stop re-fetching within a minute, which is what stops the
+  Archives re-rendering in a loop. Keep it that way.
+- **Someone else's recipe** is read-only, and its only action is **Add to my
+  recipes**. That makes a server-side copy with an empty rating and cook log,
+  and `copied_from`. `myCopyOf()` finds an existing copy. `view-detail` and
+  `view-theirs` share element ids (`#ingList`, `#multAmt`…), so each clears the
+  other when it renders.
+- **Search.** The Recipes search also asks `/api/search` after a 300ms pause and
+  lists hits in `#others` ("In other people's books"). It shows nothing when
+  offline.
+- **The welcome.** `maybeWelcome()` opens `profileSheet(true)` once per visit
+  while the signed-in person has no name.
+- **Tests.** `startServer({named:true})` (the default) names the test owner so
+  the welcome doesn't cover other suites.
 
 **Recipe list sort and filter** (`listPrefs`, `sortRecipes`, `keepRecipe`)
 are remembered per phone in `localStorage["bourdain.listPrefs"]`. A saved sort or
@@ -220,7 +246,9 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   "+" sheet, import vs write your own, carrying on with an unsaved draft),
   `timeline` (the Archives tab: stats, most cooked, the feed, back navigation),
   `dataversion` (data version stamps, per-user keys on the phone, adopting 1.x
-  data, setting aside and picking back up, Export), `migration` (the 1 → 2
+  data, setting aside and picking back up, Export), `people` (profiles, the
+  welcome, People row, Everyone / Just me, read-only recipes, Add to my recipes,
+  search across books, the feed), `migration` (the 1 → 2
   conversion, refusing to start, Cloudflare refused, `/api/me`, the export
   zip), `scan`,
   `video`.
@@ -275,8 +303,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v28"`
-in `public/sw.js` → `v29`, `v30`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v29"`
+in `public/sw.js` → `v30`, `v31`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -451,7 +479,9 @@ Live features: link fetch and AI import with review screen, screen-recording
 frame extraction, recipe photos, AI cover illustrations (on request), drag-to-reorder ingredients in the edit form,
 0.5×–10× batch multiplier, week planner, pantry with "cook from what I have"
 and photo scanning, cook mode with a checklist and step timers, Michelin
-ratings, a per-recipe cook log, the Archives (every cook, with stats), sorting
+ratings, a per-recipe cook log, the Archives (every cook, with stats; other
+people's too once there are any), profiles, browsing and copying other people's
+recipes, search across everyone's books, sorting
 and filtering of the recipe list, and **Export my data** (a zip of everything you
 own plus its photos, from the version sheet; `GET /api/export`, written by the
 small `zipStore()` in `server.js` with no dependency).
