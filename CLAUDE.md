@@ -497,7 +497,9 @@ Four routes in, most to least reliable:
    (6 per sheet, 4 sheets max). Audio is not transcribed; the model reads
    on-screen text and caption overlays.
 
-Instagram blocks both link routes. Screenshots or a recording are the way in.
+Instagram links work when the recipe is written in the caption or comments. When
+it is only said or shown in the video, screenshots or a recording are the way
+in; that case is why they exist.
 
 **Every import lands on a review screen before saving.** The model misreads
 quantities occasionally. Do not add a path that saves straight to the library.

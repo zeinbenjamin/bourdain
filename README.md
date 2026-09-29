@@ -123,7 +123,7 @@ Four routes in, in order of how reliable they are:
 3. **Screenshots.** Sent to the model as images.
 4. **A screen recording.** The browser samples frames, drops near-identical ones, and tiles the rest into contact sheets before sending. Turn captions on before recording: the model reads on-screen text, it can't hear audio.
 
-Instagram usually refuses both link routes. Screenshots or a recording are the way in there.
+Instagram links work when the recipe is in the caption or comments. When it is only said or shown in the video, use screenshots or a screen recording instead.
 
 Every import lands on a review screen before it's saved, because the model will occasionally misread a quantity.
 
