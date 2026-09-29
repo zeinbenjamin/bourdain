@@ -179,15 +179,16 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .dn .w{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:4px}
 .dn .d{font-family:var(--serif);font-weight:700;font-size:30px}
 .day.today .dn .w{color:var(--flame)}
-.day.today .slot{border-color:var(--flame)}
-/* nothing planned today: a filled red + as a nudge */
-.day.today.empty .addslot{background:var(--flame);border-color:var(--flame);color:var(--flame-ink)}
+/* nothing planned today: a filled red + as a nudge. Not ".empty": that class is
+   the app's empty-state message and would restyle the whole row. */
+.day.today.nomeal .addslot{background:var(--flame);border-color:var(--flame);color:var(--flame-ink)}
 .slots{display:flex;flex-direction:column;gap:6px;min-width:0}
 .slot{
   display:flex; align-items:center; gap:8px; background:var(--card); border:1px solid var(--line);
   border-radius:var(--r); padding:8px 10px; min-width:0;
 }
 .slot{width:100%;text-align:left;color:inherit;min-height:44px}
+#days .slot{border:0;background:none;padding:4px 0}
 .slot .mini{flex:none;width:40px;height:40px;border-radius:4px;overflow:hidden;background:var(--steel);display:flex;align-items:center;justify-content:center;color:var(--ink-3);font-family:var(--serif);font-weight:700;font-size:18px}
 .slot .mini img{width:100%;height:100%;object-fit:cover;display:block}
 .slot .mini.cover{background:var(--paper)}
@@ -1080,7 +1081,7 @@ function renderPlan(){
       const r=state.recipes[e.recipeId];
       return `<button class="slot" data-slot="${k}" data-ix="${ix}">${miniThumb(r)}<span class="t">${esc(r?(r.title||"Untitled"):"(deleted recipe)")}</span></button>`;
     }).join("");
-    return `<div class="day ${k===today?"today":""} ${day.entries.length?"":"empty"}"><div class="dn"><span class="w">${n}</span><span class="d">${d.getDate()}</span></div>
+    return `<div class="day ${k===today?"today":""} ${day.entries.length?"":"nomeal"}"><div class="dn"><span class="w">${n}</span><span class="d">${d.getDate()}</span></div>
       <div class="slots">${slots}</div><button class="addslot" data-add="${k}" aria-label="Add a meal to ${n} ${d.getDate()}">+</button></div>`;
   }).join("");
   el.onclick=async e=>{
