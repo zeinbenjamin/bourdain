@@ -32,7 +32,11 @@ try {
   check("filter: 3 stars", (await filter("s3")) === "A");
   check("filter: not rated yet", (await filter("unrated")) === "D");
   check("filter: never cooked", (await filter("never")) === "CE");
-  check("filter: 30 minutes or less", (await filter("quick")) === "CD");
+  check("filter: no '30 minutes or less' option any more (1.9.2)", !(await page.$$eval("#filterBy option", (os) => os.some((o) => o.value === "quick" || /30 minutes/.test(o.textContent)))));
+  check("sort: 'Quickest' is still there", await page.$$eval("#sortBy option", (os) => os.some((o) => o.value === "quick")));
+  await page.evaluate(() => localStorage.setItem("bourdain.listPrefs", JSON.stringify({ sort: "az", filter: "quick" })));
+  await page.reload(); await page.waitForFunction(() => !store.loading);
+  check("a phone that had '30 minutes or less' saved shows All recipes", (await page.inputValue("#filterBy")) === "all" && (await page.inputValue("#sortBy")) === "az" && (await order()) === "ABCDE", `${await page.inputValue("#filterBy")} ${await order()}`);
 
   // combines with tags and search
   await filter("all"); await page.click('.chip:has-text("weeknight")');
