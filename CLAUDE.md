@@ -137,6 +137,17 @@ in `tests/lib.mjs`.
 `--steel` card with a border and 10px between cards, white inputs inside, the
 ⋮⋮ drag handle on the left and a 44px × on the right.
 
+**Timeline tab** (`renderTimeline`, `timelineEntries`): stats (cooks this month,
+this year, recipes tried out of all), **Most cooked** (top 3 cooked more than once;
+ties go to the most recently cooked), then every finished cook newest first,
+under month headings (the year is added for past years) and grouped by day in the
+Plan's day-row style. Nothing is stored for it: it is read from each recipe's
+`cooks`, so deleting a recipe or removing a date in its cook log takes those
+cooks off the timeline. A recipe opened from here sets `state.detailFrom =
+"timeline"`, so its Back says "‹ Timeline" and the Timeline tab stays lit;
+`show()` clears it for any other view. Each entry has `who: "me"`, a placeholder
+for the shared feed planned with multi-user (see **Pinned for v2**).
+
 **Recipe list sort and filter** (`listPrefs`, `sortRecipes`, `keepRecipe`)
 are remembered per phone in `localStorage["bourdain.listPrefs"]`. A recipe card
 reads top to bottom: title, a `.cstars` row with the Michelin stars (omitted
@@ -149,7 +160,7 @@ in `index.html` or any client-visible file.
 
 ## Testing
 
-`npm test` runs every suite in `tests/` (under 2 minutes). `node tests/<name>.test.mjs`
+`npm test` runs every suite in `tests/` (about 2 minutes). `node tests/<name>.test.mjs`
 runs one, and `npm test -- scan` runs those whose name starts with "scan".
 **Run it before every push that touches the app, and add checks for anything you
 change.** Each suite starts the real `server.js` on its own port with a
@@ -169,7 +180,8 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   (edit form: description, double-tap Save), `cook` (cook mode, ratings,
   cook log), `timers` (fake clock via `page.clock`), `list` (sort, filter,
   cards), `layout` (measured gaps and tap targets at phone width), `add` (the
-  "+" sheet, import vs write your own, carrying on with an unsaved draft), `scan`,
+  "+" sheet, import vs write your own, carrying on with an unsaved draft),
+  `timeline` (stats, most cooked, the feed, back navigation), `scan`,
   `video`.
 - `slowProxy` delays: `shell` (index.html), `state` (`/api/state`), `write`
   (PUT/DELETE).
@@ -222,8 +234,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v18"`
-in `public/sw.js` → `v19`, `v20`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v19"`
+in `public/sw.js` → `v20`, `v21`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -354,18 +366,20 @@ never inline.
 
 ## Current state
 
-Three tabs: Recipes, Plan, Pantry. Importing lives behind the Recipes "+" (see
+Four tabs: Recipes, Plan, Timeline, Pantry. Importing lives behind the Recipes "+" (see
 **Adding a recipe** above); the import form is still `state.view === "import"`,
 with the Recipes tab highlighted. The Shop tab was removed but all its
 code (`buildList`, `renderShop`, the `shop` collection) is intact and hidden —
 restoring it is adding the tab button back and changing `.tabs`
-`grid-template-columns:repeat(3,1fr)` to `repeat(4,1fr)`.
+`grid-template-columns:repeat(4,1fr)` to `repeat(5,1fr)`. Zein may later move
+Pantry behind the Recipes "+" too (as something like "Cook from the pantry").
 
 Live features: link fetch and AI import with review screen, screen-recording
 frame extraction, recipe photos, AI cover illustrations (on request), drag-to-reorder ingredients in the edit form,
 0.5×–10× batch multiplier, week planner, pantry with "cook from what I have"
 and photo scanning, cook mode with a checklist and step timers, Michelin
-ratings, a per-recipe cook log, and sorting and filtering of the recipe list.
+ratings, a per-recipe cook log, a Timeline of every cook with stats, and sorting
+and filtering of the recipe list.
 
 Ideas not yet built: nutrition estimates, pantry quantities decremented by
 cooking, timer alerts while the phone is locked (would need push
@@ -378,7 +392,9 @@ Decided 2026-09-24: not now. The most likely trigger for 2.0.0 is **pantry
 amounts that go down when you cook**. That needs every pantry item to carry a
 real amount in a consistent unit, which old free-text items like "greek
 yoghurt" don't have, so existing data must be converted. Other v2-sized ideas:
-household sharing (a user id on every row, plus auth), an ingredient catalogue
+household sharing (a user id on every row, plus auth; this is also when the
+Timeline becomes a shared feed of who cooked what, which needs a `by` user id on
+each `cooks` entry — old entries without one belong to Zein), an ingredient catalogue
 (every recipe ingredient re-linked), and moving blobs to real columns. Features
 that only add fields stay 1.x: cooking mode, shopping list, nutrition, meal
 slots, a redesign.
