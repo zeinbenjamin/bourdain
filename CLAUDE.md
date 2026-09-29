@@ -193,7 +193,8 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   cook log), `timers` (fake clock via `page.clock`), `list` (sort, filter,
   cards), `layout` (measured gaps and tap targets at phone width), `add` (the
   "+" sheet, import vs write your own, carrying on with an unsaved draft),
-  `timeline` (the Archives tab: stats, most cooked, the feed, back navigation), `scan`,
+  `timeline` (the Archives tab: stats, most cooked, the feed, back navigation),
+  `dataversion` (data version stamps, refusing and setting aside newer data), `scan`,
   `video`.
 - `slowProxy` delays: `shell` (index.html), `state` (`/api/state`), `write`
   (PUT/DELETE).
@@ -246,8 +247,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v23"`
-in `public/sw.js` → `v24`, `v25`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v24"`
+in `public/sw.js` → `v25`, `v26`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -314,6 +315,19 @@ rather than `index.html`. Add a new case to `describe()` rather than returning a
 HTML page, and let the client switch on `code`. `readAll` skips a row it can't
 parse and logs `skipping corrupt row <table>/<id>`, so one bad row can't blank
 the app.
+
+**Data version (since 1.10.1).** `DATA_VERSION` (1) is defined in both
+`server.js` and `index.html` and must match. The phone stamps it on the offline
+copy (`dv` in `localStorage["bourdain"]`), on every outbox entry (`op.dv`) and
+on every write (`X-Bourdain-Data` header). The server refuses a PUT or DELETE
+stamped newer than itself with 409 `data_newer`. No header means data 1, which
+is what every app before 1.10.1 sends. On load, the phone ignores an offline
+copy stamped newer, and moves newer outbox entries to
+`localStorage["bourdain.outbox.parked"]`. Moved entries are not sent, shown
+or counted, and there's one toast. This exists so a rollback from 2.0 (see
+`docs/multi-user.md`) can't mix 2.0-shaped data into 1.x. Only bump it for a
+stored-data change with a migration, and never without the steps in that doc.
+`/api/version` and `/api/health` report it.
 
 **Adding fields is safe; renaming is not.** Old recipes simply lack new fields —
 treat missing as empty. Renaming an existing field orphans every stored recipe

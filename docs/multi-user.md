@@ -269,6 +269,34 @@ A snapshot restores the data, but the phone may already be running 2.0. So:
 Before that, 1.x gets one small release (**1.10.1**) that **ignores 2.0-shaped
 data** in a phone's outbox or offline copy rather than tripping over it.
 
+### What 1.10.1 set up, and what 2.0 must do with it
+
+1.10.1 added a **data version** (`DATA_VERSION = 1`) to both `server.js` and
+`index.html`:
+
+- The phone stamps it on its offline copy (`dv`), on each outbox entry (`dv`)
+  and on each write (`X-Bourdain-Data` header).
+- A 1.x server refuses writes stamped 2 with **409 `data_newer`**.
+- A 1.x phone ignores an offline copy stamped 2. It moves outbox entries
+  stamped 2 to `localStorage["bourdain.outbox.parked"]`, where they're kept but
+  never sent.
+
+2.0.0 must:
+
+1. Set `DATA_VERSION = 2` on both sides, in the same release as the migration.
+2. Accept writes stamped 1 or with no header (older phones still syncing), and
+   convert them the way the migration converts rows. The owner comes from the
+   signed-in user, as for every write.
+3. **Handle 409 `data_newer` from the server as "the server was rolled back".**
+   Stop syncing, move the outbox to the parked key, and say so. Don't drop it
+   the way other 4xx errors are dropped.
+4. At startup, compare `/api/version`'s `dataVersion` with its own. If the
+   server is older, don't sync (same as 3). If the server is newer, it's the
+   usual "close and reopen" stale-build case.
+5. On startup against a data-2 server, pick up any parked entries stamped 2,
+   put them back in the outbox, and clear the parked key. That's what makes
+   "roll back, then upgrade again" lose nothing.
+
 ### Rehearsal (before the real thing)
 
 1. Clone last night's snapshot to a scratch dataset.
@@ -295,7 +323,7 @@ Each stage ships and gets used before the next.
 
 | Version | What |
 |---|---|
-| **1.10.1** | Groundwork: the old app ignores 2.0-shaped data (needed for rollback). |
+| **1.10.1** ✅ | Groundwork: the old app ignores 2.0-shaped data (needed for rollback). Shipped; see "What 1.10.1 set up". |
 | **2.0.0** | The migration. Owners on every row, users table, `/api/me`, per-user offline copy, Export. Still only Zein. Zein's traffic is identified by `TRUSTED_NETS`, Cloudflare isn't set up yet, and the app looks the same. |
 | **2.1.0** | Profiles (name, photo, welcome screen), People row, read-only recipes, Add to my recipes. |
 | **2.2.0** | Archives feed with names and avatars, Everyone / Just me. |
