@@ -6,6 +6,12 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 1.10.0 — 2026-09-29
+- The Timeline tab is now called Archives, after Bourdain's "the archives", with an archive-box icon. Everything in it is the same.
+- On a recipe, Cook this, Add to the week, Add photo and Make cover sit in two neat rows instead of one button wrapping onto its own line.
+- Back, Edit, Delete, Cancel and Save buttons at the top of each page are all the same size and easier to tap.
+- The × to remove a photo or screenshot is easier to tap.
+
 ## 1.9.3 — 2026-09-29
 - The "Still cooking" bar is now Michelin red, with a bigger red Continue button that's easier to tap.
 

@@ -1,4 +1,4 @@
-// Timeline tab (1.9.0): stats and a feed of every finished cook, read from recipe.cooks.
+// Archives tab (1.9.0 as "Timeline", renamed in 1.10.0; the view is still "timeline" inside): stats and a feed of every finished cook, read from recipe.cooks.
 import { suite, startServer, openBrowser, openApp, sleep } from "./lib.mjs";
 
 const { check, finish } = suite("timeline");
@@ -13,6 +13,7 @@ try {
 
   // --- empty
   await openApp(page, s.url);
+  check("the tab is called Archives", (await page.textContent('#tabs button[data-view="timeline"]')).trim() === "Archives");
   await page.click('#tabs button[data-view="timeline"]');
   check("empty: says how cooks get here", /Nothing cooked yet/.test(await page.textContent("#view-timeline")) && /Cook this/.test(await page.textContent("#view-timeline")));
   await page.evaluate(() => { store.loading = true; renderTimeline(); });
@@ -72,7 +73,7 @@ try {
   await page.click('#tabs button[data-view="timeline"]');
   await page.click('.feed [data-open="katsu"]');
   check("tap opens the recipe", /Chicken katsu curry/.test(await page.textContent("#view-detail h2")));
-  check("recipe opened from the timeline: '‹ Timeline' and Timeline tab lit", (await page.textContent("#back")).trim() === "‹ Timeline" && (await page.evaluate(() => document.querySelector("#tabs button.on").dataset.view)) === "timeline");
+  check("recipe opened from the Archives: '‹ Archives' and Archives tab lit", (await page.textContent("#back")).trim() === "‹ Archives" && (await page.evaluate(() => document.querySelector("#tabs button.on").dataset.view)) === "timeline");
   await page.click("#back");
   check("Back returns to the timeline", await page.isVisible("#view-timeline") && await page.isVisible(".stats"));
   await page.click('#tabs button[data-view="recipes"]'); await page.click('.rcard[data-id="katsu"]');
