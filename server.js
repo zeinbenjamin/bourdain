@@ -58,6 +58,11 @@ db.exec(`
 `);
 
 const COLLECTIONS = new Set(["recipes", "plan", "pantry", "shop"]);
+/* The shape of stored data. 1 = single user (today). 2.0.0 bumps it to 2 with
+   a migration (docs/multi-user.md). Phones send theirs with every write as
+   X-Bourdain-Data; a write from a newer app is refused, so after a rollback to
+   1.x a phone still running 2.0 can't write 2.0-shaped data into 1.x tables. */
+const DATA_VERSION = 1;
 // One unreadable row must not take the whole app down, so skip it and say which.
 const readAll = (t) => {
   const out = {};
@@ -74,10 +79,10 @@ app.use(express.json({ limit: "30mb" }));
 app.disable("x-powered-by");
 
 app.get("/api/health", (_req, res) =>
-  res.json({ ok: true, hasApiKey: Boolean(API_KEY), hasImageKey: Boolean(OPENAI_KEY), version: VERSION, commit: COMMIT })
+  res.json({ ok: true, hasApiKey: Boolean(API_KEY), hasImageKey: Boolean(OPENAI_KEY), version: VERSION, commit: COMMIT, dataVersion: DATA_VERSION })
 );
 
-app.get("/api/version", (_req, res) => res.json({ version: VERSION, commit: COMMIT, changelog: CHANGELOG }));
+app.get("/api/version", (_req, res) => res.json({ version: VERSION, commit: COMMIT, dataVersion: DATA_VERSION, changelog: CHANGELOG }));
 
 app.get("/api/state", (_req, res) => {
   res.json({
@@ -88,7 +93,15 @@ app.get("/api/state", (_req, res) => {
   });
 });
 
-app.put("/api/:col/:id", (req, res) => {
+// Refuse writes made by an app that stores a newer shape of data. No header = an
+// app from before 1.10.1, which is data version 1.
+const sameDataVersion = (req, res, next) => {
+  const v = Number(req.get("X-Bourdain-Data") || 1);
+  if (v > DATA_VERSION)
+    return res.status(409).json({ error: `this change comes from a newer version of the app (data ${v}); this server is data ${DATA_VERSION}`, code: "data_newer" });
+  next();
+};
+app.put("/api/:col/:id", sameDataVersion, (req, res) => {
   const { col, id } = req.params;
   if (!COLLECTIONS.has(col)) return res.status(404).json({ error: "unknown collection", code: "bad_collection" });
   db.prepare(`INSERT INTO ${col} (id, doc, updated_at) VALUES (?, ?, ?)
@@ -97,7 +110,7 @@ app.put("/api/:col/:id", (req, res) => {
   res.status(204).end();
 });
 
-app.delete("/api/:col/:id", (req, res) => {
+app.delete("/api/:col/:id", sameDataVersion, (req, res) => {
   const { col, id } = req.params;
   if (!COLLECTIONS.has(col)) return res.status(404).json({ error: "unknown collection", code: "bad_collection" });
   db.prepare(`DELETE FROM ${col} WHERE id = ?`).run(id);

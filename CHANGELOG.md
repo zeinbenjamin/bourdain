@@ -6,6 +6,10 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 1.10.1 — 2026-09-29
+- Groundwork for sharing Bourdain with other people later. Nothing changes when you use the app.
+- If the app ever has to be rolled back from a future version, changes made in that newer version are kept safely on your phone instead of being sent to a server that can't read them.
+
 ## 1.10.0 — 2026-09-29
 - The Timeline tab is now called Archives, after Bourdain's "the archives", with an archive-box icon. Everything in it is the same.
 - On a recipe, Cook this, Add to the week, Add photo and Make cover sit in two neat rows instead of one button wrapping onto its own line.

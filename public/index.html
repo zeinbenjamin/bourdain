@@ -505,6 +505,14 @@ const timeout=ms=>AbortSignal.timeout?AbortSignal.timeout(ms):undefined;
    or starting the app offline. Unsynced changes are replayed over server data
    on load, so they win. Last write wins: fine for one person. */
 const OUTBOX_KEY="bourdain.outbox";
+/* The shape of the data this app stores (docs/multi-user.md). It is stamped on
+   the offline copy, on every outbox entry and on every write (X-Bourdain-Data).
+   Anything stamped newer came from a later app, which can only happen after a
+   rollback: the copy is ignored and the writes are set aside, never sent to a
+   server that doesn't understand them. They wait in PARKED_KEY for the newer
+   app to pick up again. */
+const DATA_VERSION=1;
+const PARKED_KEY="bourdain.outbox.parked";
 const store = {
   online:false,      // did the last request reach the server?
   fromServer:false,  // is state loaded from the server, or only from this device's copy?
@@ -513,8 +521,16 @@ const store = {
   /* Show this phone's copy straight away, so opening the app never starts on an empty screen. */
   loadLocal(){
     try{ this.outbox=JSON.parse(localStorage.getItem(OUTBOX_KEY)||"[]"); }catch(_){ this.outbox=[]; }
+    const newer=this.outbox.filter(o=>(o.dv||1)>DATA_VERSION);
+    if(newer.length){
+      this.outbox=this.outbox.filter(o=>!newer.includes(o));
+      try{ const kept=JSON.parse(localStorage.getItem(PARKED_KEY)||"[]"); localStorage.setItem(PARKED_KEY,JSON.stringify([...kept,...newer])); }catch(e){ console.warn("couldn't set aside newer changes",e); }
+      this.saveOutbox();
+      console.warn("set aside changes from a newer version of the app",newer);
+      setTimeout(()=>toast(`${newer.length} change${newer.length===1?"":"s"} from a newer version of the app ${newer.length===1?"was":"were"} set aside, because the server is on an older version. They're kept on this phone.`),0);
+    }
     try{ const raw=localStorage.getItem("bourdain"); if(raw){ const j=JSON.parse(raw);
-      Object.assign(state,{recipes:j.recipes||{},plan:j.plan||{},shop:j.shop||{},pantry:j.pantry||{}}); } }catch(_){}
+      if((j.dv||1)<=DATA_VERSION) Object.assign(state,{recipes:j.recipes||{},plan:j.plan||{},shop:j.shop||{},pantry:j.pantry||{}}); } }catch(_){}
     this.applyOutbox();
     this.paint();
   },
@@ -543,7 +559,7 @@ const store = {
     }catch(e){ console.warn("load failed",e); this.loadError=e; this.online=false; return false; }
   },
   applyOutbox(){ for(const op of this.outbox){ if(!state[op.col]) continue; if(op.doc==null) delete state[op.col][op.id]; else state[op.col][op.id]=op.doc; } },
-  local(){ try{ localStorage.setItem("bourdain", JSON.stringify({recipes:state.recipes, plan:state.plan, shop:state.shop, pantry:state.pantry})); }catch(e){} },
+  local(){ try{ localStorage.setItem("bourdain", JSON.stringify({dv:DATA_VERSION, recipes:state.recipes, plan:state.plan, shop:state.shop, pantry:state.pantry})); }catch(e){} },
   saveOutbox(){ try{ localStorage.setItem(OUTBOX_KEY, JSON.stringify(this.outbox)); }catch(e){ console.warn("outbox not saved",e); } },
   /* Send queued writes in order. Stops at the first network or server failure and
      keeps the rest; a 4xx means the server will never accept it, so it is dropped. */
@@ -555,8 +571,9 @@ const store = {
         const op=this.outbox[0];
         const path=`/api/${op.col}/${encodeURIComponent(op.id)}`;
         try{
-          await api(path, op.doc==null ? {method:"DELETE",signal:timeout(15000)}
-            : {method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(op.doc),signal:timeout(15000)});
+          const dv={"X-Bourdain-Data":String(op.dv||DATA_VERSION)};
+          await api(path, op.doc==null ? {method:"DELETE",headers:dv,signal:timeout(15000)}
+            : {method:"PUT",headers:{"Content-Type":"application/json",...dv},body:JSON.stringify(op.doc),signal:timeout(15000)});
           this.online=true;
         }catch(e){
           if(e.status>=400&&e.status<500){ op.refused=true; console.error("server refused a change, dropping it",op,e); toast("The server refused one change, so it wasn't kept. Check it and try again."); }
@@ -578,7 +595,7 @@ const store = {
      swapping ids), where awaiting flush() again would wait on itself forever. */
   enqueue(col,id,doc){
     this.outbox=this.outbox.filter(o=>!(o.col===col&&o.id===id));
-    const op={col,id,doc:doc==null?null:JSON.parse(JSON.stringify(doc))};
+    const op={col,id,dv:DATA_VERSION,doc:doc==null?null:JSON.parse(JSON.stringify(doc))};
     this.outbox.push(op); this.saveOutbox(); this.local(); this.paint();
     return op;
   },
