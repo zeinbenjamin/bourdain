@@ -97,7 +97,15 @@ try {
   check("recipe page: no big gap between the stars line and the description", desc.top - stats.bottom <= 12, `${Math.round(desc.top - stats.bottom)}px`);
 
   // --- edit form
+  // tidy-ups (1.10.0): action buttons in a 2x2 grid, header buttons one size
+  const quad = await page.$$eval("#view-detail .actions.quad .btn", (bs) => bs.map((b) => { const r = b.getBoundingClientRect(); return { l: Math.round(r.left), t: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }; }));
+  check("recipe page: four action buttons in two even rows, none left on its own", quad.length === 4 && new Set(quad.map((a) => a.t)).size === 2 && new Set(quad.map((a) => a.w)).size === 1 && quad.every((a) => a.h >= 44), JSON.stringify(quad));
+  const hdr = async (sel) => page.$$eval(sel, (bs) => bs.map((b) => { const r = b.getBoundingClientRect(), cs = getComputedStyle(b); return { h: Math.round(r.height), f: cs.fontSize }; }));
+  const dh = await hdr("#view-detail .detail-head .btn");
+  check("recipe page: Back, Edit and Delete the same height, at least 44px", dh.length === 3 && dh.every((b) => b.h >= 44 && b.h === dh[0].h && b.f === dh[0].f), JSON.stringify(dh));
   await page.click("#edit");
+  const rh = await hdr("#review .detail-head .btn");
+  check("edit form: '‹ Cancel' and 'Save changes' the same height and text size", rh.length === 2 && rh[0].h === rh[1].h && rh[0].h >= 44 && rh[0].f === rh[1].f, JSON.stringify(rh));
   const handle = await box(".ingrow .h");
   check("edit form: drag handle on one line", handle.h < 30, JSON.stringify(handle));
   // ingredient rows read as separate cards (1.8.0)
@@ -115,6 +123,15 @@ try {
   check("edit form: unit box fits 'whole'", ing.unitFits);
   const qtyFits = await page.evaluate(() => { const q = document.querySelector(".ingrow [data-f=quantity]"), old = q.value; q.value = "1000"; const ok = q.scrollWidth <= q.clientWidth; q.value = old; return ok; });
   check("edit form: quantity box fits '1000'", qtyFits);
+  // photo × buttons get a 44px tap area (1.10.0)
+  const xBox = async (sel) => page.evaluate((q) => [...document.querySelectorAll(q)].map((b) => { const r = b.getBoundingClientRect(), c = b.querySelector("span").getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height), dot: Math.round(c.width) }; }), sel);
+  await page.evaluate(() => { state.draft = state.reviewCollect(); state.draft.photos = ["d".repeat(32)]; renderReview(); });
+  const px = await xBox("#revPhotos [data-rmp]");
+  check("edit form: photo × is a 44px tap area with the small dark circle", px.length === 1 && px[0].w >= 44 && px[0].h >= 44 && px[0].dot <= 26, JSON.stringify(px));
+  await page.evaluate(() => { state.draft = null; state.editingId = null; show("import"); state.images = [new Blob(["x"], { type: "image/png" })]; renderThumbs(); });
+  const tx = await xBox("#thumbs [data-rmi]");
+  check("import: screenshot × is a 44px tap area too", tx.length === 1 && tx[0].w >= 44 && tx[0].h >= 44, JSON.stringify(tx));
+  await page.evaluate(() => { state.images = []; renderThumbs(); });
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
 } catch (e) { finish(e); } finally { await b?.browser.close(); await s?.cleanup(); }

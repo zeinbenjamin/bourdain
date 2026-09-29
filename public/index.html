@@ -142,6 +142,7 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 /* Detail */
 .revhint{margin-bottom:12px}
 .detail-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px}
+.detail-head .btn{min-height:44px;padding:0 16px;font-size:13px}
 .detail h2{font-size:34px;line-height:1.08;margin-bottom:8px;letter-spacing:-.02em}
 .detail .meta{font-family:var(--sans);color:var(--ink-3);font-size:12.5px}
 .detail .source{font-family:var(--sans);font-size:12.5px;word-break:break-all}
@@ -158,6 +159,8 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .steps li::before{display:block;margin-bottom:2px}
 .steps li::before{content:"Step " counter(s);font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:.02em;text-transform:uppercase;color:var(--ink-3);line-height:1.9;white-space:nowrap}
 .actions{display:flex;gap:8px;margin:20px 0 6px;flex-wrap:wrap}
+.actions.quad{display:grid;grid-template-columns:1fr 1fr}
+.actions.quad .btn{min-height:44px;padding:0 10px}
 
 /* Plan */
 .weeknav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
@@ -188,7 +191,7 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .slot .t{flex:1;min-width:0;font-family:var(--serif);font-weight:600;font-size:16px;line-height:1.25;overflow-wrap:anywhere}
 .addslot{width:44px;height:44px;border:1px solid var(--line);background:none;border-radius:999px;padding:0;color:var(--flame);font-family:var(--sans);font-size:24px;font-weight:400;line-height:1}
 
-/* Timeline */
+/* Archives (the "timeline" view) */
 .stats{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--rule);border-bottom:1px solid var(--line);margin-bottom:18px}
 .stat{padding:10px 0 12px;text-align:center}
 .stat+.stat{border-left:1px solid var(--line)}
@@ -259,7 +262,10 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .photos{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 4px}
 .photos .ph{position:relative;width:88px;height:88px;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:var(--steel)}
 .photos .ph img{width:100%;height:100%;object-fit:cover;display:block}
-.photos .ph .x{position:absolute;top:2px;right:2px;width:22px;height:22px;border-radius:50%;border:0;background:rgba(0,0,0,.55);color:#fff;font-size:14px;line-height:1;padding:0}
+/* the × is a 44px tap area; the dark circle is the span inside it */
+.photos .ph .x,.thumbs .x{position:absolute;top:0;right:0;width:44px;height:44px;border:0;background:none;padding:3px;display:flex;align-items:flex-start;justify-content:flex-end}
+.photos .ph .x span,.thumbs .x span{width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:15px;line-height:24px;text-align:center}
+.thumbs .tw{position:relative;display:inline-block}
 .photos .add{width:88px;height:88px;border-radius:10px;border:1px dashed var(--line);background:none;color:var(--ink-2);font-size:13px;display:flex;align-items:center;justify-content:center;text-align:center}
 .hero{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:0;display:block;margin:12px 0 4px;background:var(--steel)}
 .photos .ph,.photos .add{border-radius:var(--r)}
@@ -462,7 +468,7 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
   <button data-view="plan">
     <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Plan</button>
   <button data-view="timeline">
-    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Timeline</button>
+    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></svg>Archives</button>
   <button data-view="pantry">
     <svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M5 12h14M10 7v2M10 15v2"/></svg>Pantry</button>
 </nav>
@@ -722,7 +728,7 @@ function renderDetail(){
   const t=(r.prep_min||0)+(r.cook_min||0);
   const meta=[r.servings?`Serves ${r.servings}`:null, r.prep_min?`${r.prep_min} min prep`:null, r.cook_min?`${r.cook_min} min cook`:null].filter(Boolean).join(" · ");
   el.innerHTML=`
-    <div class="detail-head"><button class="btn small ghost" id="back">‹ ${state.detailFrom==="timeline"?"Timeline":"Recipes"}</button>
+    <div class="detail-head"><button class="btn small ghost" id="back">‹ ${state.detailFrom==="timeline"?"Archives":"Recipes"}</button>
       <div class="row"><button class="btn small" id="edit">Edit</button><button class="btn small danger" id="del">Delete</button></div></div>
     <h2>${esc(r.title)}</h2>
     <div class="meta">${esc(meta)}</div>
@@ -732,7 +738,7 @@ function renderDetail(){
     <div class="tags" style="margin-top:8px;display:flex;gap:4px;flex-wrap:wrap">${(r.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>
     ${r.cover?`<img class="hero cover" src="${coverUrl(r.cover)}" alt="">`:r.photos&&r.photos.length?`<img class="hero" src="${photoUrl(r.photos[0])}" alt="">`:""}
     ${r.cover ? (r.photos&&r.photos.length?photosHtml(r.photos,false):"") : (r.photos&&r.photos.length>1?photosHtml(r.photos.slice(1),false):"")}
-    <div class="actions"><button class="btn primary" id="cookThis">${cooking.get()?.recipeId===state.detailId?"Continue cooking":"Cook this"}</button><button class="btn" id="addPlan">Add to the week</button><button class="btn" id="addPhoto">Add photo</button><button class="btn" id="makeCover">${r.cover?"New cover":"Make cover"}</button></div>
+    <div class="actions quad"><button class="btn primary" id="cookThis">${cooking.get()?.recipeId===state.detailId?"Continue cooking":"Cook this"}</button><button class="btn" id="addPlan">Add to the week</button><button class="btn" id="addPhoto">Add photo</button><button class="btn" id="makeCover">${r.cover?"New cover":"Make cover"}</button></div>
     <h3>Ingredients</h3>
     <div class="scaler"><span class="lab">Batch</span>
       <span class="ctl"><button id="multDown" aria-label="Smaller batch">−</button><span class="amt" id="multAmt"></span><button id="multUp" aria-label="Bigger batch">+</button></span>
@@ -1420,7 +1426,7 @@ function renderImport(){
   document.getElementById("btnFetch").hidden = false;
   renderThumbs();
 }
-function renderThumbs(){ const t=document.getElementById("thumbs"); t.innerHTML=state.images.map((f,i)=>`<span style="position:relative;display:inline-block"><img src="${URL.createObjectURL(f)}" alt="Image ${i+1}"><button class="x" data-rmi="${i}" aria-label="Remove" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:0;background:var(--ink);color:var(--paper);font-size:14px;line-height:1;padding:0">×</button></span>`).join(""); }
+function renderThumbs(){ const t=document.getElementById("thumbs"); t.innerHTML=state.images.map((f,i)=>`<span class="tw"><img src="${URL.createObjectURL(f)}" alt="Image ${i+1}"><button class="x" data-rmi="${i}" aria-label="Remove image ${i+1}"><span>×</span></button></span>`).join(""); }
 document.getElementById("srcImgs").addEventListener("change",async e=>{
   const files=[...e.target.files]; e.target.value="";
   const status=document.getElementById("importStatus");
@@ -1680,7 +1686,7 @@ async function applyCover(recipeId,coverId){
 }
 function pickPhotos(){ return new Promise(res=>{ const i=document.createElement("input"); i.type="file"; i.accept="image/*"; i.multiple=true; i.onchange=()=>res([...i.files]); i.click(); }); }
 function photosHtml(ids,editable){
-  return `<div class="photos">${(ids||[]).map(id=>`<div class="ph"><img src="${photoUrl(id)}" alt="">${editable?`<button class="x" data-rmp="${id}" aria-label="Remove photo">×</button>`:""}</div>`).join("")}${editable?`<button class="add" data-addp>+ Photo</button>`:""}</div>`;
+  return `<div class="photos">${(ids||[]).map(id=>`<div class="ph"><img src="${photoUrl(id)}" alt="">${editable?`<button class="x" data-rmp="${id}" aria-label="Remove photo"><span>×</span></button>`:""}</div>`).join("")}${editable?`<button class="add" data-addp>+ Photo</button>`:""}</div>`;
 }
 
 /* review / edit form */

@@ -13,7 +13,8 @@ try {
 
   // --- tab bar
   const tabs = await page.evaluate(() => [...document.querySelectorAll("#tabs button")].map((t) => ({ v: t.dataset.view, w: t.getBoundingClientRect().width })));
-  check("four tabs: Recipes, Plan, Timeline, Pantry; no Import", tabs.map((t) => t.v).join() === "recipes,plan,timeline,pantry", JSON.stringify(tabs));
+  const labels = await page.$$eval("#tabs button", (bs) => bs.map((b) => b.textContent.trim()).join());
+  check("four tabs: Recipes, Plan, Archives, Pantry; no Import", tabs.map((t) => t.v).join() === "recipes,plan,timeline,pantry" && labels === "Recipes,Plan,Archives,Pantry", labels);
   check("tabs share the width evenly", Math.max(...tabs.map((t) => t.w)) - Math.min(...tabs.map((t) => t.w)) < 1 && tabs[0].w > 80, JSON.stringify(tabs));
 
   // --- "+" asks how

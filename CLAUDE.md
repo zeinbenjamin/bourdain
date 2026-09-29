@@ -135,18 +135,27 @@ recipe" for an existing one), with one neutral hint to check it before saving, s
 it reads the same after an import as when writing from scratch. Tests reach both through `addRecipe(page, "import"|"manual")`
 in `tests/lib.mjs`.
 
+**Buttons that are easy to hit.** Every `.detail-head` button (Back, Edit,
+Delete, Cancel, Save) is 44px tall at one text size. The recipe page's four
+actions sit in a 2×2 grid (`.actions.quad`) so none wraps onto a line alone.
+Photo and screenshot × buttons are 44px tap areas with the small dark circle
+drawn by the `<span>` inside.
+
 **Edit form ingredients** (`renderReview`, `.ingrow`): each ingredient is a grey
 `--steel` card with a border and 10px between cards, white inputs inside, the
 ⋮⋮ drag handle on the left and a 44px × on the right.
 
-**Timeline tab** (`renderTimeline`, `timelineEntries`): stats (cooks this month,
+**Archives tab** (`renderTimeline`, `timelineEntries`): named for Bourdain's
+"the archives". It was called Timeline until 1.10.0 and is still `timeline`
+inside (`state.view`, `data-view`, `#view-timeline`, the test suite); only the
+words on screen changed. Stats (cooks this month,
 this year, recipes tried out of all), **Most cooked** (top 3 cooked more than once;
 ties go to the most recently cooked), then every finished cook newest first,
 under month headings (the year is added for past years) and grouped by day in the
 Plan's day-row style. Nothing is stored for it: it is read from each recipe's
 `cooks`, so deleting a recipe or removing a date in its cook log takes those
-cooks off the timeline. A recipe opened from here sets `state.detailFrom =
-"timeline"`, so its Back says "‹ Timeline" and the Timeline tab stays lit;
+cooks off the Archives. A recipe opened from here sets `state.detailFrom =
+"timeline"`, so its Back says "‹ Archives" and the Archives tab stays lit;
 `show()` clears it for any other view. Each entry has `who: "me"`, a placeholder
 for the shared feed planned with multi-user (see **Pinned for v2**).
 
@@ -184,7 +193,7 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   cook log), `timers` (fake clock via `page.clock`), `list` (sort, filter,
   cards), `layout` (measured gaps and tap targets at phone width), `add` (the
   "+" sheet, import vs write your own, carrying on with an unsaved draft),
-  `timeline` (stats, most cooked, the feed, back navigation), `scan`,
+  `timeline` (the Archives tab: stats, most cooked, the feed, back navigation), `scan`,
   `video`.
 - `slowProxy` delays: `shell` (index.html), `state` (`/api/state`), `write`
   (PUT/DELETE).
@@ -237,8 +246,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v22"`
-in `public/sw.js` → `v23`, `v24`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v23"`
+in `public/sw.js` → `v24`, `v25`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -369,7 +378,7 @@ never inline.
 
 ## Current state
 
-Four tabs: Recipes, Plan, Timeline, Pantry. Importing lives behind the Recipes "+" (see
+Four tabs: Recipes, Plan, Archives, Pantry. Importing lives behind the Recipes "+" (see
 **Adding a recipe** above); the import form is still `state.view === "import"`,
 with the Recipes tab highlighted. The Shop tab was removed but all its
 code (`buildList`, `renderShop`, the `shop` collection) is intact and hidden —
@@ -381,7 +390,7 @@ Live features: link fetch and AI import with review screen, screen-recording
 frame extraction, recipe photos, AI cover illustrations (on request), drag-to-reorder ingredients in the edit form,
 0.5×–10× batch multiplier, week planner, pantry with "cook from what I have"
 and photo scanning, cook mode with a checklist and step timers, Michelin
-ratings, a per-recipe cook log, a Timeline of every cook with stats, and sorting
+ratings, a per-recipe cook log, the Archives (every cook, with stats), and sorting
 and filtering of the recipe list.
 
 Ideas not yet built: nutrition estimates, pantry quantities decremented by
@@ -396,7 +405,7 @@ amounts that go down when you cook**. That needs every pantry item to carry a
 real amount in a consistent unit, which old free-text items like "greek
 yoghurt" don't have, so existing data must be converted. Other v2-sized ideas:
 household sharing (a user id on every row, plus auth; this is also when the
-Timeline becomes a shared feed of who cooked what, which needs a `by` user id on
+Archives becomes a shared feed of who cooked what, which needs a `by` user id on
 each `cooks` entry — old entries without one belong to Zein), an ingredient catalogue
 (every recipe ingredient re-linked), and moving blobs to real columns. Features
 that only add fields stay 1.x: cooking mode, shopping list, nutrition, meal
