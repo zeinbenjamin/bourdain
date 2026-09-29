@@ -416,6 +416,44 @@ As planned, with these decisions made while building it:
   keep asking the server when you're alone. A render loop there was caught
   while building.
 
+## What 2.2.0 built
+
+As planned, with these decisions made while building it:
+
+- **The jobs:** `import` (url + text, up to 4 images), `scan` (up to 6
+  images), `ideas` (the pantry list) and `write` (the chosen idea, the pantry
+  list and what's missing). The server clips each piece of text. A `prompt`
+  field from the phone is ignored, and `/api/claude` is gone (JSON 404).
+- **What counts:** a call is logged once it has left the server for Claude or
+  OpenAI, including when it's stopped, times out or the provider fails.
+  A missing key or an unreachable provider isn't counted. Refused calls (over a
+  limit, busy) never reach the provider and aren't counted.
+- **Cost:** Claude from a price table in `server.js`, per million tokens for
+  the configured model (a model not in the table is priced as Sonnet and
+  labelled a guess). The cover picture price is **a placeholder, US$0.05**,
+  which Zein sets from the OpenAI bill in the owner's view.
+- **Settings** live in a `settings` table: `limits` (everyone's),
+  `limits:<userId>` (one person's, only the ones that differ) and `image_usd`.
+  A bad value is refused whole (400 `bad_limits`) and nothing is saved.
+- **Midnight** is the server's. The container needs `TZ` (in
+  `docker-compose.yml`), or limits reset at midnight UTC.
+- **The admin is exempt from all of it** while "No limits for you" is ticked,
+  including one-at-a-time, so a cover finishing in the background never blocks
+  an import. Untick it to try the limits yourself.
+- **Activity** is logged for recipe adds, edits, cooks, deletes and copies,
+  plan and pantry changes, profile changes and every AI job (with the reason
+  when one didn't work). Titles, dates and item names only. Repeats within a
+  minute are folded. Pruned after 6 months (activity) and 400 days (AI usage).
+- **The owner's view** opens with a long press on the version sheet's heading
+  ("Bourdain 2.2.0"). It has no button and no hint.
+- **Tests:** one `ai` suite instead of the planned `ai-limits` and `admin`.
+  Until 2.3 every request is the owner, so the server's 403 for anyone else
+  can't be reached from a test without a bypass (there isn't one). The phone's
+  handling of that 403, and that a non-admin's long press does nothing, are
+  tested; the 403 itself gets a real test in 2.3 with signed-in test users.
+- **Still to do at the invite stage:** the note for pilot users saying their
+  activity and AI usage are logged.
+
 ## Stages
 
 Each stage ships and gets used before the next.
@@ -424,8 +462,8 @@ Each stage ships and gets used before the next.
 |---|---|
 | **1.10.1** ✅ | Groundwork: the old app ignores 2.0-shaped data (needed for rollback). Shipped; see "What 1.10.1 set up". |
 | **2.0.0** ✅ | The migration. Owners on every row, users table, `/api/me`, per-user offline copy, Export. Still only Zein: every request is Zein, and Cloudflare traffic is refused until 2.3. The app looks the same. Shipped 2026-09-29. |
-| **2.1.0** 🔨 | Built 2026-09-29, waiting to be merged; see "What 2.1.0 built". Everything about seeing other people (merged from the planned 2.1 and 2.2 on 2026-09-29, since both change the Archives): profiles (name, photo, welcome screen), People row, read-only recipes, Add to my recipes, search across everyone's books, and the Archives feed with names and avatars, Everyone / Just me. |
-| **2.2.0** | `/api/ai` with server-side prompts, usage log, limits, admin screen, activity log. |
+| **2.1.0** ✅ | Shipped 2026-09-29; see "What 2.1.0 built". Everything about seeing other people (merged from the planned 2.1 and 2.2 on 2026-09-29, since both change the Archives): profiles (name, photo, welcome screen), People row, read-only recipes, Add to my recipes, search across everyone's books, and the Archives feed with names and avatars, Everyone / Just me. |
+| **2.2.0** 🔨 | Built 2026-09-29, waiting to be merged; see "What 2.2.0 built". `/api/ai` with server-side prompts, usage log, limits, admin screen, activity log. |
 | **2.3.0** | #14, upload cap, "Signed out" handling, Cloudflare token verification. |
 | — | Set up Cloudflare Tunnel + Access (no code). Zein signs in through it first, then with a second test email, then invites the pilot users. |
 

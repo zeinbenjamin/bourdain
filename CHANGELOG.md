@@ -6,6 +6,12 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.2.0 — 2026-09-29
+- Ready for sharing: each person now has a daily AI allowance (20 imports, 10 fridge scans, 15 recipe ideas and 5 covers a day) and an estimated US$5 a month. You're not held to them. Over a limit, the app says which one and when there's more.
+- One AI job at a time per person, so a double tap can't spend twice.
+- For you only: a long press on the heading of the version sheet (tap the Bourdain title) opens the owner's view. It shows who's using the app and when, what they've done lately, the AI each person used today and this month with an estimated cost, and lets you change the limits for everyone or for one person.
+- Nothing changes in how importing, scanning, ideas or covers work.
+
 ## 2.1.0 — 2026-09-29
 - New: your profile. The first time you open this version, pick the name (and, if you like, a photo) other people will see. Change it any time with Edit profile, by tapping the Bourdain title.
 - Ready for sharing: once other people join, the Archives show everyone's cooks with their name and photo, with Everyone or Just me at the top. Tap someone to see their recipes and what they've cooked lately.

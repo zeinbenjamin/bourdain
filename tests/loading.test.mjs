@@ -63,7 +63,7 @@ try {
   await page.click("#stopParse"); await sleep(700);
   check("Stop: says it stopped", /Stopped\. Nothing was imported\./.test(await page.textContent("#importStatus")));
   check("Stop: Read button usable again", await page.locator("#btnParse").isEnabled());
-  check("Stop: server cancelled the Claude call", /MOCK: upstream aborted/.test(s.log()) && /claude call cancelled/.test(s.log()));
+  check("Stop: server cancelled the Claude call", /MOCK: upstream aborted/.test(s.log()) && /import cancelled: the client stopped waiting/.test(s.log()));
   await sleep(8500);
   check("Stop: no review screen appears later", await page.locator("#review").isHidden());
   s.setMode({});

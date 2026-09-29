@@ -50,11 +50,11 @@ try {
   // --- Claude failures get specific codes
   for (const [mode, code] of [["401", "bad_api_key"], ["404", "model_unavailable"], ["529", "overloaded"], ["credit", "no_credit"], ["image", "image_rejected"], ["max_tokens", "truncated"], ["refusal", "refused"]]) {
     s.setMode({ claude: mode });
-    const r = await s.post("/api/claude", { prompt: "x" });
+    const r = await s.post("/api/ai", { kind: "import", material: { text: "x" } });
     check(`Claude ${mode} -> ${code}`, r.code === code, `${r.status} ${r.code}`);
   }
   s.setMode({}); s.clearLog();
-  const ok = await s.post("/api/claude", { prompt: "x" });
+  const ok = await s.post("/api/ai", { kind: "import", material: { text: "x" } });
   check("Claude ok -> parsed JSON", ok.json && ok.json.title === "Mock donburi");
   check("max_tokens is 16000", /MOCK_CLAUDE_REQ \{"model":"claude-sonnet-4-6","max_tokens":16000\}/.test(s.log()));
 
@@ -98,7 +98,7 @@ try {
   // --- placeholder keys count as missing
   await s.restart({ ANTHROPIC_API_KEY: "sk-ant-REPLACE-ME", OPENAI_API_KEY: "sk-REPLACE-ME" });
   check("placeholder OpenAI key -> no_image_key", (await s.post("/api/cover", { recipe })).code === "no_image_key");
-  check("placeholder Anthropic key -> no_api_key", (await s.post("/api/claude", { prompt: "x" })).code === "no_api_key");
+  check("placeholder Anthropic key -> no_api_key", (await s.post("/api/ai", { kind: "import", material: { text: "x" } })).code === "no_api_key");
   check("health reports hasImageKey false", (await (await fetch(B + "/api/health")).json()).hasImageKey === false);
   await s.cleanup();
 

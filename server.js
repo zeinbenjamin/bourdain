@@ -174,6 +174,7 @@ app.put("/api/me", (req, res) => {
   const photo = req.body?.photo ?? null;
   if (photo !== null && !/^[a-f0-9]{32}$/.test(photo)) return res.status(400).json({ error: "photo must be an uploaded photo id or null", code: "bad_photo" });
   db.prepare("UPDATE users SET name = ?, photo = ? WHERE id = ?").run(name, photo, req.user.id);
+  logActivity(req.user.id, "profile_changed", name);
   res.json(me(db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id)));
 });
 
@@ -227,6 +228,7 @@ app.post("/api/copy", (req, res) => {
   delete copy.rating; copy.cooks = [];
   const newId = randomUUID().replace(/-/g, "").slice(0, 12);
   db.prepare("INSERT INTO recipes (owner, id, doc, updated_at) VALUES (?, ?, ?, ?)").run(req.user.id, newId, JSON.stringify(copy), now);
+  logActivity(req.user.id, "recipe_copied", `${src.title || "Untitled"} (from ${u.name || "someone"})`);
   res.status(201).json({ id: newId, recipe: copy, already: false });
 });
 
@@ -343,18 +345,34 @@ const sameDataVersion = (req, res, next) => {
     return res.status(409).json({ error: `this change comes from a newer version of the app (data ${v}); this server is data ${DATA_VERSION}`, code: "data_newer" });
   next();
 };
-app.put("/api/:col/:id", sameDataVersion, (req, res) => {
+app.put("/api/:col(recipes|plan|pantry|shop)/:id", sameDataVersion, (req, res) => {
   const { col, id } = req.params;
   if (!COLLECTIONS.has(col)) return res.status(404).json({ error: "unknown collection", code: "bad_collection" });
+  const doc = req.body ?? {};
+  if (col === "recipes") {
+    const prev = db.prepare("SELECT doc FROM recipes WHERE owner = ? AND id = ?").get(req.user.id, id);
+    let was = null; try { was = prev && JSON.parse(prev.doc); } catch {}
+    const cooked = ((doc.cooks || []).length) > (((was && was.cooks) || []).length);
+    logActivity(req.user.id, !prev ? "recipe_added" : cooked ? "cook_logged" : "recipe_edited", doc.title || "Untitled");
+  } else if (col === "plan") logActivity(req.user.id, "plan_changed", id);
+  else if (col === "pantry") logActivity(req.user.id, "pantry_changed", doc.item || id);
   db.prepare(`INSERT INTO ${col} (owner, id, doc, updated_at) VALUES (?, ?, ?, ?)
               ON CONFLICT(owner, id) DO UPDATE SET doc = excluded.doc, updated_at = excluded.updated_at`)
-    .run(req.user.id, id, JSON.stringify(req.body ?? {}), new Date().toISOString());
+    .run(req.user.id, id, JSON.stringify(doc), new Date().toISOString());
   res.status(204).end();
 });
 
-app.delete("/api/:col/:id", sameDataVersion, (req, res) => {
+app.delete("/api/:col(recipes|plan|pantry|shop)/:id", sameDataVersion, (req, res) => {
   const { col, id } = req.params;
   if (!COLLECTIONS.has(col)) return res.status(404).json({ error: "unknown collection", code: "bad_collection" });
+  if (col === "recipes") {
+    const prev = db.prepare("SELECT doc FROM recipes WHERE owner = ? AND id = ?").get(req.user.id, id);
+    let was = null; try { was = prev && JSON.parse(prev.doc); } catch {}
+    if (prev) logActivity(req.user.id, "recipe_deleted", (was && was.title) || "Untitled");
+  } else if (col === "pantry") {
+    let was = null; try { was = JSON.parse(db.prepare("SELECT doc FROM pantry WHERE owner = ? AND id = ?").get(req.user.id, id)?.doc || "null"); } catch {}
+    logActivity(req.user.id, "pantry_removed", (was && was.item) || id);
+  }
   db.prepare(`DELETE FROM ${col} WHERE owner = ? AND id = ?`).run(req.user.id, id);
   res.status(204).end();
 });
@@ -422,11 +440,14 @@ async function callClaude({ content, maxTokens = 16000, up, who = "claude" }) {
       body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, messages: [{ role: "user", content }] }),
     });
   } catch (err) {
+    // Stopped or timed out mid-call: it may already be billed, so it counts. Unreachable: it isn't.
+    if (up.meter && (up.clientGone() || up.timedOut())) up.meter.reached = true;
     if (up.clientGone()) throw err;
     if (up.timedOut()) throw new UpstreamError(504, "upstream_timeout", "Claude took too long to answer");
     console.error(`${who}: could not reach Anthropic`, err.message);
     throw new UpstreamError(502, "upstream_unreachable", "could not reach the Anthropic API");
   }
+  if (up.meter) up.meter.reached = true;
   if (!r.ok) {
     const body = await r.text();
     let msg = ""; try { msg = JSON.parse(body).error?.message || ""; } catch {}
@@ -442,38 +463,208 @@ async function callClaude({ content, maxTokens = 16000, up, who = "claude" }) {
     throw new UpstreamError(502, "upstream_error", "the Anthropic API returned an error");
   }
   const data = await r.json();
+  if (up.meter) { up.meter.input += data.usage?.input_tokens || 0; up.meter.output += data.usage?.output_tokens || 0; }
   if (data.stop_reason === "refusal") throw new UpstreamError(422, "refused", "Claude declined the request");
   if (data.stop_reason === "max_tokens") throw new UpstreamError(422, "truncated", "Claude's reply was cut off before it finished");
   return (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
 }
 
-app.post("/api/claude", async (req, res) => {
-  const { prompt, images } = req.body || {};
-  if (!prompt) return res.status(400).json({ error: "no prompt", code: "no_prompt" });
-  const content = [];
-  for (const img of images || []) {
-    content.push({ type: "image", source: { type: "base64", media_type: img.media_type || "image/jpeg", data: img.data } });
-  }
-  content.push({ type: "text", text: prompt });
+/* ---------------- AI jobs, per-person limits and usage (2.2) ----------------
+   The phone asks for one of the app's own jobs and sends only the material; the
+   prompts live here. So the Anthropic key can't be used for anything else, and
+   every call is counted against the person making it. See docs/multi-user.md,
+   "AI limits per person".                                                      */
+const AISLES = ["produce", "meat & seafood", "dairy & eggs", "bakery", "pantry", "spices", "frozen", "drinks", "other"]; // same list as index.html
+const PARSE_PROMPT = `You are the import step of a personal recipe app. Extract exactly ONE recipe from the material below (it may be a social-media caption, text copied from a website, notes, and/or screenshots of a recipe or of a video's caption). Reply with ONLY a JSON object, no prose, in this shape:
 
+{"title": string, "description": string (one sentence, or ""), "servings": number|null, "prep_min": number|null, "cook_min": number|null,
+ "ingredients": [{"raw_text": string (the line as written), "quantity": number|null, "unit": one of ["g","kg","ml","l","tsp","tbsp","cup","whole","clove","slice","can","packet","bunch","pinch","to taste",""], "item": string (canonical, lowercase, singular, no brand, e.g. "chicken breast", "soy sauce"), "prep": string (e.g. "diced", or ""), "section": string (sub-heading like "For the sauce", or ""), "aisle": one of ${JSON.stringify(AISLES)}, "optional": boolean}],
+ "steps": [string, ...] (numbered method as separate imperative steps, in order),
+ "tags": [string, ...] (2-5 short lowercase tags: cuisine, protein, style like "weeknight", "meal prep", "high protein"),
+ "notes": string (tips, swaps, storage, or "")}
+
+If an image is a grid of video frames (a contact sheet from a screen recording), read the frames in order left-to-right then top-to-bottom, and treat on-screen text, captions and subtitles as the recipe source; ingredients often appear as overlaid text and quantities may be spoken in captions. Combine all frames into one recipe.
+
+Rules: convert vulgar fractions to decimals (½ -> 0.5). Convert ounces to g and fl oz/pints to ml. Use "whole" for countable items (2 eggs -> quantity 2, unit "whole", item "egg"). If a quantity is genuinely missing, use null and unit "". Ignore hashtags, follow-me lines, emoji and comments. If the material contains no recipe at all, reply {"error":"no recipe found"}.
+
+MATERIAL:
+`;
+const SCAN_PROMPT = `You are looking at photos of a home fridge, freezer or pantry cupboard. List the food and cooking ingredients you can see, so they can be added to a pantry list.
+
+Reply with ONLY a JSON object, no prose: {"items":[{"item": string, "qty": number|null, "unit": string, "aisle": string, "sure": boolean}]}
+
+- item: canonical, lowercase, singular, generic name with no brand, e.g. "greek yoghurt", "chicken thigh", "soy sauce", "egg".
+- qty: a number only when you can clearly count whole items (eggs, cans, lemons, bottles). Otherwise null. Never guess weights or how full a container is.
+- unit: "" unless one of ["can","packet","bunch","slice","clove"] clearly fits the count.
+- aisle: one of ${JSON.stringify(AISLES)}.
+- sure: false when the item is partly hidden, the label is unreadable, or you are guessing what is inside an opaque container or tub.
+- The same item seen in several photos is listed once.
+- Skip salt, pepper, cooking oil and water (always assumed), and anything that is not food or drink (medicine, cleaning products, containers that are clearly empty).
+- If you can see no food at all, reply {"items":[]}.`;
+const clip = (v, n) => String(v ?? "").slice(0, n);
+// kind -> how to build the prompt from the material, how many images, and which limit it counts against
+const AI_JOBS = {
+  import: { group: "import", images: 4, prompt: (m) => PARSE_PROMPT + (m.url ? `Source URL: ${clip(m.url, 500)}\n\n` : "") + (m.text ? clip(m.text, 20000) : "(no text — read the screenshots)") },
+  scan: { group: "scan", images: 6, prompt: () => SCAN_PROMPT },
+  ideas: { group: "ideas", images: 0, prompt: (m) => `I have these ingredients: ${clip(m.have, 4000)}.
+Assume salt, pepper, cooking oil and water are always on hand. Suggest 3 different dishes I could realistically cook. Favour ones needing nothing extra; a dish may need at most 2 common extra items.
+Reply with ONLY a JSON array of 3 objects: {"title": string, "why": string (one sentence on what it is and why it fits what I have), "missing": [string] (extra items I'd need to buy, empty array if none)}` },
+  write: { group: "ideas", images: 0, prompt: (m) => {
+    const missing = Array.isArray(m.missing) ? m.missing.slice(0, 5).map((x) => clip(x, 60)).filter(Boolean) : [];
+    return PARSE_PROMPT + `Write the full recipe for "${clip(m.title, 200)}" for 2 people, using these ingredients I already have where sensible: ${clip(m.have, 4000)}. Assume salt, pepper, oil and water are on hand.${missing.length ? ` It may also use: ${missing.join(", ")}.` : ""}`;
+  } },
+};
+const LIMIT_GROUPS = ["import", "scan", "ideas", "cover"];
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ai_usage (id INTEGER PRIMARY KEY AUTOINCREMENT, user TEXT NOT NULL, at TEXT NOT NULL, day TEXT NOT NULL,
+    kind TEXT NOT NULL, grp TEXT NOT NULL, model TEXT, input_tokens INTEGER NOT NULL DEFAULT 0, output_tokens INTEGER NOT NULL DEFAULT 0,
+    images INTEGER NOT NULL DEFAULT 0, est_usd REAL NOT NULL DEFAULT 0, outcome TEXT NOT NULL);
+  CREATE INDEX IF NOT EXISTS ai_usage_user_day ON ai_usage (user, day);
+  CREATE TABLE IF NOT EXISTS activity (id INTEGER PRIMARY KEY AUTOINCREMENT, user TEXT NOT NULL, at TEXT NOT NULL, action TEXT NOT NULL, target TEXT);
+  CREATE INDEX IF NOT EXISTS activity_at ON activity (at);
+  CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+`);
+const getSetting = (k) => { const r = db.prepare("SELECT value FROM settings WHERE key = ?").get(k); try { return r ? JSON.parse(r.value) : null; } catch { return null; } };
+const setSetting = (k, v) => v == null ? db.prepare("DELETE FROM settings WHERE key = ?").run(k)
+  : db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(k, JSON.stringify(v));
+// Per person per day (local midnight: set TZ on the container), plus an estimated monthly budget.
+const DEFAULT_LIMITS = { import: 20, scan: 10, ideas: 15, cover: 5, monthly_usd: 5, admin_exempt: true };
+const limitsFor = (userId) => ({ ...DEFAULT_LIMITS, ...(getSetting("limits") || {}), ...(userId ? getSetting(`limits:${userId}`) || {} : {}) });
+/* Estimated cost. Claude per million tokens, from Anthropic's price list
+   (claude-sonnet-4-6: $3 in, $15 out). The image price is a placeholder, not a
+   quoted OpenAI price: set it in the admin screen from your OpenAI bill. The
+   real bills are in the Anthropic and OpenAI consoles; these are estimates. */
+const CLAUDE_PRICES = {
+  "claude-sonnet-4-6": [3, 15], "claude-sonnet-5": [2, 10], "claude-sonnet-5-5": [2, 10], "claude-haiku-4-5": [1, 5],
+  "claude-opus-4-6": [5, 25], "claude-opus-4-7": [5, 25], "claude-opus-4-8": [5, 25], "claude-opus-5": [5, 25], "claude-opus-5-5": [4, 20],
+};
+const prices = () => ({ model: MODEL, claude: CLAUDE_PRICES[MODEL] || [3, 15], known: Boolean(CLAUDE_PRICES[MODEL]), image_usd: getSetting("image_usd") ?? 0.05 });
+const localDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const aiInFlight = new Set();
+function aiBlock(user, group) {
+  const lim = limitsFor(user.id);
+  if (user.is_admin && lim.admin_exempt) return null;
+  if (aiInFlight.has(user.id)) return { status: 429, body: { error: "still working on your last one", code: "ai_busy" } };
+  const used = db.prepare("SELECT COUNT(*) AS n FROM ai_usage WHERE user = ? AND day = ? AND grp = ?").get(user.id, localDay(), group).n;
+  if (used >= lim[group]) return { status: 429, body: { error: `daily limit reached (${lim[group]})`, code: "ai_limit", kind: group, limit: lim[group] } };
+  const spent = db.prepare("SELECT COALESCE(SUM(est_usd), 0) AS s FROM ai_usage WHERE user = ? AND day LIKE ?").get(user.id, localDay().slice(0, 7) + "%").s;
+  if (spent >= lim.monthly_usd) return { status: 429, body: { error: "monthly AI allowance used up", code: "ai_budget", limit: lim.monthly_usd } };
+  return null;
+}
+/* Runs one AI job for req.user: checks the limits, allows one at a time per
+   person, and records the call if it reached Claude or OpenAI (a call that never
+   left the server, like a missing key, isn't counted: it cost nothing). */
+async function runAi(req, res, kind, group, up, job) {
+  const blocked = aiBlock(req.user, group);
+  if (blocked) { res.status(blocked.status).json(blocked.body); return { blocked: true }; }
+  aiInFlight.add(req.user.id);
+  up.meter = { reached: false, input: 0, output: 0, images: 0 };
+  let outcome = "ok";
+  try { return { value: await job() }; }
+  catch (err) { outcome = err instanceof UpstreamError ? err.code : up.clientGone() ? "stopped" : "error"; throw err; }
+  finally {
+    aiInFlight.delete(req.user.id);
+    const m = up.meter;
+    if (m.reached) {
+      const p = prices(), usd = (m.input * p.claude[0] + m.output * p.claude[1]) / 1e6 + m.images * p.image_usd;
+      db.prepare(`INSERT INTO ai_usage (user, at, day, kind, grp, model, input_tokens, output_tokens, images, est_usd, outcome)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(req.user.id, new Date().toISOString(), localDay(), kind, group, MODEL, m.input, m.output, m.images, Math.round(usd * 1e6) / 1e6, outcome);
+      logActivity(req.user.id, "ai_" + kind, outcome === "ok" ? "" : outcome);
+    }
+  }
+}
+const parseJsonReply = (text) => {
+  const cleaned = text.replace(/^\s*```(?:json)?/i, "").replace(/```\s*$/, "").trim();
+  try { return JSON.parse(cleaned); } catch {}
+  const m = cleaned.match(/[[{][\s\S]*[\]}]/); // sometimes there's a sentence before the JSON
+  if (m) { try { return JSON.parse(m[0]); } catch {} }
+  return undefined;
+};
+app.post("/api/ai", async (req, res) => {
+  const { kind, material = {}, images = [] } = req.body || {};
+  const job = AI_JOBS[kind];
+  if (!job) return res.status(400).json({ error: "unknown AI job", code: "bad_kind" });
+  if (!Array.isArray(images) || images.length > job.images) return res.status(400).json({ error: `at most ${job.images} images for ${kind}`, code: "too_many_images" });
+  if (!API_KEY) return send(res, new UpstreamError(503, "no_api_key", "no Anthropic API key configured"));
+  const content = images.map((img) => ({ type: "image", source: { type: "base64", media_type: /^image\/(jpeg|png|webp|gif)$/.test(img?.media_type) ? img.media_type : "image/jpeg", data: String(img?.data || "") } }));
+  content.push({ type: "text", text: job.prompt(material && typeof material === "object" ? material : {}) });
   const up = upstreamSignal(res, 120_000);
   try {
-    const text = await callClaude({ content, up });
-    const cleaned = text.replace(/^\s*```(?:json)?/i, "").replace(/```\s*$/, "").trim();
-    try {
-      return res.json({ json: JSON.parse(cleaned), raw: text });
-    } catch {
-      // Sometimes there's a sentence before the JSON — grab the outermost object or array.
-      const m = cleaned.match(/[[{][\s\S]*[\]}]/);
-      if (m) { try { return res.json({ json: JSON.parse(m[0]), raw: text }); } catch {} }
-      return res.status(422).json({ error: "model did not return JSON", code: "invalid_json", raw: text.slice(0, 500) });
-    }
+    const r = await runAi(req, res, kind, job.group, up, async () => {
+      const text = await callClaude({ content, up });
+      const json = parseJsonReply(text);
+      if (json === undefined) throw Object.assign(new UpstreamError(422, "invalid_json", "model did not return JSON"), { raw: text.slice(0, 500) });
+      return json;
+    });
+    if (r.blocked) return;
+    res.json({ json: r.value });
   } catch (err) {
-    if (up.clientGone()) return console.log("claude call cancelled: the client stopped waiting");
+    if (up.clientGone()) return console.log(`${kind} cancelled: the client stopped waiting`);
     if (err instanceof UpstreamError) return send(res, err);
-    console.error("claude call failed", err);
-    res.status(502).json({ error: "claude call failed", code: "upstream_error" });
+    console.error(`${kind} failed`, err);
+    res.status(502).json({ error: "the AI job failed", code: "upstream_error" });
   }
+});
+
+/* ---------------- activity and the admin screen (2.2) ----------------
+   One row per thing someone did (not the contents), so the owner can see who's
+   using what. A repeat of the same action on the same thing within a minute is
+   folded into the first, so a pantry scan adding ten items isn't ten rows.   */
+function logActivity(user, action, target) {
+  const t = clip(target, 120);
+  const last = db.prepare("SELECT at FROM activity WHERE user = ? AND action = ? AND COALESCE(target, '') = ? ORDER BY id DESC LIMIT 1").get(user, action, t);
+  if (last && Date.now() - Date.parse(last.at) < 60_000) return;
+  db.prepare("INSERT INTO activity (user, at, action, target) VALUES (?, ?, ?, ?)").run(user, new Date().toISOString(), action, t);
+}
+const requireAdmin = (req, res, next) => (req.user.is_admin ? next() : res.status(403).json({ error: "only the owner can see this", code: "not_admin" }));
+app.get("/api/admin/summary", requireAdmin, (_req, res) => {
+  const day = localDay(), month = day.slice(0, 7) + "%";
+  const people = db.prepare("SELECT * FROM users ORDER BY is_admin DESC, created_at").all().map((u) => {
+    const rs = Object.values(readAll("recipes", u.id)).filter(Boolean);
+    const today = Object.fromEntries(LIMIT_GROUPS.map((g) => [g, 0]));
+    for (const r of db.prepare("SELECT grp, COUNT(*) AS n FROM ai_usage WHERE user = ? AND day = ? GROUP BY grp").all(u.id, day)) today[r.grp] = r.n;
+    const m = db.prepare("SELECT COUNT(*) AS calls, COALESCE(SUM(est_usd), 0) AS usd FROM ai_usage WHERE user = ? AND day LIKE ?").get(u.id, month);
+    return { id: u.id, email: u.email, name: u.name || null, photo: u.photo || null, is_admin: Boolean(u.is_admin), created_at: u.created_at, last_seen: u.last_seen,
+      recipes: rs.length, cooks: rs.reduce((n, r) => n + (r.cooks || []).filter((c) => c && c.date).length, 0), copies: rs.filter((r) => r.copied_from).length,
+      ai: { today, month_calls: m.calls, month_usd: m.usd }, limits: limitsFor(u.id), overrides: getSetting(`limits:${u.id}`) };
+  });
+  const byKind = db.prepare("SELECT grp, COUNT(*) AS calls, COALESCE(SUM(est_usd), 0) AS usd FROM ai_usage WHERE day LIKE ? GROUP BY grp").all(month);
+  res.json({ day, people, month: { calls: byKind.reduce((n, r) => n + r.calls, 0), usd: byKind.reduce((n, r) => n + r.usd, 0), byKind },
+    defaults: { ...DEFAULT_LIMITS, ...(getSetting("limits") || {}) }, prices: prices() });
+});
+app.get("/api/admin/activity", requireAdmin, (req, res) => {
+  const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 100));
+  const rows = req.query.user
+    ? db.prepare("SELECT a.*, u.name, u.email FROM activity a LEFT JOIN users u ON u.id = a.user WHERE a.user = ? ORDER BY a.id DESC LIMIT ?").all(String(req.query.user), limit)
+    : db.prepare("SELECT a.*, u.name, u.email FROM activity a LEFT JOIN users u ON u.id = a.user ORDER BY a.id DESC LIMIT ?").all(limit);
+  res.json(rows.map((r) => ({ user: r.user, name: r.name || r.email || "?", at: r.at, action: r.action, target: r.target })));
+});
+// Limits: the defaults for everyone, one person's overrides (null clears them), and the image price estimate.
+app.put("/api/admin/limits", requireAdmin, (req, res) => {
+  const b = req.body || {};
+  const clean = (o, allowExempt) => {
+    if (o == null) return null;
+    const out = {};
+    for (const [k, v] of Object.entries(o)) {
+      if (LIMIT_GROUPS.includes(k)) { if (!Number.isInteger(v) || v < 0 || v > 1000) throw new Error(`${k} must be a whole number from 0 to 1000`); out[k] = v; }
+      else if (k === "monthly_usd") { if (typeof v !== "number" || !(v >= 0) || v > 1000) throw new Error("monthly_usd must be 0 to 1000"); out[k] = Math.round(v * 100) / 100; }
+      else if (k === "admin_exempt" && allowExempt) { if (typeof v !== "boolean") throw new Error("admin_exempt must be true or false"); out[k] = v; }
+      else throw new Error(`unknown limit ${k}`);
+    }
+    return out;
+  };
+  if (b.user !== undefined && !db.prepare("SELECT 1 FROM users WHERE id = ?").get(String(b.user))) return res.status(404).json({ error: "no such person", code: "not_found" });
+  let defaults, overrides;
+  try { // check everything before saving anything
+    if (b.defaults) defaults = clean(b.defaults, true);
+    if (b.user !== undefined) overrides = b.overrides == null || !Object.keys(b.overrides).length ? null : clean(b.overrides, false);
+    if (b.image_usd !== undefined && (typeof b.image_usd !== "number" || !(b.image_usd >= 0) || b.image_usd > 10)) throw new Error("image_usd must be 0 to 10");
+  } catch (err) { return res.status(400).json({ error: err.message, code: "bad_limits" }); }
+  if (defaults) setSetting("limits", { ...(getSetting("limits") || {}), ...defaults });
+  if (b.user !== undefined) setSetting(`limits:${b.user}`, overrides);
+  if (b.image_usd !== undefined) setSetting("image_usd", Math.round(b.image_usd * 10000) / 10000);
+  res.json({ defaults: { ...DEFAULT_LIMITS, ...(getSetting("limits") || {}) }, prices: prices(), ...(b.user !== undefined ? { user: b.user, limits: limitsFor(String(b.user)), overrides: getSetting(`limits:${b.user}`) } : {}) });
 });
 
 /* ---------------- covers ----------------
@@ -521,12 +712,15 @@ async function paintCover(prompt, up) {
         }),
       });
     } catch (err) {
+      if (up.meter && (up.clientGone() || up.timedOut())) { up.meter.reached = true; up.meter.images += 1; } // may already be billed
       if (up.clientGone()) throw err;
       if (up.timedOut()) throw new UpstreamError(504, "image_timeout", "the image model took too long");
       console.error("cover: could not reach OpenAI", err.message);
       throw new UpstreamError(502, "image_unreachable", "could not reach the OpenAI API");
     }
+    if (up.meter) up.meter.reached = true;
     if (r.ok) {
+      if (up.meter) up.meter.images += 1;
       const data = await r.json();
       const b64 = data.data?.[0]?.b64_json;
       if (!b64) throw new UpstreamError(502, "image_failed", "the image model returned no image");
@@ -556,13 +750,17 @@ app.post("/api/cover", async (req, res) => {
   if (!OPENAI_KEY) return send(res, new UpstreamError(503, "no_image_key", "no OpenAI API key configured"));
   const up = upstreamSignal(res, 240_000);
   try {
-    const dish = await describeDish(recipe, up);
-    const png = await paintCover(COVER_STYLE + dish, up);
-    const id = randomUUID().replace(/-/g, "");
-    const webp = await sharp(png).resize(1024, 1024, { fit: "inside", withoutEnlargement: true }).webp({ quality: 88 }).toBuffer();
-    await writeFile(path.join(PHOTO_DIR, `${id}.webp`), webp);
-    console.log(`cover ${id} for "${recipe.title}": ${dish}`);
-    res.json({ id, url: `/api/covers/${id}`, dish });
+    const r = await runAi(req, res, "cover", "cover", up, async () => {
+      const dish = await describeDish(recipe, up);
+      const png = await paintCover(COVER_STYLE + dish, up);
+      const id = randomUUID().replace(/-/g, "");
+      const webp = await sharp(png).resize(1024, 1024, { fit: "inside", withoutEnlargement: true }).webp({ quality: 88 }).toBuffer();
+      await writeFile(path.join(PHOTO_DIR, `${id}.webp`), webp);
+      console.log(`cover ${id} for "${recipe.title}": ${dish}`);
+      return { id, url: `/api/covers/${id}`, dish };
+    });
+    if (r.blocked) return;
+    res.json(r.value);
   } catch (err) {
     if (up.clientGone()) return console.log("cover cancelled: the client stopped waiting");
     if (err instanceof UpstreamError) return send(res, err);
@@ -599,7 +797,13 @@ async function sweepCovers() {
   if (removed || kept) console.log(`cover sweep: removed ${removed} unused cover${removed === 1 ? "" : "s"}, kept ${kept} newer than ${COVER_GRACE_DAYS} days`);
   return { removed, kept };
 }
-const runSweep = () => sweepCovers().catch((err) => console.error("cover sweep failed", err));
+// Activity is kept for 6 months and AI usage for 13 (enough for "this month" and a year back).
+function pruneLogs() {
+  const cut = (days) => new Date(Date.now() - days * 86_400_000).toISOString();
+  const a = db.prepare("DELETE FROM activity WHERE at < ?").run(cut(183)).changes, u = db.prepare("DELETE FROM ai_usage WHERE at < ?").run(cut(400)).changes;
+  if (a || u) console.log(`pruned ${a} old activity row${a === 1 ? "" : "s"} and ${u} old AI usage row${u === 1 ? "" : "s"}`);
+}
+const runSweep = () => { try { pruneLogs(); } catch (err) { console.error("log prune failed", err); } return sweepCovers().catch((err) => console.error("cover sweep failed", err)); };
 
 app.get("/api/covers/:id", (req, res) => {
   if (!/^[a-f0-9]{32}$/.test(req.params.id)) return res.status(400).end();
@@ -730,6 +934,9 @@ app.post("/api/fetch", async (req, res) => {
 /* ---------------- errors ----------------
    Every /api failure answers in JSON with a code the client can act on,
    never Express's HTML error page.                                     */
+// Collection writes are matched by name above, so /api/admin/... can't be taken for one.
+// Any other name here is a collection that doesn't exist.
+app.all("/api/:col/:id", (req, res, next) => (req.method === "PUT" || req.method === "DELETE") ? res.status(404).json({ error: "unknown collection", code: "bad_collection" }) : next());
 app.use("/api", (_req, res) => res.status(404).json({ error: "no such endpoint", code: "not_found" }));
 
 function describe(err) {

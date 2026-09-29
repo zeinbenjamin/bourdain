@@ -19,14 +19,16 @@ globalThis.fetch = async (url, opts = {}) => {
     await wait(m.claudeDelay || 200, opts.signal);
     const body = JSON.parse(opts.body); const prompt = body.messages[0].content.at(-1).text;
     console.log("MOCK_CLAUDE_REQ", JSON.stringify({ model: body.model, max_tokens: body.max_tokens }));
+    console.log("MOCK_CLAUDE_PROMPT " + JSON.stringify(prompt.slice(0, 80)) + " … " + JSON.stringify(prompt.slice(-160)));
+    const usage = { input_tokens: 1000, output_tokens: 500 }; // like the real API; the server estimates cost from it
     switch (m.claude) {
       case "401": return json(401, { type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } });
       case "404": return json(404, { type: "error", error: { type: "not_found_error", message: "model: claude-nope" } });
       case "529": return json(529, { type: "error", error: { type: "overloaded_error", message: "Overloaded" } });
       case "credit": return json(400, { type: "error", error: { type: "invalid_request_error", message: "Your credit balance is too low to access the Anthropic API." } });
       case "image": return json(400, { type: "error", error: { type: "invalid_request_error", message: "messages.0.content.0.image.source.base64: image exceeds 5 MB maximum" } });
-      case "max_tokens": return json(200, { content: [{ type: "text", text: '{"title":"Half a' }], stop_reason: "max_tokens" });
-      case "refusal": return json(200, { content: [], stop_reason: "refusal" });
+      case "max_tokens": return json(200, { content: [{ type: "text", text: '{"title":"Half a' }], stop_reason: "max_tokens", usage });
+      case "refusal": return json(200, { content: [], stop_reason: "refusal", usage });
     }
     if (/home fridge, freezer or pantry/.test(prompt)) {
       console.log("MOCK_SCAN images=" + body.messages[0].content.filter(c => c.type === "image").length);
@@ -38,12 +40,15 @@ globalThis.fetch = async (url, opts = {}) => {
         { item: "leftover curry", qty: null, unit: "", aisle: "other", sure: false },
         { item: "eggs", qty: 6, unit: "", aisle: "dairy & eggs", sure: true },
       ];
-      return json(200, { content: [{ type: "text", text: "Here you go:\n" + JSON.stringify({ items }) }], stop_reason: "end_turn" });
+      return json(200, { content: [{ type: "text", text: "Here you go:\n" + JSON.stringify({ items }) }], stop_reason: "end_turn", usage });
+    }
+    if (/Suggest 3 different dishes/.test(prompt)) {
+      return json(200, { content: [{ type: "text", text: JSON.stringify([{ title: "Lemon rice", why: "Bright and quick.", missing: [] }, { title: "Egg fried rice", why: "Uses the eggs.", missing: ["spring onion"] }, { title: "Shakshuka", why: "Eggs in sauce.", missing: ["tinned tomato"] }]) }], stop_reason: "end_turn", usage });
     }
     const text = /Describe what this finished dish/.test(prompt)
       ? "Glazed chicken pieces over soft scrambled egg and rice, topped with shredded nori, in a blue-and-white donburi bowl."
       : '{"title":"Mock donburi","servings":2,"ingredients":[{"raw_text":"2 chicken thighs","quantity":2,"unit":"whole","item":"chicken thigh","aisle":"meat & seafood"}],"steps":["Cook it."],"tags":["japanese"]}';
-    return json(200, { content: [{ type: "text", text }], stop_reason: "end_turn" });
+    return json(200, { content: [{ type: "text", text }], stop_reason: "end_turn", usage });
   }
   if (u.startsWith("https://api.openai.com")) {
     const body = JSON.parse(opts.body);
