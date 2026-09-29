@@ -42,6 +42,10 @@ try {
   // --- the app reloads mid-cook (phone locked, app switched)
   await page.reload(); await page.waitForFunction(() => !store.loading);
   check("after a reload: 'Still cooking Leek soup' bar", /Still cooking Leek soup/.test(await page.textContent("#cookBanner")));
+  const bar = await page.evaluate(() => { const c = (q) => getComputedStyle(document.querySelector(q)); const b = document.getElementById("cookResume").getBoundingClientRect();
+    return { text: c(".cookbar").color, title: c(".cookbar strong").color, btnBg: c("#cookResume").backgroundColor, btnInk: c("#cookResume").color, h: b.height }; });
+  const FLAME = "rgb(211, 7, 43)";
+  check("'Still cooking' text and Continue button are Michelin red; button 44px", bar.text === FLAME && bar.title === FLAME && bar.btnBg === FLAME && bar.btnInk === "rgb(255, 255, 255)" && bar.h >= 44, JSON.stringify(bar));
   await page.click("#cookResume"); await page.waitForSelector("#cookIng");
   check("continue: ticks and batch kept", (await page.locator("#cookIng .ck.done").count()) === 1 && (await page.locator("#cookSteps .ck.done").count()) === 1 && /2× batch/.test(await page.textContent("#view-cook .kicker")));
   await page.click("#cookBack");
