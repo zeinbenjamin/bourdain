@@ -508,7 +508,7 @@ Each stage ships and gets used before the next.
 | **2.0.0** ✅ | The migration. Owners on every row, users table, `/api/me`, per-user offline copy, Export. Still only Zein: every request is Zein, and Cloudflare traffic is refused until 2.3. The app looks the same. Shipped 2026-09-29. |
 | **2.1.0** ✅ | Shipped 2026-09-29; see "What 2.1.0 built". Everything about seeing other people (merged from the planned 2.1 and 2.2 on 2026-09-29, since both change the Archives): profiles (name, photo, welcome screen), People row, read-only recipes, Add to my recipes, search across everyone's books, and the Archives feed with names and avatars, Everyone / Just me. |
 | **2.2.0** ✅ | Shipped 2026-09-29; see "What 2.2.0 built". `/api/ai` with server-side prompts, usage log, limits, admin screen, activity log. |
-| **2.3.0** 🔨 | Built 2026-09-29, waiting to be merged; see "What 2.3.0 built". #14, upload cap, "Signed out" handling, Cloudflare token verification. |
+| **2.3.0** ✅ | Shipped 2026-09-29 (then 2.3.1: the address the server saw on the red bar; 2.3.2: first names in the People row); see "What 2.3.0 built". #14, upload cap, "Signed out" handling, Cloudflare token verification. |
 | — | Set up Cloudflare Tunnel + Access (no code). Zein signs in through it first, then with a second test email, then invites the pilot users. |
 
 ## Setup Zein does (no code)
