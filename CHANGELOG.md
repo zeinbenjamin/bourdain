@@ -6,6 +6,9 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 1.9.3 — 2026-09-29
+- The "Still cooking" bar is now Michelin red, with a bigger red Continue button that's easier to tap.
+
 ## 1.9.2 — 2026-09-29
 - Recipes: the "30 minutes or less" filter is gone. You can still sort by Quickest.
 

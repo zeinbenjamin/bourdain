@@ -93,6 +93,7 @@ section.view.active{display:block}
 }
 .btn.primary{background:var(--ink); color:var(--paper); border-color:var(--ink); font-weight:600}
 .btn.ghost{background:transparent}
+.btn.accent{background:var(--flame); color:var(--flame-ink); border-color:var(--flame); font-weight:600}
 .btn.danger{color:var(--red); border-color:var(--red)}
 .btn.ghost{border-color:var(--line)}
 .btn:disabled{opacity:.5;cursor:default}
@@ -312,7 +313,9 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .timerbar:empty{display:none}
 .cookhead{display:flex;align-items:center;gap:8px}
 .cookbar{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--flame);border-radius:var(--r);padding:8px 10px 8px 12px;margin:0 0 12px;font-family:var(--sans);font-size:13px}
+.cookbar{color:var(--flame)}
 .cookbar strong{font-weight:700}
+.cookbar .btn{flex:none;min-height:44px;padding:0 18px;font-size:13px}
 .cooklist{list-style:none;padding:0;margin:0}
 .cooklist li{border-bottom:1px solid var(--line)}
 .cooklist .sec{font-family:var(--sans);font-weight:700;font-size:13px;letter-spacing:.02em;text-transform:uppercase;padding:14px 0 4px;border:0}
@@ -930,7 +933,7 @@ function cookStatsHtml(r){
 function paintCookBanner(){
   const el=document.getElementById("cookBanner"); const c=cooking.get(); const r=c&&state.recipes[c.recipeId];
   if(!r){ el.innerHTML=""; return; }
-  el.innerHTML=`<div class="cookbar"><span>Still cooking <strong>${esc(r.title)}</strong><span id="cookBanTimer"></span></span><button class="btn small primary" id="cookResume">Continue</button></div>`;
+  el.innerHTML=`<div class="cookbar"><span>Still cooking <strong>${esc(r.title)}</strong><span id="cookBanTimer"></span></span><button class="btn accent" id="cookResume">Continue</button></div>`;
   timers.paint(); timers.run();
   el.querySelector("#cookResume").onclick=()=>{ state.detailId=c.recipeId; show("cook"); };
 }
