@@ -2,7 +2,8 @@ import express from "express";
 import multer from "multer";
 import Database from "better-sqlite3";
 import sharp from "sharp";
-import { randomUUID } from "node:crypto";
+import { randomUUID, randomBytes } from "node:crypto";
+import { crc32 } from "node:zlib";
 import { mkdirSync, existsSync, createReadStream, readFileSync } from "node:fs";
 import { writeFile, readdir, stat, unlink } from "node:fs/promises";
 import path from "node:path";
@@ -47,26 +48,88 @@ const INDEX_HTML = readFileSync(path.join(__dirname, "public", "index.html"), "u
   .replace('content="__APP_VERSION__"', `content="${VERSION}"`)
   .replace('content="__APP_COMMIT__"', `content="${COMMIT}"`);
 
-/* ---------------- database ---------------- */
+/* ---------------- database ----------------
+   Data version 2 (2.0.0, docs/multi-user.md): every row in the four collections
+   has an owner, and `users` says who's who. A version 1 database (single user,
+   no owner column) is converted once, on the first start, inside one
+   transaction: it either finishes or leaves the old tables exactly as they were. */
 const db = new Database(path.join(DATA_DIR, "bourdain.db"));
 db.pragma("journal_mode = WAL");
-db.exec(`
-  CREATE TABLE IF NOT EXISTS recipes (id TEXT PRIMARY KEY, doc TEXT NOT NULL, updated_at TEXT NOT NULL);
-  CREATE TABLE IF NOT EXISTS plan    (id TEXT PRIMARY KEY, doc TEXT NOT NULL, updated_at TEXT NOT NULL);
-  CREATE TABLE IF NOT EXISTS pantry  (id TEXT PRIMARY KEY, doc TEXT NOT NULL, updated_at TEXT NOT NULL);
-  CREATE TABLE IF NOT EXISTS shop    (id TEXT PRIMARY KEY, doc TEXT NOT NULL, updated_at TEXT NOT NULL);
-`);
-
 const COLLECTIONS = new Set(["recipes", "plan", "pantry", "shop"]);
-/* The shape of stored data. 1 = single user (today). 2.0.0 bumps it to 2 with
-   a migration (docs/multi-user.md). Phones send theirs with every write as
-   X-Bourdain-Data; a write from a newer app is refused, so after a rollback to
-   1.x a phone still running 2.0 can't write 2.0-shaped data into 1.x tables. */
-const DATA_VERSION = 1;
+/* The shape of stored data, 2 since 2.0.0. Phones send theirs with every write as
+   X-Bourdain-Data; a write from a newer app is refused, so after a rollback a phone
+   still running the newer app can't write its data into older tables. Writes
+   stamped 1 (a phone that queued them before updating) are accepted: the documents
+   look the same, and the owner always comes from who's signed in, never the phone. */
+const DATA_VERSION = 2;
+// The one account that owns everything from before 2.0 and is the admin. Recognised
+// by its row, not its email, so changing OWNER_EMAIL renames the account.
+const OWNER_EMAIL = (process.env.OWNER_EMAIL || "").trim().toLowerCase();
+
+const columns = (t) => db.prepare(`PRAGMA table_info(${t})`).all().map((c) => c.name);
+function storedDataVersion() {
+  const hasMeta = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'").get();
+  const row = hasMeta && db.prepare("SELECT value FROM meta WHERE key = 'data_version'").get();
+  if (row) return Number(row.value);
+  return columns("recipes").length ? 1 : 0; // 0: a brand new, empty database
+}
+const ownedTable = (t) => `CREATE TABLE ${t} (owner TEXT NOT NULL, id TEXT NOT NULL, doc TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (owner, id))`;
+const newUserId = () => randomBytes(6).toString("hex");
+const counts = () => Object.fromEntries([...COLLECTIONS].map((t) => [t, db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get().n]));
+const fmtCounts = (c) => [...COLLECTIONS].map((t) => `${c[t]} ${t}`).join(", ");
+
+function openData() {
+  const from = storedDataVersion();
+  if (from > DATA_VERSION) {
+    console.error(`The database is data version ${from}, but this build only understands up to ${DATA_VERSION}. Not starting, so nothing gets damaged. Deploy the newer image, or roll the data dataset back to the snapshot taken before it.`);
+    process.exit(1);
+  }
+  if (!OWNER_EMAIL) {
+    console.error("OWNER_EMAIL is not set. Add it to the app's environment (the email you'll sign in with) and redeploy. Nothing was changed.");
+    process.exit(1);
+  }
+  const now = new Date().toISOString();
+  const setUp = db.transaction(() => {
+    db.exec("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+    db.exec(`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT, photo TEXT,
+             is_admin INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, last_seen TEXT)`);
+    let owner = db.prepare("SELECT * FROM users WHERE is_admin = 1 ORDER BY created_at LIMIT 1").get();
+    if (!owner) {
+      db.prepare("INSERT INTO users (id, email, is_admin, created_at) VALUES (?, ?, 1, ?)").run(newUserId(), OWNER_EMAIL, now);
+      owner = db.prepare("SELECT * FROM users WHERE is_admin = 1").get();
+    }
+    if (from === 0) for (const t of COLLECTIONS) db.exec(ownedTable(t));
+    if (from === 1) {
+      const before = counts();
+      console.log(`data migration 1 → 2: found ${fmtCounts(before)}; giving them all to ${OWNER_EMAIL}`);
+      for (const t of COLLECTIONS) {
+        db.exec(ownedTable(`${t}_v2`));
+        db.prepare(`INSERT INTO ${t}_v2 (owner, id, doc, updated_at) SELECT ?, id, doc, updated_at FROM ${t}`).run(owner.id);
+        db.exec(`DROP TABLE ${t}; ALTER TABLE ${t}_v2 RENAME TO ${t}`);
+      }
+      const after = counts();
+      if (fmtCounts(after) !== fmtCounts(before)) throw new Error(`counts changed during the migration (${fmtCounts(before)} → ${fmtCounts(after)})`);
+      console.log(`data migration 1 → 2: done, ${fmtCounts(after)} now owned by ${OWNER_EMAIL}`);
+    }
+    db.prepare("INSERT INTO meta (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(String(DATA_VERSION));
+    if (owner.email !== OWNER_EMAIL) {
+      db.prepare("UPDATE users SET email = ? WHERE id = ?").run(OWNER_EMAIL, owner.id);
+      console.log(`owner email changed: ${owner.email} → ${OWNER_EMAIL} (same account, same recipes)`);
+    }
+  });
+  try { setUp(); }
+  catch (err) {
+    console.error(`Couldn't set up the database, so nothing was changed: ${err.message}. The data is exactly as it was; this build won't start until that's fixed.`);
+    process.exit(1);
+  }
+  return db.prepare("SELECT * FROM users WHERE is_admin = 1 ORDER BY created_at LIMIT 1").get();
+}
+const OWNER = openData();
+
 // One unreadable row must not take the whole app down, so skip it and say which.
-const readAll = (t) => {
+const readAll = (t, owner) => {
   const out = {};
-  for (const r of db.prepare(`SELECT id, doc FROM ${t}`).all()) {
+  for (const r of db.prepare(`SELECT id, doc FROM ${t} WHERE owner = ?`).all(owner)) {
     try { out[r.id] = JSON.parse(r.doc); }
     catch (err) { console.error(`skipping corrupt row ${t}/${r.id}:`, err.message); }
   }
@@ -84,17 +147,83 @@ app.get("/api/health", (_req, res) =>
 
 app.get("/api/version", (_req, res) => res.json({ version: VERSION, commit: COMMIT, dataVersion: DATA_VERSION, changelog: CHANGELOG }));
 
-app.get("/api/state", (_req, res) => {
+/* ---------------- who is asking ----------------
+   2.0 is still single-user: Cloudflare sign-in isn't checked until 2.3 (see
+   docs/multi-user.md), so every request is the owner. Until then, anything that
+   arrives through Cloudflare is refused outright: a public hostname added to the
+   tunnel too early must show "not set up yet", never the owner's recipes.
+   /api/health and /api/version above stay open; they hold no data.            */
+let lastSeenWritten = 0;
+app.use("/api", (req, res, next) => {
+  if (req.get("cf-ray") || req.get("cf-connecting-ip") || req.get("cf-access-jwt-assertion"))
+    return res.status(403).json({ error: "Bourdain isn't set up for access through Cloudflare yet", code: "cf_not_set_up" });
+  req.user = OWNER;
+  if (Date.now() - lastSeenWritten > 5 * 60_000) { // a write per request would be wasteful; every 5 minutes is plenty
+    lastSeenWritten = Date.now();
+    db.prepare("UPDATE users SET last_seen = ? WHERE id = ?").run(new Date().toISOString(), req.user.id);
+  }
+  next();
+});
+
+const me = (u) => ({ id: u.id, email: u.email, name: u.name || null, photo: u.photo || null, is_admin: Boolean(u.is_admin) });
+app.get("/api/me", (req, res) => res.json(me(db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id))));
+
+app.get("/api/state", (req, res) => {
   res.json({
-    recipes: readAll("recipes"),
-    plan: readAll("plan"),
-    pantry: readAll("pantry"),
-    shop: readAll("shop"),
+    recipes: readAll("recipes", req.user.id),
+    plan: readAll("plan", req.user.id),
+    pantry: readAll("pantry", req.user.id),
+    shop: readAll("shop", req.user.id),
   });
 });
 
+/* Export my data: one zip with everything the caller owns (data.json) and the
+   photo and cover files their recipes use. Files are stored uncompressed: JPEG
+   and WebP are already compressed, and it keeps the zip writer tiny. */
+function zipStore(files) {
+  const parts = [], central = [];
+  let offset = 0;
+  const now = new Date(), dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+  const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+  for (const { name, data } of files) {
+    const n = Buffer.from(name, "utf8"), crc = crc32(data);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt16LE(0x0800, 6); local.writeUInt16LE(0, 8);
+    local.writeUInt16LE(dosTime, 10); local.writeUInt16LE(dosDate, 12); local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18); local.writeUInt32LE(data.length, 22); local.writeUInt16LE(n.length, 26); local.writeUInt16LE(0, 28);
+    const cd = Buffer.alloc(46);
+    cd.writeUInt32LE(0x02014b50, 0); cd.writeUInt16LE(20, 4); cd.writeUInt16LE(20, 6); cd.writeUInt16LE(0x0800, 8); cd.writeUInt16LE(0, 10);
+    cd.writeUInt16LE(dosTime, 12); cd.writeUInt16LE(dosDate, 14); cd.writeUInt32LE(crc, 16); cd.writeUInt32LE(data.length, 20);
+    cd.writeUInt32LE(data.length, 24); cd.writeUInt16LE(n.length, 28); cd.writeUInt32LE(offset, 42);
+    parts.push(local, n, data); central.push(cd, n);
+    offset += 30 + n.length + data.length;
+  }
+  const cdSize = central.reduce((a, b) => a + b.length, 0), end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(files.length, 8); end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(cdSize, 12); end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...parts, ...central, end]);
+}
+app.get("/api/export", async (req, res) => {
+  const u = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
+  const data = { exported_at: new Date().toISOString(), app_version: VERSION, data_version: DATA_VERSION, user: { email: u.email, name: u.name || null } };
+  for (const t of COLLECTIONS) data[t] = readAll(t, u.id);
+  const files = [{ name: "bourdain/data.json", data: Buffer.from(JSON.stringify(data, null, 2)) }];
+  const assets = new Map(); // file name -> path on disk
+  for (const r of Object.values(data.recipes)) {
+    for (const id of r.photos || []) if (/^[a-f0-9]{32}$/.test(id)) assets.set(`photos/${id}.jpg`, path.join(PHOTO_DIR, `${id}.jpg`));
+    if (/^[a-f0-9]{32}$/.test(r.cover || "")) assets.set(`covers/${r.cover}.webp`, path.join(PHOTO_DIR, `${r.cover}.webp`));
+  }
+  let missing = 0;
+  for (const [name, file] of assets) {
+    try { files.push({ name: `bourdain/${name}`, data: readFileSync(file) }); } catch { missing++; }
+  }
+  if (missing) console.warn(`export: ${missing} photo or cover file${missing === 1 ? " was" : "s were"} missing on disk and left out`);
+  const day = new Date().toISOString().slice(0, 10);
+  res.set("Content-Disposition", `attachment; filename="bourdain-${day}.zip"`).type("application/zip").send(zipStore(files));
+});
+
 // Refuse writes made by an app that stores a newer shape of data. No header = an
-// app from before 1.10.1, which is data version 1.
+// app from before 1.10.1, which is data version 1 and still accepted.
 const sameDataVersion = (req, res, next) => {
   const v = Number(req.get("X-Bourdain-Data") || 1);
   if (v > DATA_VERSION)
@@ -104,16 +233,16 @@ const sameDataVersion = (req, res, next) => {
 app.put("/api/:col/:id", sameDataVersion, (req, res) => {
   const { col, id } = req.params;
   if (!COLLECTIONS.has(col)) return res.status(404).json({ error: "unknown collection", code: "bad_collection" });
-  db.prepare(`INSERT INTO ${col} (id, doc, updated_at) VALUES (?, ?, ?)
-              ON CONFLICT(id) DO UPDATE SET doc = excluded.doc, updated_at = excluded.updated_at`)
-    .run(id, JSON.stringify(req.body ?? {}), new Date().toISOString());
+  db.prepare(`INSERT INTO ${col} (owner, id, doc, updated_at) VALUES (?, ?, ?, ?)
+              ON CONFLICT(owner, id) DO UPDATE SET doc = excluded.doc, updated_at = excluded.updated_at`)
+    .run(req.user.id, id, JSON.stringify(req.body ?? {}), new Date().toISOString());
   res.status(204).end();
 });
 
 app.delete("/api/:col/:id", sameDataVersion, (req, res) => {
   const { col, id } = req.params;
   if (!COLLECTIONS.has(col)) return res.status(404).json({ error: "unknown collection", code: "bad_collection" });
-  db.prepare(`DELETE FROM ${col} WHERE id = ?`).run(id);
+  db.prepare(`DELETE FROM ${col} WHERE owner = ? AND id = ?`).run(req.user.id, id);
   res.status(204).end();
 });
 
@@ -528,5 +657,5 @@ runSweep();
 setInterval(runSweep, 86_400_000).unref();
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Bourdain ${VERSION} (${COMMIT}) on :${PORT}  data=${DATA_DIR}  key=${API_KEY ? "set" : "MISSING"}  images=${OPENAI_KEY ? IMAGE_MODEL + "/" + IMAGE_QUALITY : "no OpenAI key"}`);
+  console.log(`Bourdain ${VERSION} (${COMMIT}) on :${PORT}  data=${DATA_DIR} (data v${DATA_VERSION}, owner ${OWNER.email})  key=${API_KEY ? "set" : "MISSING"}  images=${OPENAI_KEY ? IMAGE_MODEL + "/" + IMAGE_QUALITY : "no OpenAI key"}`);
 });

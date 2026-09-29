@@ -130,10 +130,20 @@ Cloudflare's login; everyone else never reaches the NAS.
 
   Settings: `CF_ACCESS_TEAM` and `CF_ACCESS_AUD`. The server never trusts a
   plain email header.
-- **Zein at home.** Requests with no token are allowed only from trusted
-  networks (`TRUSTED_NETS`, e.g. `192.168.1.0/24` and Tailscale's
-  `100.64.0.0/10`), and those requests are Zein. Anything else without a valid
-  token gets 401.
+- **Until 2.3 (built in 2.0.0): single-user.** Every request is Zein. Anything
+  that arrives through Cloudflare (a `Cf-Ray`, `Cf-Connecting-Ip` or
+  `Cf-Access-Jwt-Assertion` header) is refused with 403 `cf_not_set_up`, so a
+  public hostname added to the tunnel too early shows "can't be opened from this
+  address yet", never the recipes. `/api/health` and `/api/version` stay open,
+  since they hold no data.
+- **From 2.3: Zein at home.** Cloudflare's token always wins when present.
+  Requests with no token are allowed only from trusted networks (`TRUSTED_NETS`,
+  e.g. `192.168.1.0/24` and Tailscale's `100.64.0.0/10`), and those requests are
+  Zein. Anything else without a valid token gets 401.
+  - Zein's `cloudflared` already runs for the media server, and it reaches the
+    app through the NAS's own address. **The NAS's own address and the Docker
+    network must never be in `TRUSTED_NETS`**, or tunnel traffic would count
+    as Zein.
   - **Verify on the NAS before relying on it:** which address the app sees for
     a request from the phone, and which it sees for a request through
     `cloudflared`.
@@ -256,9 +266,25 @@ old data exactly as it was.
    - copy every row across with `owner = Zein`;
    - drop the old table;
    - rename the new table into its place.
-4. Create `ai_usage`, `activity`, `settings`.
-5. Set `data_version = 2`.
-6. Log counts again, and refuse to commit if any differ.
+4. Set `data_version = 2`.
+5. Log counts again, and refuse to commit if any differ.
+
+(`ai_usage`, `activity` and `settings` aren't created here. They're new, empty
+tables that 2.2 creates with `CREATE TABLE IF NOT EXISTS` when it first needs
+them. That isn't a data conversion, so it doesn't belong in the migration.)
+
+**As built in 2.0.0** (`openData()` in `server.js`):
+- It also refuses to start when the stored data version is newer than the build
+  understands.
+- A brand-new, empty install is created straight at version 2.
+- The owner is the `is_admin` user, found by id. If `OWNER_EMAIL` changes, that
+  user's email is updated ("owner email changed" in the log), so it's the same
+  account and the same recipes.
+- Any failure is logged as "Couldn't set up the database, so nothing was
+  changed", and the server exits.
+- Tested in `tests/migration.test.mjs`, including a migration forced to fail
+  after two of the four tables have moved. Also tried against a database
+  written by the real 1.10.4 server.
 
 What doesn't move:
 
@@ -270,9 +296,14 @@ What doesn't move:
 - **Unsynced changes waiting on a phone** reach the server as normal writes. The
   server sets the owner from who's signed in, so they become Zein's with no
   special handling.
-- **The offline copy on the phone** moves to a per-user key
-  (`bourdain:<userId>`), so a different person signing in on the same phone never
-  sees it.
+- **The offline copy and the outbox on the phone** move to per-user keys
+  (`bourdain:<userId>`, `bourdain.outbox:<userId>`), so a different person
+  signing in on the same phone never sees them.
+  - `bourdain.me` remembers who was signed in last, so the right copy shows
+    before the server answers.
+  - On the first open after updating, the plain 1.x keys are adopted into the
+    owner's, but only when the person signed in is the admin.
+  - Every outbox entry is stamped with `uid` as well as `dv`.
 - **A cook in progress** survives.
 
 ### Rollback
@@ -286,7 +317,7 @@ A snapshot restores the data, but the phone may already be running 2.0. So:
 Before that, 1.x gets one small release (**1.10.1**) that **ignores 2.0-shaped
 data** in a phone's outbox or offline copy rather than tripping over it.
 
-### What 1.10.1 set up, and what 2.0 must do with it
+### What 1.10.1 set up, and what 2.0 does with it
 
 1.10.1 added a **data version** (`DATA_VERSION = 1`) to both `server.js` and
 `index.html`:
@@ -298,7 +329,8 @@ data** in a phone's outbox or offline copy rather than tripping over it.
   stamped 2 to `localStorage["bourdain.outbox.parked"]`, where they're kept but
   never sent.
 
-2.0.0 must:
+2.0.0 does all five (see `store.whoami`, `unpark`, `setAsideAll` in
+`index.html`, tested in `tests/dataversion.test.mjs`):
 
 1. Set `DATA_VERSION = 2` on both sides, in the same release as the migration.
 2. Accept writes stamped 1 or with no header (older phones still syncing), and
@@ -307,21 +339,36 @@ data** in a phone's outbox or offline copy rather than tripping over it.
 3. **Handle 409 `data_newer` from the server as "the server was rolled back".**
    Stop syncing, move the outbox to the parked key, and say so. Don't drop it
    the way other 4xx errors are dropped.
-4. At startup, compare `/api/version`'s `dataVersion` with its own. If the
-   server is older, don't sync (same as 3). If the server is newer, it's the
-   usual "close and reopen" stale-build case.
+4. At startup it asks `/api/me`, which only exists on 2.x. If that fails (a 1.x
+   server, or offline), nothing is picked up from the parked key, and the first
+   write the server refuses sets everything aside (as in 3). If the server is
+   newer, it's the usual "close and reopen" stale-build case.
 5. On startup against a data-2 server, pick up any parked entries stamped 2,
    put them back in the outbox, and clear the parked key. That's what makes
    "roll back, then upgrade again" lose nothing.
 
-### Rehearsal (before the real thing)
+### Rehearsal (optional)
+
+Agreed 2026-09-29 as more than a setup this size needs: the migration tests plus
+the `pre-2.0.0` snapshot cover the same risk. If wanted:
 
 1. Clone last night's snapshot to a scratch dataset.
 2. Run the 2.0.0 image against it on a spare port, with `OWNER_EMAIL` set.
 3. Check the logged counts, and click around.
 4. Delete the clone.
 
-Only then, with a manual `pre-2.0.0` snapshot taken, redeploy for real.
+### 2.0.0 day (Zein)
+
+1. Tap the Bourdain title and note the build (commit). The image for it is
+   `ghcr.io/zeinbenjamin/bourdain:sha-<commit>`, your way back.
+2. Take a manual `pre-2.0.0` snapshot of the bourdain datasets in TrueNAS.
+3. Redeploy. In the app's logs, look for the two "data migration 1 → 2" lines
+   with matching counts.
+4. Open the app and check your recipes, plan and pantry. Optionally tap the
+   Bourdain title and use **Export my data** as an extra copy.
+
+If something's wrong: stop the app, roll the `data` dataset back to
+`pre-2.0.0`, change `:latest` to `:sha-<commit>` in the YAML, and redeploy.
 
 ## Security work before anyone outside gets in
 
@@ -341,7 +388,7 @@ Each stage ships and gets used before the next.
 | Version | What |
 |---|---|
 | **1.10.1** ✅ | Groundwork: the old app ignores 2.0-shaped data (needed for rollback). Shipped; see "What 1.10.1 set up". |
-| **2.0.0** | The migration. Owners on every row, users table, `/api/me`, per-user offline copy, Export. Still only Zein. Zein's traffic is identified by `TRUSTED_NETS`, Cloudflare isn't set up yet, and the app looks the same. |
+| **2.0.0** 🔨 | The migration. Owners on every row, users table, `/api/me`, per-user offline copy, Export. Still only Zein: every request is Zein, and Cloudflare traffic is refused until 2.3. The app looks the same. Built 2026-09-29, waiting to be merged and deployed. |
 | **2.1.0** | Everything about seeing other people (merged from the planned 2.1 and 2.2 on 2026-09-29, since both change the Archives): profiles (name, photo, welcome screen), People row, read-only recipes, Add to my recipes, search across everyone's books, and the Archives feed with names and avatars, Everyone / Just me. |
 | **2.2.0** | `/api/ai` with server-side prompts, usage log, limits, admin screen, activity log. |
 | **2.3.0** | #14, upload cap, "Signed out" handling, Cloudflare token verification. |
@@ -349,14 +396,21 @@ Each stage ships and gets used before the next.
 
 ## Setup Zein does (no code)
 
-- **Before 2.0.0:** add `OWNER_EMAIL` to the TrueNAS YAML, and mirror it in
-  `docker-compose.yml` with a placeholder.
-- **At 2.3.0:**
-  - In Cloudflare: add the domain, create a Tunnel, and run `cloudflared` as a
-    second TrueNAS app with the tunnel token.
-  - Create an Access application for `bourdain.<domain>` with an email
-    allow-list and a one-time-PIN login.
-  - Note the team name and audience tag for `CF_ACCESS_TEAM` / `CF_ACCESS_AUD`.
+- **Before 2.0.0:** add `OWNER_EMAIL` to the TrueNAS YAML (done 2026-09-29).
+  It's mirrored in `docker-compose.yml` with a placeholder.
+- **Any time (safe, nothing becomes public):** create the Access application
+  (Self-hosted, public hostname `bourdain.<domain>`) with an email allow-list of
+  Zein only, and a one-time-PIN login.
+- **At 2.3.0, in this order:**
+  1. Deploy 2.3.0.
+  2. Add `CF_ACCESS_TEAM` / `CF_ACCESS_AUD` to the YAML, and redeploy.
+  3. **Only then** add `bourdain.<domain>` as a public hostname on Zein's
+     existing tunnel (the one the media server uses; no second `cloudflared`),
+     pointing at `http://<NAS IP>:8080`.
+  4. Test on mobile data, with Zein's email and a second one. Then add the
+     pilot users' emails.
+  - The team name and the Access application's audience (AUD) tag are the
+    values for `CF_ACCESS_TEAM` / `CF_ACCESS_AUD`.
   - Set the session length (e.g. 30 days) so pilot users rarely see the login.
 - **Keep:** daily snapshots and the off-NAS backup.
 - **Take:** a manual snapshot before 2.0.0.

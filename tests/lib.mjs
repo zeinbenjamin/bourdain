@@ -10,6 +10,8 @@ import { chromium } from "playwright";
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Every test server has an owner (2.0.0 refuses to start without one).
+export const OWNER_EMAIL_FOR_TESTS = "owner@example.com";
 
 // PASS/FAIL collector. finish() prints and exits non-zero on any failure.
 export function suite(name) {
@@ -38,7 +40,7 @@ export async function startServer({ port, env = {}, mock = false, dataDir } = {}
   const launch = async (extraEnv = {}) => {
     proc = spawn("node", [...(mock ? ["--import", path.join(ROOT, "tests/mock-apis.mjs")] : []), "server.js"], {
       cwd: ROOT,
-      env: { ...process.env, PORT: String(port), DATA_DIR: data, MOCK_FILE: modeFile, ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", ...env, ...extraEnv },
+      env: { ...process.env, PORT: String(port), DATA_DIR: data, MOCK_FILE: modeFile, ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", OWNER_EMAIL: OWNER_EMAIL_FOR_TESTS, ...env, ...extraEnv },
     });
     proc.stdout.on("data", (d) => (log += d));
     proc.stderr.on("data", (d) => (log += d));

@@ -141,6 +141,7 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 
 /* Detail */
 .revhint{margin-bottom:12px}
+.verbtns{margin-bottom:12px}
 .detail-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px}
 .detail-head .btn{min-height:44px;padding:0 16px;font-size:13px}
 .detail h2{font-size:34px;line-height:1.08;margin-bottom:8px;letter-spacing:-.02em}
@@ -516,16 +517,27 @@ const OUTBOX_KEY="bourdain.outbox";
    rollback: the copy is ignored and the writes are set aside, never sent to a
    server that doesn't understand them. They wait in PARKED_KEY for the newer
    app to pick up again. */
-const DATA_VERSION=1;
+const DATA_VERSION=2;
 const PARKED_KEY="bourdain.outbox.parked";
+/* Since 2.0 this phone's copy and outbox are kept per person, under
+   "bourdain:<userId>" and "bourdain.outbox:<userId>", so a different person
+   signing in on the same phone never sees them. ME_KEY remembers who was signed
+   in last, so the right copy shows before the server answers. The plain keys
+   are what 1.x kept; they belong to the owner and are adopted once. */
+const ME_KEY="bourdain.me";
 const store = {
   online:false,      // did the last request reach the server?
   fromServer:false,  // is state loaded from the server, or only from this device's copy?
   outbox:[], flushing:null,
   loading:true,      // true until the first load from the server succeeds or gives up
+  me:null,           // {id, email, name, photo, is_admin} once known
+  serverBehind:false,// the server refused a write as too new: it was rolled back, so stop sending
+  key(base){ return this.me ? `${base}:${this.me.id}` : base; },
   /* Show this phone's copy straight away, so opening the app never starts on an empty screen. */
   loadLocal(){
-    try{ this.outbox=JSON.parse(localStorage.getItem(OUTBOX_KEY)||"[]"); }catch(_){ this.outbox=[]; }
+    try{ this.me=JSON.parse(localStorage.getItem(ME_KEY)||"null"); }catch(_){ this.me=null; }
+    state.recipes={}; state.plan={}; state.shop={}; state.pantry={};
+    try{ this.outbox=JSON.parse(localStorage.getItem(this.key(OUTBOX_KEY))||"[]"); }catch(_){ this.outbox=[]; }
     const newer=this.outbox.filter(o=>(o.dv||1)>DATA_VERSION);
     if(newer.length){
       this.outbox=this.outbox.filter(o=>!newer.includes(o));
@@ -534,16 +546,18 @@ const store = {
       console.warn("set aside changes from a newer version of the app",newer);
       setTimeout(()=>toast(`${newer.length} change${newer.length===1?"":"s"} from a newer version of the app ${newer.length===1?"was":"were"} set aside, because the server is on an older version. They're kept on this phone.`),0);
     }
-    try{ const raw=localStorage.getItem("bourdain"); if(raw){ const j=JSON.parse(raw);
+    try{ const raw=localStorage.getItem(this.key("bourdain")); if(raw){ const j=JSON.parse(raw);
       if((j.dv||1)<=DATA_VERSION) Object.assign(state,{recipes:j.recipes||{},plan:j.plan||{},shop:j.shop||{},pantry:j.pantry||{}}); } }catch(_){}
     this.applyOutbox();
     this.paint();
   },
   async init(){
+    await this.whoami();
     if(!await this.reload()){
       console.warn("couldn't load from the server, using this device's copy");
       const e=this.loadError;
-      toast(e&&e.status ? `The server is up but couldn't load your recipes (${e.code}). Showing this phone's copy; check the server logs.`
+      toast(e&&e.code==="cf_not_set_up" ? "Bourdain can't be opened from this address yet. Use your home address for now."
+        : e&&e.status ? `The server is up but couldn't load your recipes (${e.code}). Showing this phone's copy; check the server logs.`
         : "Can't reach the server. Changes are kept on this phone and sync when it's back.");
     }
     this.loading=false;
@@ -552,6 +566,48 @@ const store = {
     window.addEventListener("online",()=>this.sync());
     document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") this.sync(); });
     setInterval(()=>{ if(this.outbox.length||photoQueue.pending||!this.fromServer) this.sync(); },30000);
+  },
+  /* Who's signed in. On the first open after 2.0, this is also where the plain 1.x
+     keys move under the owner's name. If someone else was signed in last, their
+     copy is put away and this person's is loaded instead. */
+  async whoami(){
+    let me; try{ me=await api("/api/me",{signal:timeout(10000)}); }catch(e){ return; } // offline, or a 1.x server: keep what we have
+    const was=this.me;
+    this.me=me; try{ localStorage.setItem(ME_KEY,JSON.stringify(me)); }catch(_){}
+    if(!was) this.adoptLegacy(me.is_admin);
+    if(!was || was.id!==me.id) this.loadLocal();
+    this.unpark();
+  },
+  /* The plain keys hold what 1.x kept (the owner's) and anything this app queued
+     before it knew who was signed in (dv 2, no uid: the person signing in now).
+     The admin takes all of it; anyone else takes only the second kind. */
+  adoptLegacy(isAdmin){
+    try{
+      const oldBox=JSON.parse(localStorage.getItem(OUTBOX_KEY)||"[]"), mine=JSON.parse(localStorage.getItem(this.key(OUTBOX_KEY))||"[]");
+      const take=oldBox.filter(o=>isAdmin||((o.dv||1)===DATA_VERSION&&!o.uid)).map(o=>({...o,uid:this.me.id}));
+      if(take.length) localStorage.setItem(this.key(OUTBOX_KEY),JSON.stringify([...mine.filter(e=>!take.some(o=>o.col===e.col&&o.id===e.id)),...take]));
+      const rest=oldBox.filter(o=>!take.some(t=>t.col===o.col&&t.id===o.id));
+      if(rest.length) localStorage.setItem(OUTBOX_KEY,JSON.stringify(rest)); else localStorage.removeItem(OUTBOX_KEY);
+      if(isAdmin){
+        const oldCopy=localStorage.getItem("bourdain");
+        if(oldCopy!=null&&localStorage.getItem(this.key("bourdain"))==null) localStorage.setItem(this.key("bourdain"),oldCopy);
+        localStorage.removeItem("bourdain");
+      }
+    }catch(e){ console.warn("couldn't move this phone's copy under your profile",e); }
+  },
+  /* Changes set aside after a rollback (by 1.x, or by this app when the server
+     refused them as too new) go back in the queue once the server is 2.x again.
+     Only this version's, and only this person's. */
+  unpark(){
+    try{
+      const parked=JSON.parse(localStorage.getItem(PARKED_KEY)||"[]");
+      const back=parked.filter(o=>(o.dv||1)===DATA_VERSION&&(!o.uid||o.uid===this.me?.id));
+      if(!back.length) return;
+      for(const op of back){ this.outbox=this.outbox.filter(o=>!(o.col===op.col&&o.id===op.id)); this.outbox.push(op); }
+      localStorage.setItem(PARKED_KEY,JSON.stringify(parked.filter(o=>!back.includes(o))));
+      this.saveOutbox(); this.applyOutbox(); this.paint();
+      console.log("picked up changes that were set aside",back);
+    }catch(e){ console.warn("couldn't pick up set-aside changes",e); }
   },
   /* Load everything from the server, then lay unsynced changes over it. */
   async reload(){
@@ -564,15 +620,15 @@ const store = {
     }catch(e){ console.warn("load failed",e); this.loadError=e; this.online=false; return false; }
   },
   applyOutbox(){ for(const op of this.outbox){ if(!state[op.col]) continue; if(op.doc==null) delete state[op.col][op.id]; else state[op.col][op.id]=op.doc; } },
-  local(){ try{ localStorage.setItem("bourdain", JSON.stringify({dv:DATA_VERSION, recipes:state.recipes, plan:state.plan, shop:state.shop, pantry:state.pantry})); }catch(e){} },
-  saveOutbox(){ try{ localStorage.setItem(OUTBOX_KEY, JSON.stringify(this.outbox)); }catch(e){ console.warn("outbox not saved",e); } },
+  local(){ try{ localStorage.setItem(this.key("bourdain"), JSON.stringify({dv:DATA_VERSION, recipes:state.recipes, plan:state.plan, shop:state.shop, pantry:state.pantry})); }catch(e){} },
+  saveOutbox(){ try{ localStorage.setItem(this.key(OUTBOX_KEY), JSON.stringify(this.outbox)); }catch(e){ console.warn("outbox not saved",e); } },
   /* Send queued writes in order. Stops at the first network or server failure and
      keeps the rest; a 4xx means the server will never accept it, so it is dropped. */
   flush(){
     if(this.flushing) return this.flushing;
     this.flushing=(async()=>{
       await photoQueue.flush(); // photos first, so recipes reach the server pointing at real photo ids
-      while(this.outbox.length){
+      while(this.outbox.length&&!this.serverBehind){
         const op=this.outbox[0];
         const path=`/api/${op.col}/${encodeURIComponent(op.id)}`;
         try{
@@ -581,6 +637,7 @@ const store = {
             : {method:"PUT",headers:{"Content-Type":"application/json",...dv},body:JSON.stringify(op.doc),signal:timeout(15000)});
           this.online=true;
         }catch(e){
+          if(e.code==="data_newer"){ this.setAsideAll(); break; } // the server was rolled back: keep everything for later, send nothing
           if(e.status>=400&&e.status<500){ op.refused=true; console.error("server refused a change, dropping it",op,e); toast("The server refused one change, so it wasn't kept. Check it and try again."); }
           else { console.warn("sync failed, will retry",e); this.online=false; break; }
         }
@@ -589,8 +646,15 @@ const store = {
     })().finally(()=>{ this.flushing=null; this.paint(); });
     return this.flushing;
   },
+  setAsideAll(){
+    this.serverBehind=true; this.online=false;
+    try{ const kept=JSON.parse(localStorage.getItem(PARKED_KEY)||"[]"); localStorage.setItem(PARKED_KEY,JSON.stringify([...kept,...this.outbox])); }catch(e){ console.warn("couldn't set aside changes",e); return; }
+    const n=this.outbox.length; this.outbox=[]; this.saveOutbox();
+    toast(`The server is on an older version of Bourdain, so ${n===1?"this change is":`these ${n} changes are`} kept on this phone until it's updated.`);
+  },
   /* Retry pending writes; if we started from this device's copy, pick up the server's once it's reachable. */
   async sync(){
+    if(!this.me) await this.whoami(); // first opened offline: find out who's signed in now it's reachable
     await this.flush();
     if(this.outbox.length||this.fromServer) return;
     if(await this.reload()){ this.paint(); if(!(state.view==="import"&&state.draft)) render(); } // don't wipe a half-edited form
@@ -600,7 +664,7 @@ const store = {
      swapping ids), where awaiting flush() again would wait on itself forever. */
   enqueue(col,id,doc){
     this.outbox=this.outbox.filter(o=>!(o.col===col&&o.id===id));
-    const op={col,id,dv:DATA_VERSION,doc:doc==null?null:JSON.parse(JSON.stringify(doc))};
+    const op={col,id,dv:DATA_VERSION,uid:this.me?.id,doc:doc==null?null:JSON.parse(JSON.stringify(doc))};
     this.outbox.push(op); this.saveOutbox(); this.local(); this.paint();
     return op;
   },
@@ -609,6 +673,7 @@ const store = {
     const sending=this.flush();
     if(this.online) await sending; // when the server is already known to be down, don't make the user wait on it
     if(op.refused) return false;
+    if(this.serverBehind) return false; // set aside with the rest; setAsideAll already said so
     if(!this.outbox.includes(op)) return true;
     toast(`${verb} on this phone. It'll sync when the server's back.`);
     return false;
@@ -1808,9 +1873,9 @@ const isStale=info=>info && (info.version!==APP.version || (info.commit!=="dev" 
 function fmtDate(isoDate){ const [y,m,d]=isoDate.split("-").map(Number); return `${d} ${MONTHS[m-1]} ${y}`; }
 async function openVersion(){
   const sh=openSheet(`<h3>Bourdain ${esc(APP.version)}</h3><p class="muted small" style="margin:0 0 10px">Build ${esc(APP.commit)}</p>
-    <div id="verBody"><p class="status"><span class="spin"></span>Checking the server…</p></div>
-    <div class="row" style="margin-top:12px"><button class="btn ghost" data-act="close">Close</button></div>`);
-  sheetActions(sh,{ close:closeSheet });
+    <div class="row verbtns"><button class="btn" data-act="export">Export my data</button><button class="btn ghost" data-act="close">Close</button></div>
+    <div id="verBody"><p class="status"><span class="spin"></span>Checking the server…</p></div>`);
+  sheetActions(sh,{ close:closeSheet, export:exportData });
   let info=null; try{ info=await api("/api/version",{signal:timeout(10000)}); }catch(e){ console.warn("version check failed",e); }
   const body=sh.querySelector("#verBody"); if(!sh.isConnected||!body) return; // another sheet opened meanwhile
   if(!info){ body.innerHTML=`<p class="vernote">Couldn't reach the server, so I can't check for a newer version or show the history. Try again when you're back on home Wi-Fi.</p>`; return; }
@@ -1822,6 +1887,23 @@ async function openVersion(){
   body.innerHTML = note + (hist?`<h3 style="font-family:var(--sans);font-size:13px;letter-spacing:.02em;text-transform:uppercase;margin:16px 0 4px">What's changed</h3>${hist}`:"");
 }
 document.getElementById("brand").onclick=openVersion;
+/* One zip of everything this person owns: data.json plus the photos and covers
+   their recipes use. A backup to keep, or for someone who asks for their data. */
+async function exportData(btn){
+  const old=btn.textContent; btn.disabled=true; btn.innerHTML=`<span class="spin"></span>Preparing…`;
+  try{
+    const res=await fetch(API+"/api/export",{signal:timeout(120000)});
+    if(!res.ok){ let e={}; try{ e=await res.json(); }catch(_){} throw Object.assign(new Error(e.error||res.statusText),{code:e.code,status:res.status}); }
+    const name=(res.headers.get("Content-Disposition")||"").match(/filename="([^"]+)"/)?.[1]||"bourdain-export.zip";
+    const url=URL.createObjectURL(await res.blob());
+    const a=document.createElement("a"); a.href=url; a.download=name; document.body.append(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+    toast(`Saved ${name}. It has your recipes, plan, pantry and their photos.`);
+  }catch(e){
+    console.warn("export failed",e);
+    toast(e.status ? `The server couldn't make the export (${e.code||e.status}). Check the server logs.` : "Couldn't reach the server to make the export. Try again when you're back on home Wi-Fi.");
+  }finally{ btn.disabled=false; btn.textContent=old; }
+}
 /* Quietly tell the user when the server has a newer build than the one this phone is running. */
 async function checkForUpdate(){
   try{ const info=await api("/api/version",{signal:timeout(10000)}); if(isStale(info)) toast(`Version ${info.version} is ready. Close and reopen the app to update.`); }

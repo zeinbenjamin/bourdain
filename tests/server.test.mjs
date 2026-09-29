@@ -41,7 +41,7 @@ try {
   // --- a corrupt row is skipped, not fatal
   await s.put("recipes", "good", { title: "Good soup" });
   const db = new Database(path.join(s.data, "bourdain.db"));
-  db.prepare("INSERT INTO recipes (id, doc, updated_at) VALUES ('broken', '{not json', datetime())").run();
+  db.prepare("INSERT INTO recipes (owner, id, doc, updated_at) VALUES ((SELECT id FROM users WHERE is_admin = 1), 'broken', '{not json', datetime())").run();
   db.close();
   const st = await s.state();
   check("corrupt row skipped, the rest still loads", st.recipes.good && !st.recipes.broken && /skipping corrupt row recipes\/broken/.test(s.log()));
@@ -120,7 +120,7 @@ try {
   await s.stop();
   const orphan2 = file(id("e") + ".webp", "old");
   const db3 = new Database(path.join(data, "bourdain.db"));
-  db3.prepare("INSERT INTO recipes (id, doc, updated_at) VALUES ('broken', '{oops', datetime())").run(); db3.close();
+  db3.prepare("INSERT INTO recipes (owner, id, doc, updated_at) VALUES ((SELECT id FROM users WHERE is_admin = 1), 'broken', '{oops', datetime())").run(); db3.close();
   s.clearLog(); await s.restart();
   check("sweep: skipped entirely if a recipe can't be read", existsSync(orphan2) && /cover sweep skipped: recipe broken/.test(s.log()));
   await s.cleanup();

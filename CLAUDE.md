@@ -1,8 +1,10 @@
 # Bourdain
 
 A self-hosted cooking app: import recipes from links, screenshots or screen
-recordings, plan the week, track the pantry. Single user, runs on a TrueNAS
-SCALE box at home. Built for Zein; no one else uses it.
+recordings, plan the week, track the pantry. Runs on a TrueNAS SCALE box at
+home. Built for Zein, and still used only by Zein. Since 2.0.0 every stored row
+has an owner, ready for a small pilot group; the plan, stage by stage, is in
+`docs/multi-user.md`.
 
 ## Architecture
 
@@ -13,17 +15,24 @@ server.js              Express — static files, data API, Claude proxy, link fe
 public/index.html      The entire front end: markup, CSS and JS in one file
 public/sw.js           Service worker (offline shell + photo cache)
 /data/bourdain.db      SQLite, on a mounted NAS dataset
-/data/photos/          JPEGs, on a mounted NAS dataset
+/data/photos/          photos (.jpg) and AI covers (.webp), on a mounted NAS dataset
 ```
 
-**The front end is deliberately one file.** It is ~1000 lines and that is fine.
+**The front end is deliberately one file.** It is ~2000 lines and that is fine.
 Do not split it into modules, add a bundler, or introduce a framework without
 being asked — the no-build-step property is what makes deploys trivial.
 
 ### Data model
 
-Four collections, each stored as JSON blobs keyed by id: `recipes`, `plan`,
-`pantry`, `shop`. The server does not validate their shape; the client owns it.
+Four collections, each stored as JSON blobs keyed by **(owner, id)**: `recipes`,
+`plan`, `pantry`, `shop`. The server does not validate their shape; the client
+owns it. The server sets `owner` from who's asking (`req.user`), never from the
+phone, and every read and write is scoped to it. Alongside them:
+- `users (id, email, name, photo, is_admin, created_at, last_seen)`. The owner
+  is the `is_admin` user, created from `OWNER_EMAIL`.
+- `meta (key, value)`, holding `data_version`.
+
+See **Data version** under Gotchas.
 
 A recipe:
 
@@ -70,8 +79,15 @@ how data persists, that is the only place to touch.
   so local changes win (last write wins, which is fine for one person). A 4xx
   means the server will never accept that change, so it is dropped with a toast.
   The header shows "N changes not synced" or "Offline".
-- `localStorage["bourdain"]` is a full mirror, refreshed on every successful
-  load. `store.loadLocal()` renders it immediately at startup; `store.init()`
+- `localStorage["bourdain:<userId>"]` is a full mirror, refreshed on every
+  successful load. The outbox is `bourdain.outbox:<userId>`, and
+  `bourdain.me` remembers who was signed in last. `store.key(base)` builds the
+  per-user key. `store.whoami()` (from `init()`, and from `sync()` if the app
+  was first opened offline) asks `/api/me`. If that's a different person from
+  last time, `loadLocal()` runs again for them. On the first open for a person it
+  adopts the plain keys (`bourdain`, `bourdain.outbox`). The admin takes all of
+  it, since 1.x data is the owner's. Anyone else takes only outbox entries this
+  app made before it knew who was signed in (`dv` 2, no `uid`). `store.loadLocal()` renders it immediately at startup; `store.init()`
   then replaces it with the server's data, or keeps it if the server can't be
   reached. `store.loading` is true until that finishes. Empty states must check
   it, so a new phone shows "Loading…" rather than "Nothing in the book yet".
@@ -188,7 +204,8 @@ throwaway data dir, and drives the real app in headless Chromium (Playwright,
 a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
 
 - `tests/lib.mjs`: `startServer` (stop/restart to fake the server going
-  down), `slowProxy` (fake slow Wi-Fi), `openBrowser`, and the `suite`
+  down; it sets `OWNER_EMAIL` to `OWNER_EMAIL_FOR_TESTS`, since the server won't
+  start without one), `slowProxy` (fake slow Wi-Fi), `openBrowser`, and the `suite`
   PASS/FAIL collector.
 - `tests/mock-apis.mjs`: fake Claude and OpenAI, loaded with `--import`. It is
   driven per call by `setMode({claude, image, scan, claudeDelay, imageDelay})`
@@ -202,7 +219,10 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   cards), `layout` (measured gaps and tap targets at phone width), `add` (the
   "+" sheet, import vs write your own, carrying on with an unsaved draft),
   `timeline` (the Archives tab: stats, most cooked, the feed, back navigation),
-  `dataversion` (data version stamps, refusing and setting aside newer data), `scan`,
+  `dataversion` (data version stamps, per-user keys on the phone, adopting 1.x
+  data, setting aside and picking back up, Export), `migration` (the 1 → 2
+  conversion, refusing to start, Cloudflare refused, `/api/me`, the export
+  zip), `scan`,
   `video`.
 - `slowProxy` delays: `shell` (index.html), `state` (`/api/state`), `write`
   (PUT/DELETE).
@@ -255,8 +275,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v27"`
-in `public/sw.js` → `v28`, `v29`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v28"`
+in `public/sw.js` → `v29`, `v30`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -303,8 +323,10 @@ pre-repo versions. Code that reads recipes should still treat `title` as
 possibly missing.
 
 **Adding a collection needs server edits too.** In `server.js`: add it to
-`COLLECTIONS` (or writes get a 404), add a `CREATE TABLE` (or writes fail with
-a 500), and add it to the `/api/state` response. In `index.html`: add it to
+`COLLECTIONS` (or writes get a 404), create its table with `ownedTable()` (it
+needs the `owner` column, or writes fail with a 500; an existing database needs
+it created in `openData()`), and add it to the `/api/state` response with
+`readAll(t, req.user.id)`. In `index.html`: add it to
 `state` and to both branches of `store.init()` and to `store.local()`.
 
 **Upstream failures have specific codes, and the client has one message table.**
@@ -324,18 +346,35 @@ HTML page, and let the client switch on `code`. `readAll` skips a row it can't
 parse and logs `skipping corrupt row <table>/<id>`, so one bad row can't blank
 the app.
 
-**Data version (since 1.10.1).** `DATA_VERSION` (1) is defined in both
-`server.js` and `index.html` and must match. The phone stamps it on the offline
-copy (`dv` in `localStorage["bourdain"]`), on every outbox entry (`op.dv`) and
-on every write (`X-Bourdain-Data` header). The server refuses a PUT or DELETE
-stamped newer than itself with 409 `data_newer`. No header means data 1, which
-is what every app before 1.10.1 sends. On load, the phone ignores an offline
-copy stamped newer, and moves newer outbox entries to
-`localStorage["bourdain.outbox.parked"]`. Moved entries are not sent, shown
-or counted, and there's one toast. This exists so a rollback from 2.0 (see
-`docs/multi-user.md`) can't mix 2.0-shaped data into 1.x. Only bump it for a
-stored-data change with a migration, and never without the steps in that doc.
-`/api/version` and `/api/health` report it.
+**Data version (1.10.1; 2 since 2.0.0).** `DATA_VERSION` (2) is defined in both
+`server.js` and `index.html` and must match.
+
+- **What's stamped.** The phone stamps it on the offline copy (`dv`), on every
+  outbox entry (`op.dv`, plus `op.uid`) and on every write (`X-Bourdain-Data`
+  header).
+- **What the server does.** It refuses a PUT or DELETE stamped newer than
+  itself with 409 `data_newer`. It accepts 1 or no header (older phones still
+  syncing); the documents look the same, and the owner comes from `req.user`.
+- **Phone, on load.** It ignores an offline copy stamped newer, and moves newer
+  outbox entries to `localStorage["bourdain.outbox.parked"]`, where they're not
+  sent, shown or counted, and says so once.
+- **Phone, when a write gets `data_newer`** (the server was rolled back):
+  `setAsideAll()` moves the whole outbox there and stops sending.
+- **Picking them back up.** Against a 2.x server, `unpark()` returns this
+  version's parked entries for this person.
+- **At server start**, `openData()` runs the 1 → 2 migration (see
+  `docs/multi-user.md`), and refuses to start without `OWNER_EMAIL` or with
+  data newer than it understands. `/api/version` and `/api/health` report the
+  version.
+
+Only bump it for a stored-data change with a migration, and never without the
+steps in that doc.
+
+**Nothing through Cloudflare yet.** Until 2.3 checks Cloudflare's sign-in,
+every `/api` request is the owner. Anything carrying Cloudflare headers
+(`Cf-Ray`, `Cf-Connecting-Ip`, `Cf-Access-Jwt-Assertion`) gets 403
+`cf_not_set_up`, and the phone says to use the home address. Don't loosen this
+before 2.3.
 
 **Adding fields is safe; renaming is not.** Old recipes simply lack new fields —
 treat missing as empty. Renaming an existing field orphans every stored recipe
@@ -412,8 +451,10 @@ Live features: link fetch and AI import with review screen, screen-recording
 frame extraction, recipe photos, AI cover illustrations (on request), drag-to-reorder ingredients in the edit form,
 0.5×–10× batch multiplier, week planner, pantry with "cook from what I have"
 and photo scanning, cook mode with a checklist and step timers, Michelin
-ratings, a per-recipe cook log, the Archives (every cook, with stats), and sorting
-and filtering of the recipe list.
+ratings, a per-recipe cook log, the Archives (every cook, with stats), sorting
+and filtering of the recipe list, and **Export my data** (a zip of everything you
+own plus its photos, from the version sheet; `GET /api/export`, written by the
+small `zipStore()` in `server.js` with no dependency).
 
 Ideas not yet built: nutrition estimates, pantry quantities decremented by
 cooking, timer alerts while the phone is locked (would need push
@@ -426,8 +467,8 @@ Decided 2026-09-24: not now. The most likely trigger for 2.0.0 is **pantry
 amounts that go down when you cook**. That needs every pantry item to carry a
 real amount in a consistent unit, which old free-text items like "greek
 yoghurt" don't have, so existing data must be converted. Other v2-sized ideas:
-household sharing (now planned as per-person multi-user; the full design,
-agreed 2026-09-29 and not yet built, is in `docs/multi-user.md`), an ingredient catalogue
+household sharing (now per-person multi-user, agreed 2026-09-29 in
+`docs/multi-user.md`: 2.0.0 is the data change, and 2.1 to 2.3 follow), an ingredient catalogue
 (every recipe ingredient re-linked), and moving blobs to real columns. Features
 that only add fields stay 1.x: cooking mode, shopping list, nutrition, meal
 slots, a redesign.
