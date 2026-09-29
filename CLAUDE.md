@@ -372,6 +372,10 @@ Without it the container crash-loops on SQLite open. The repo's
 it already has, and the new build never arrives. That looks exactly like a
 deploy that didn't work, the same as a forgotten service worker bump.
 
+**The container uses the host's network** (`network_mode: host`, no `ports:`)
+since 2.3.1. With Docker's port mapping every request seemed to come from
+Docker's gateway, so `TRUSTED_NETS` could never match a real device.
+
 **`docker-compose.yml` mirrors the live TrueNAS YAML**, with the pool path and
 API key replaced by placeholders. If you change the YAML in TrueNAS, change this
 file to match. The live setup uses datasets under `/mnt/sonic/builds_/bourdain/`.

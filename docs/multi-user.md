@@ -532,6 +532,11 @@ Each stage ships and gets used before the next.
      If the page shows a red "doesn't recognise this network" bar instead, the
      bar (since 2.3.1) says which address the server saw; compare it with
      `TRUSTED_NETS`. The app's log has the same line.
+     - **What happened on Zein's NAS (2026-09-29):** first 172.16.2.1, Docker's
+       gateway, because the port mapping hides the real address. Fixed with
+       `network_mode: host` (and no `ports:`). Then 100.88.81.69: the PC reached
+       the NAS over Tailscale even at home, so its Tailscale address goes in
+       `TRUSTED_NETS` too.
   4. **Only then** add `bourdain.<domain>` as a public hostname on the existing
      tunnel (the one the media server uses; no second `cloudflared`), pointing
      at `http://<NAS IP>:8080`.
