@@ -167,6 +167,118 @@ app.use("/api", (req, res, next) => {
 
 const me = (u) => ({ id: u.id, email: u.email, name: u.name || null, photo: u.photo || null, is_admin: Boolean(u.is_admin) });
 app.get("/api/me", (req, res) => res.json(me(db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id))));
+// Name and photo. The photo is an id from /api/photos, like a recipe photo.
+app.put("/api/me", (req, res) => {
+  const name = typeof req.body?.name === "string" ? req.body.name.trim().replace(/\s+/g, " ") : "";
+  if (!name || name.length > 40) return res.status(400).json({ error: "a name is 1 to 40 characters", code: "bad_name" });
+  const photo = req.body?.photo ?? null;
+  if (photo !== null && !/^[a-f0-9]{32}$/.test(photo)) return res.status(400).json({ error: "photo must be an uploaded photo id or null", code: "bad_photo" });
+  db.prepare("UPDATE users SET name = ?, photo = ? WHERE id = ?").run(name, photo, req.user.id);
+  res.json(me(db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id)));
+});
+
+/* ---------------- other people (2.1) ----------------
+   Everyone signed in can see everyone's recipes and cooks ("share all",
+   docs/multi-user.md). Emails are never sent to anyone but their owner.
+   Only people who have chosen a name appear; someone mid-welcome doesn't.     */
+const person = (u, viewer) => ({ id: u.id, name: u.name, photo: u.photo || null, me: u.id === viewer });
+const named = () => db.prepare("SELECT * FROM users WHERE name IS NOT NULL AND name != '' ORDER BY created_at").all();
+const recipesOf = (owner) => readAll("recipes", owner);
+app.get("/api/people", (req, res) => {
+  res.json(named().map((u) => {
+    const rs = Object.values(recipesOf(u.id));
+    return { ...person(u, req.user.id), recipes: rs.length, cooks: rs.reduce((n, r) => n + ((r && r.cooks) || []).filter((c) => c && c.date).length, 0) };
+  }));
+});
+app.get("/api/people/:id", (req, res) => {
+  const u = db.prepare("SELECT * FROM users WHERE id = ?").get(req.params.id);
+  if (!u || !u.name) return res.status(404).json({ error: "no such person", code: "not_found" });
+  res.json({ person: person(u, req.user.id), recipes: recipesOf(u.id) });
+});
+app.get("/api/people/:id/recipes/:rid", (req, res) => {
+  const u = db.prepare("SELECT * FROM users WHERE id = ?").get(req.params.id);
+  const row = u && db.prepare("SELECT doc FROM recipes WHERE owner = ? AND id = ?").get(u.id, req.params.rid);
+  let doc = null; try { doc = row && JSON.parse(row.doc); } catch {}
+  if (!doc) return res.status(404).json({ error: "that recipe isn't there any more", code: "not_found" });
+  res.json({ person: person(u, req.user.id), id: req.params.rid, recipe: doc });
+});
+
+// Which of the caller's recipes are copies of whose: "owner/id" -> the copy's id.
+const copiesOf = (owner) => {
+  const out = new Map();
+  for (const [id, r] of Object.entries(recipesOf(owner))) if (r && r.copied_from && r.copied_from.owner) out.set(`${r.copied_from.owner}/${r.copied_from.id}`, id);
+  return out;
+};
+/* Add to my recipes: a copy the caller owns. Rating and cook log start empty (each
+   copy has its owner's rating), and copied_from keeps the credit. Photos and the
+   cover are shared by id: the files are never duplicated, and the cover sweep
+   already looks at every owner's recipes before deleting one. */
+app.post("/api/copy", (req, res) => {
+  const { owner, id } = req.body || {};
+  if (owner === req.user.id) return res.status(400).json({ error: "that's already your recipe", code: "own_recipe" });
+  const u = typeof owner === "string" && db.prepare("SELECT * FROM users WHERE id = ?").get(owner);
+  const row = u && db.prepare("SELECT doc FROM recipes WHERE owner = ? AND id = ?").get(u.id, String(id));
+  let src = null; try { src = row && JSON.parse(row.doc); } catch {}
+  if (!src) return res.status(404).json({ error: "that recipe isn't there any more", code: "not_found" });
+  const existing = copiesOf(req.user.id).get(`${u.id}/${id}`);
+  if (existing) return res.json({ id: existing, recipe: JSON.parse(db.prepare("SELECT doc FROM recipes WHERE owner = ? AND id = ?").get(req.user.id, existing).doc), already: true });
+  const now = new Date().toISOString();
+  const copy = { ...src, copied_from: { owner: u.id, id: String(id), name: u.name || "", title: src.title || "" }, created_at: now, updated_at: now };
+  delete copy.rating; copy.cooks = [];
+  const newId = randomUUID().replace(/-/g, "").slice(0, 12);
+  db.prepare("INSERT INTO recipes (owner, id, doc, updated_at) VALUES (?, ?, ?, ?)").run(req.user.id, newId, JSON.stringify(copy), now);
+  res.status(201).json({ id: newId, recipe: copy, already: false });
+});
+
+// Search across everyone else's books: the same fields as the phone's own search.
+app.get("/api/search", (req, res) => {
+  const q = String(req.query.q || "").trim().toLowerCase();
+  if (q.length < 2) return res.status(400).json({ error: "type at least 2 letters", code: "short_query" });
+  const copies = copiesOf(req.user.id), hits = [];
+  for (const u of named()) {
+    if (u.id === req.user.id) continue;
+    for (const [id, r] of Object.entries(recipesOf(u.id))) {
+      if (!r) continue;
+      const title = (r.title || "").toLowerCase();
+      const hay = [title, r.description, ...(r.tags || []), ...(r.ingredients || []).map((i) => i && (i.item || i.raw_text))].join(" ").toLowerCase();
+      if (!hay.includes(q)) continue;
+      hits.push({ rank: title.includes(q) ? 0 : 1, owner: u.id, name: u.name, photo: u.photo || null, id, title: r.title || "", cover: r.cover || null,
+        firstPhoto: (r.photos || [])[0] || null, rating: r.rating ?? null, prep_min: r.prep_min || 0, cook_min: r.cook_min || 0, servings: r.servings || null,
+        copied: copies.get(`${u.id}/${id}`) || null });
+    }
+  }
+  hits.sort((a, b) => a.rank - b.rank || a.title.localeCompare(b.title));
+  res.json(hits.slice(0, 20).map(({ rank, ...h }) => h));
+});
+
+// The Archives feed: everyone's finished cooks, newest first, paged by `before`.
+app.get("/api/feed", (req, res) => {
+  const before = typeof req.query.before === "string" ? req.query.before : null;
+  const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 300));
+  const out = [];
+  for (const u of named()) {
+    const who = person(u, req.user.id);
+    for (const [id, r] of Object.entries(recipesOf(u.id))) {
+      for (const c of (r && r.cooks) || []) {
+        if (!c || !c.date) continue;
+        out.push({ who, owner: u.id, recipeId: id, title: r.title || "", cover: r.cover || null, firstPhoto: (r.photos || [])[0] || null,
+          rating: r.rating ?? null, date: c.date, at: c.at || c.date, mult: c.mult || 1 });
+      }
+    }
+  }
+  // the caller's own cooks count even before they've picked a name
+  if (!out.some((e) => e.who.me)) {
+    const u = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
+    if (!u.name) for (const [id, r] of Object.entries(recipesOf(u.id))) for (const c of (r && r.cooks) || []) {
+      if (c && c.date) out.push({ who: { id: u.id, name: null, photo: u.photo || null, me: true }, owner: u.id, recipeId: id, title: r.title || "", cover: r.cover || null,
+        firstPhoto: (r.photos || [])[0] || null, rating: r.rating ?? null, date: c.date, at: c.at || c.date, mult: c.mult || 1 });
+    }
+  }
+  const key = (e) => `${e.date}|${e.at}`;
+  out.sort((a, b) => key(b).localeCompare(key(a)));
+  const page = (before ? out.filter((e) => key(e) < before) : out).slice(0, limit);
+  res.json({ entries: page, next: page.length === limit ? key(page[page.length - 1]) : null });
+});
 
 app.get("/api/state", (req, res) => {
   res.json({
@@ -205,7 +317,7 @@ function zipStore(files) {
 }
 app.get("/api/export", async (req, res) => {
   const u = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
-  const data = { exported_at: new Date().toISOString(), app_version: VERSION, data_version: DATA_VERSION, user: { email: u.email, name: u.name || null } };
+  const data = { exported_at: new Date().toISOString(), app_version: VERSION, data_version: DATA_VERSION, user: { email: u.email, name: u.name || null, photo: u.photo || null } };
   for (const t of COLLECTIONS) data[t] = readAll(t, u.id);
   const files = [{ name: "bourdain/data.json", data: Buffer.from(JSON.stringify(data, null, 2)) }];
   const assets = new Map(); // file name -> path on disk
@@ -213,6 +325,7 @@ app.get("/api/export", async (req, res) => {
     for (const id of r.photos || []) if (/^[a-f0-9]{32}$/.test(id)) assets.set(`photos/${id}.jpg`, path.join(PHOTO_DIR, `${id}.jpg`));
     if (/^[a-f0-9]{32}$/.test(r.cover || "")) assets.set(`covers/${r.cover}.webp`, path.join(PHOTO_DIR, `${r.cover}.webp`));
   }
+  if (/^[a-f0-9]{32}$/.test(u.photo || "")) assets.set(`profile/${u.photo}.jpg`, path.join(PHOTO_DIR, `${u.photo}.jpg`));
   let missing = 0;
   for (const [name, file] of assets) {
     try { files.push({ name: `bourdain/${name}`, data: readFileSync(file) }); } catch { missing++; }

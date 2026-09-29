@@ -202,6 +202,33 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .stat{padding:10px 0 12px;text-align:center}
 .stat+.stat{border-left:1px solid var(--line)}
 .stat b{display:block;font-family:var(--serif);font-size:30px;font-weight:700;line-height:1.1}
+.feedhint{margin:14px 0 0}
+/* People (2.1): avatars, the People row and Everyone / Just me in the Archives, profiles */
+.av{flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;overflow:hidden;background:var(--steel);color:var(--ink-2);font-family:var(--serif);font-weight:700;border:1px solid var(--line);vertical-align:middle}
+.av img{width:100%;height:100%;object-fit:cover;display:block}
+.av.xs{width:18px;height:18px;font-size:10px;margin-right:5px;border:0}
+.av.sm{width:32px;height:32px;font-size:15px}
+.av.md{width:44px;height:44px;font-size:19px}
+.av.lg{width:72px;height:72px;font-size:30px}
+.people{display:flex;gap:6px;overflow-x:auto;margin:0 -4px 12px;padding:2px 4px 4px;scrollbar-width:none}
+.people::-webkit-scrollbar{display:none}
+.person{flex:none;width:64px;display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:0;padding:0;color:var(--ink);font-family:var(--sans);font-size:11px;font-weight:500;min-height:44px}
+.person span:last-child{max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:999px;padding:3px;margin:0 0 16px}
+.seg button{min-height:38px;border:0;background:none;border-radius:999px;font-family:var(--sans);font-size:13px;font-weight:500;color:var(--ink-2)}
+.seg button.on{background:var(--ink);color:var(--paper);font-weight:600}
+.tl-sub .av.xs{margin-top:-2px}
+.fromline{display:inline-flex;align-items:center;gap:0;background:none;border:0;padding:0;margin:4px 0 2px;min-height:44px;font-family:var(--sans);font-size:13px;color:var(--flame);font-weight:600;text-align:left}
+.fromline.who{color:var(--ink-2);font-weight:500}
+.fromline.who .cstars{margin-left:8px}
+.rcard .owner{display:flex;align-items:center;flex-wrap:wrap;gap:0 6px;font-family:var(--sans);font-size:12px;color:var(--ink-2);margin:0 0 3px}
+.inyours{color:var(--flame);font-weight:600}
+.others-head{margin-top:26px}
+.btn.wide{width:100%;min-height:48px;font-size:15px}
+.profile{display:flex;align-items:center;gap:14px;margin:4px 0 18px}
+.profile h2{margin:0 0 4px}
+.profile-edit{display:flex;align-items:center;gap:14px;margin:6px 0 14px}
+.profile-edit .btn{min-height:44px;padding:0 16px}
 .stat .of{font-size:16px;font-weight:600;color:var(--ink-3)}
 .stat span{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--ink-3)}
 .tl-head{font-family:var(--sans);font-size:13px;letter-spacing:.02em;text-transform:uppercase;font-weight:700;margin:22px 0 0;padding-bottom:5px;border-bottom:1px solid var(--rule)}
@@ -386,10 +413,14 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
     </div>
     <div class="chips" id="tagChips"></div>
     <div class="rlist" id="rlist"></div>
+    <div id="others"></div>
   </section>
 
   <!-- DETAIL -->
   <section class="view detail" id="view-detail"></section>
+  <!-- SOMEONE ELSE'S RECIPE (read-only) and A PERSON'S PROFILE (2.1) -->
+  <section class="view detail" id="view-theirs"></section>
+  <section class="view" id="view-person"></section>
 
   <!-- COOK -->
   <section class="view detail" id="view-cook"></section>
@@ -730,7 +761,11 @@ function show(view){
   state.view=view;
   if(view!=="detail"&&view!=="cook") state.detailFrom=null; // set by the Timeline so the recipe's Back returns there
   document.querySelectorAll("section.view").forEach(s=>s.classList.toggle("active", s.id==="view-"+view));
-  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.view===view || ((view==="detail"||view==="cook"||view==="import")&&b.dataset.view===(state.detailFrom||"recipes"))));
+  // Which tab stays lit for views that aren't tabs themselves
+  const tab = view==="person" ? "timeline"
+    : view==="theirs" ? ({recipes:"recipes",detail:"recipes"}[state.theirs?.from]||"timeline")
+    : (view==="detail"||view==="cook"||view==="import") ? (state.detailFrom||"recipes") : view;
+  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.view===tab));
   const sub=document.getElementById("topSub");
   const now=new Date(); sub.textContent = `${DAYS[(now.getDay()+6)%7]} ${now.getDate()} ${MONTHS[now.getMonth()]}`;
   document.getElementById("main").scrollTop=0;
@@ -747,6 +782,8 @@ function render(){
   if (state.view==="shop") renderShop();
   if (state.view==="pantry") renderPantry();
   if (state.view==="timeline") renderTimeline();
+  if (state.view==="person") renderPerson();
+  if (state.view==="theirs") renderTheirs();
   if (state.view==="import") renderImport();
   if (state.view==="cook") renderCook();
 }
@@ -759,6 +796,7 @@ function renderRecipes(){
   chips.innerHTML = tags.map(t=>`<button class="chip ${state.tag===t?"on":""}" data-tag="${esc(t)}">${esc(t)}</button>`).join("");
   chips.onclick=e=>{ const b=e.target.closest(".chip"); if(!b) return; state.tag = state.tag===b.dataset.tag?null:b.dataset.tag; renderRecipes(); };
   const q=state.query.trim().toLowerCase();
+  others.search(q);
   const pref=listPrefs.get();
   const list=Object.entries(state.recipes).filter(([id,r])=>{
     if (state.tag && !(r.tags||[]).includes(state.tag)) return false;
@@ -774,22 +812,24 @@ function renderRecipes(){
     el.querySelector("[data-go]").onclick=()=>addSheet(); return;
   }
   if (!list.length){
-    el.innerHTML=`<div class="empty">No recipes match that.${pref.filter!=="all"?`<div style="margin-top:12px"><button class="btn small" data-reset>Show all recipes</button></div>`:""}</div>`;
+    el.innerHTML=`<div class="empty">None of your recipes match that.${pref.filter!=="all"?`<div style="margin-top:12px"><button class="btn small" data-reset>Show all recipes</button></div>`:""}</div>`;
     const rb=el.querySelector("[data-reset]"); if(rb) rb.onclick=()=>{ listPrefs.set({...pref,filter:"all"}); renderRecipes(); };
     return;
   }
-  el.innerHTML=list.map(([id,r])=>{
-    const t=(r.prep_min||0)+(r.cook_min||0);
-    const meta=[t?`${t} min`:null, r.servings?`${r.servings} serves`:null, r.source_type&&r.source_type!=="manual"?r.source_type:null].filter(Boolean).join(" · ");
-    return `<button class="rcard" data-id="${id}">
-      ${r.cover?`<div class="thumb cover"><img src="${coverUrl(r.cover)}" alt=""></div>`
-        :`<div class="thumb">${r.photos&&r.photos.length?`<img src="${photoUrl(r.photos[0])}" alt="">`:esc((r.title||"?").trim()[0]||"?").toUpperCase()}</div>`}
-      <div class="body"><h3>${esc(r.title)}</h3>${r.rating?`<div class="cstars">${stars(r.rating)}</div>`:""}${meta?`<div class="meta">${esc(meta)}</div>`:""}
-      <div class="tags">${(r.tags||[]).slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div></div></button>`;
-  }).join("");
+  el.innerHTML=list.map(([id,r])=>cardHtml(r,`data-id="${esc(id)}"`)).join("");
   el.onclick=e=>{ const c=e.target.closest(".rcard"); if(c){ if(state.detailId!==c.dataset.id) state.mult=1; state.detailId=c.dataset.id; show("detail"); } };
 }
 document.getElementById("search").addEventListener("input",e=>{ state.query=e.target.value; renderRecipes(); });
+// A recipe card. `attrs` says what tapping it opens; `extra` goes under the title (whose recipe it is).
+function cardHtml(r,attrs,extra=""){
+  const t=(r.prep_min||0)+(r.cook_min||0);
+  const meta=[t?`${t} min`:null, r.servings?`${r.servings} serves`:null, r.source_type&&r.source_type!=="manual"?r.source_type:null].filter(Boolean).join(" · ");
+  return `<button class="rcard" ${attrs}>
+    ${r.cover?`<div class="thumb cover"><img src="${coverUrl(r.cover)}" alt=""></div>`
+      :`<div class="thumb">${r.photos&&r.photos.length?`<img src="${photoUrl(r.photos[0])}" alt="">`:esc((r.title||"?").trim()[0]||"?").toUpperCase()}</div>`}
+    <div class="body"><h3>${esc(r.title||"Untitled")}</h3>${extra}${r.rating?`<div class="cstars">${stars(r.rating)}</div>`:""}${meta?`<div class="meta">${esc(meta)}</div>`:""}
+    <div class="tags">${(r.tags||[]).slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div></div></button>`;
+}
 // "+" asks how: import (link, text, screenshots, recording) or write one by hand.
 function addSheet(){
   const open=state.draft&&!state.editingId ? state.draft : null; // an import or new recipe not saved yet
@@ -809,30 +849,26 @@ document.getElementById("impBack").onclick=()=>show("recipes");
 
 function blankRecipe(){ return {photos:[],title:"",description:"",source_url:"",source_type:"manual",servings:2,prep_min:null,cook_min:null,ingredients:[{raw_text:"",quantity:null,unit:"",item:"",prep:"",section:"",aisle:"other",optional:false}],steps:[""],tags:[]}; }
 
-function renderDetail(){
-  const r=state.recipes[state.detailId]; const el=document.getElementById("view-detail");
-  if(!r){ el.innerHTML=`<div class="empty">Recipe not found.</div>`; return; }
-  const t=(r.prep_min||0)+(r.cook_min||0);
-  const meta=[r.servings?`Serves ${r.servings}`:null, r.prep_min?`${r.prep_min} min prep`:null, r.cook_min?`${r.cook_min} min cook`:null].filter(Boolean).join(" · ");
-  el.innerHTML=`
-    <div class="detail-head"><button class="btn small ghost" id="back">‹ ${state.detailFrom==="timeline"?"Archives":"Recipes"}</button>
-      <div class="row"><button class="btn small" id="edit">Edit</button><button class="btn small danger" id="del">Delete</button></div></div>
-    <h2>${esc(r.title)}</h2>
-    <div class="meta">${esc(meta)}</div>
-    <button class="cookstats" id="cookStats" aria-label="Rating and cooking history">${cookStatsHtml(r)}</button>
-    ${r.source_url?`<div class="source muted"><a href="${esc(r.source_url)}" target="_blank" rel="noopener">${esc(hostOf(r.source_url)||r.source_url)}</a></div>`:""}
+/* The parts of a recipe page that are the same whether it's yours or someone
+   else's: source, description, tags, pictures; then ingredients with the batch
+   scaler, method and notes. */
+function recipeMediaHtml(r){
+  return `${r.source_url?`<div class="source muted"><a href="${esc(r.source_url)}" target="_blank" rel="noopener">${esc(hostOf(r.source_url)||r.source_url)}</a></div>`:""}
     ${r.description?`<p class="muted">${esc(r.description)}</p>`:""}
     <div class="tags" style="margin-top:8px;display:flex;gap:4px;flex-wrap:wrap">${(r.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>
     ${r.cover?`<img class="hero cover" src="${coverUrl(r.cover)}" alt="">`:r.photos&&r.photos.length?`<img class="hero" src="${photoUrl(r.photos[0])}" alt="">`:""}
-    ${r.cover ? (r.photos&&r.photos.length?photosHtml(r.photos,false):"") : (r.photos&&r.photos.length>1?photosHtml(r.photos.slice(1),false):"")}
-    <div class="actions quad"><button class="btn primary" id="cookThis">${cooking.get()?.recipeId===state.detailId?"Continue cooking":"Cook this"}</button><button class="btn" id="addPlan">Add to the week</button><button class="btn" id="addPhoto">Add photo</button><button class="btn" id="makeCover">${r.cover?"New cover":"Make cover"}</button></div>
-    <h3>Ingredients</h3>
+    ${r.cover ? (r.photos&&r.photos.length?photosHtml(r.photos,false):"") : (r.photos&&r.photos.length>1?photosHtml(r.photos.slice(1),false):"")}`;
+}
+function recipeMethodHtml(r){
+  return `<h3>Ingredients</h3>
     <div class="scaler"><span class="lab">Batch</span>
       <span class="ctl"><button id="multDown" aria-label="Smaller batch">−</button><span class="amt" id="multAmt"></span><button id="multUp" aria-label="Bigger batch">+</button></span>
     </div>
     <ul class="ing" id="ingList"></ul>
     <h3>Method</h3><ol class="steps">${(r.steps||[]).map(s=>`<li>${esc(s)}</li>`).join("")}</ol>
     ${r.notes?`<h3>Notes</h3><p>${esc(r.notes)}</p>`:""}`;
+}
+function wireIngredients(el,r){
   const paintIng=()=>{
     const m=state.mult||1;
     let out="", lastSec=null;
@@ -851,6 +887,26 @@ function renderDetail(){
   paintIng();
   el.querySelector("#multDown").onclick=()=>{ state.mult=Math.max(0.5,(state.mult||1)-0.5); paintIng(); };
   el.querySelector("#multUp").onclick=()=>{ state.mult=Math.min(10,(state.mult||1)+0.5); paintIng(); };
+}
+function renderDetail(){
+  const r=state.recipes[state.detailId]; const el=document.getElementById("view-detail");
+  if(!r){ el.innerHTML=`<div class="empty">Recipe not found.</div>`; return; }
+  const t=(r.prep_min||0)+(r.cook_min||0);
+  const meta=[r.servings?`Serves ${r.servings}`:null, r.prep_min?`${r.prep_min} min prep`:null, r.cook_min?`${r.cook_min} min cook`:null].filter(Boolean).join(" · ");
+  document.getElementById("view-theirs").innerHTML=""; // the two share element ids; only one is ever on the page
+  const from=r.copied_from;
+  el.innerHTML=`
+    <div class="detail-head"><button class="btn small ghost" id="back">‹ ${state.detailFrom==="timeline"?"Archives":"Recipes"}</button>
+      <div class="row"><button class="btn small" id="edit">Edit</button><button class="btn small danger" id="del">Delete</button></div></div>
+    <h2>${esc(r.title)}</h2>
+    <div class="meta">${esc(meta)}</div>
+    ${from?`<button class="fromline" id="fromLine" data-owner="${esc(from.owner||"")}" data-rid="${esc(from.id||"")}">From ${esc(from.name||"someone")}'s recipes ›</button>`:""}
+    <button class="cookstats" id="cookStats" aria-label="Rating and cooking history">${cookStatsHtml(r)}</button>
+    ${recipeMediaHtml(r)}
+    <div class="actions quad"><button class="btn primary" id="cookThis">${cooking.get()?.recipeId===state.detailId?"Continue cooking":"Cook this"}</button><button class="btn" id="addPlan">Add to the week</button><button class="btn" id="addPhoto">Add photo</button><button class="btn" id="makeCover">${r.cover?"New cover":"Make cover"}</button></div>
+    ${recipeMethodHtml(r)}`;
+  wireIngredients(el,r);
+  const fl=el.querySelector("#fromLine"); if(fl) fl.onclick=()=>openTheirs(fl.dataset.owner,fl.dataset.rid,"detail");
   el.querySelector("#back").onclick=()=>show(state.detailFrom||"recipes");
   el.querySelector("#edit").onclick=()=>{ state.editingId=state.detailId; state.draft=JSON.parse(JSON.stringify(r)); show("import"); };
   el.querySelector("#del").onclick=()=>{
@@ -871,6 +927,186 @@ function renderDetail(){
   const rid=state.detailId;
   el.querySelector("#makeCover").onclick=()=>makeCover(r, id=>applyCover(rid,id));
   const ap=el.querySelector("#addPhoto"); if(ap) ap.onclick=async()=>{ const files=await pickPhotos(); if(!files.length) return; toast("Uploading…"); const ids=await uploadPhotos(files); if(!ids.length) return; r.photos=[...(r.photos||[]),...ids]; r.updated_at=new Date().toISOString(); await store.put("recipes",state.detailId,r); renderDetail(); };
+}
+
+/* ---------- other people (2.1) ----------
+   Everyone in the group can browse everyone's recipes and cooks, but your own
+   book only ever holds recipes you own. Someone else's recipe opens read-only
+   with one action, Add to my recipes, which makes your own copy (its own
+   rating and cook log, and "From Sam's recipes"). All of this needs the
+   server; offline, those parts simply don't show. See docs/multi-user.md. */
+const people={
+  list:null, loading:null, at:0,
+  load(force){
+    if(this.loading) return this.loading;
+    if(this.list&&!force) return Promise.resolve(this.list);
+    this.loading=api("/api/people",{signal:timeout(10000)}).then(l=>(this.list=l)).catch(()=>this.list).finally(()=>{ this.at=Date.now(); this.loading=null; });
+    return this.loading;
+  },
+  stale(){ return Date.now()-this.at>60000; }, // failures count too, so an unreachable server isn't asked on every render
+  others(){ return (this.list||[]).filter(p=>!p.me); },
+  byId(id){ return (this.list||[]).find(p=>p.id===id); },
+};
+// A person's photo, or their initial on grey. sizes: xs (18), sm (32), md (44), lg (72)
+function avatar(p,size="sm"){
+  const initial=esc(((p&&p.name)||"?").trim()[0]||"?").toUpperCase();
+  return p&&p.photo ? `<span class="av ${size}"><img src="${photoUrl(p.photo)}" alt=""></span>` : `<span class="av ${size}" aria-hidden="true">${initial}</span>`;
+}
+const possessive=n=>n?`${n}'s`:"Someone's";
+// Is this someone else's recipe already copied into my book? Returns my copy's id.
+const myCopyOf=(owner,id)=>Object.entries(state.recipes).find(([,r])=>r&&r.copied_from&&r.copied_from.owner===owner&&r.copied_from.id===id)?.[0]||null;
+
+/* Search across everyone else's books, under your own results. Waits for a pause
+   in typing, and quietly shows nothing if the server can't be reached. */
+const others={
+  timer:null, last:"",
+  search(q){
+    clearTimeout(this.timer);
+    const el=document.getElementById("others");
+    if(q.length<2){ this.last=""; el.innerHTML=""; return; }
+    if(q===this.last) return; // same words: keep what's shown (a re-render after sync, say)
+    this.timer=setTimeout(async()=>{
+      let hits; try{ hits=await api("/api/search?q="+encodeURIComponent(q),{signal:timeout(10000)}); }catch(_){ hits=null; }
+      if(state.query.trim().toLowerCase()!==q) return; // they've kept typing
+      this.last=q;
+      if(!hits||!hits.length){ el.innerHTML=""; return; }
+      el.innerHTML=`<h3 class="tl-head others-head">In other people's books</h3><div class="rlist">${hits.map(h=>{
+        const p={id:h.owner,name:h.name,photo:h.photo}, mine=h.copied||myCopyOf(h.owner,h.id);
+        return cardHtml({title:h.title,cover:h.cover,photos:h.firstPhoto?[h.firstPhoto]:[],rating:h.rating,prep_min:h.prep_min,cook_min:h.cook_min,servings:h.servings},
+          `data-owner="${esc(h.owner)}" data-rid="${esc(h.id)}"`,
+          `<div class="owner">${avatar(p,"xs")}<span>${esc(possessive(h.name))}</span>${mine?`<span class="inyours">In your recipes</span>`:""}</div>`);
+      }).join("")}</div>`;
+    },300);
+  },
+};
+document.getElementById("others").onclick=e=>{ const c=e.target.closest("[data-owner]"); if(c) openTheirs(c.dataset.owner,c.dataset.rid,"recipes"); };
+
+/* Someone else's recipe, read-only. `from` is where Back goes. */
+function openTheirs(owner,rid,from){
+  if(store.me&&owner===store.me.id){ state.detailId=rid; show("detail"); return; }
+  state.theirs={owner,rid,from,data:null,error:null}; state.mult=1;
+  show("theirs");
+  api(`/api/people/${encodeURIComponent(owner)}/recipes/${encodeURIComponent(rid)}`,{signal:timeout(10000)})
+    .then(d=>{ if(state.theirs&&state.theirs.rid===rid){ state.theirs.data=d; if(state.view==="theirs") renderTheirs(); } })
+    .catch(e=>{ if(state.theirs&&state.theirs.rid===rid){ state.theirs.error=e; if(state.view==="theirs") renderTheirs(); } });
+}
+function renderTheirs(){
+  const el=document.getElementById("view-theirs"), t=state.theirs;
+  if(!t){ show("recipes"); return; }
+  const backTo={person:null,recipes:"Recipes",timeline:"Archives",detail:"Your copy"}[t.from];
+  const who=t.data?.person||people.byId(t.owner);
+  const back=`<div class="detail-head"><button class="btn small ghost" id="tBack">‹ ${esc(backTo||(who&&who.name)||"Back")}</button></div>`;
+  if(!t.data){
+    el.innerHTML=back+(t.error ? `<div class="empty">${t.error.status===404?"That recipe isn't there any more. Its owner may have deleted it.":"Can't reach the server to show this recipe. Try again when you're back online."}</div>`
+      : `<div class="empty"><span class="spin"></span>Opening the recipe…</div>`);
+  } else {
+    document.getElementById("view-detail").innerHTML=""; // shares element ids with this view
+    const r=t.data.recipe, mine=myCopyOf(t.owner,t.rid);
+    const meta=[r.servings?`Serves ${r.servings}`:null, r.prep_min?`${r.prep_min} min prep`:null, r.cook_min?`${r.cook_min} min cook`:null].filter(Boolean).join(" · ");
+    el.innerHTML=`${back}
+      <h2>${esc(r.title||"Untitled")}</h2>
+      <div class="meta">${esc(meta)}</div>
+      <button class="fromline who" id="tWho">${avatar(who,"xs")}<span>${esc(possessive(who&&who.name))} recipe</span>${r.rating?`<span class="cstars">${stars(r.rating)}</span>`:""}</button>
+      ${recipeMediaHtml(r)}
+      <div class="actions"><button class="btn ${mine?"":"accent"} wide" id="tCopy">${mine?"In your recipes ›":"Add to my recipes"}</button></div>
+      ${recipeMethodHtml(r)}`;
+    wireIngredients(el,r);
+    el.querySelector("#tWho").onclick=()=>openPerson(t.owner);
+    el.querySelector("#tCopy").onclick=async e=>{
+      const have=myCopyOf(t.owner,t.rid); if(have){ state.detailId=have; show("detail"); return; }
+      const b=e.currentTarget; b.disabled=true; b.innerHTML=`<span class="spin"></span>Adding…`;
+      try{
+        const res=await api("/api/copy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({owner:t.owner,id:t.rid}),signal:timeout(15000)});
+        state.recipes[res.id]=res.recipe; store.local();
+        state.detailId=res.id; state.mult=1; show("detail");
+        toast(res.already?"It's already in your recipes.":`Added to your recipes. Rate it and cook it as your own.`);
+      }catch(err){
+        b.disabled=false; b.textContent="Add to my recipes";
+        toast(err.status===404?"That recipe isn't there any more. Its owner may have deleted it.":"Couldn't reach the server to add it. Try again when you're back online.");
+      }
+    };
+  }
+  el.querySelector("#tBack").onclick=()=>{
+    if(t.from==="person") show("person"); else if(t.from==="detail") show("detail"); else show(t.from||"recipes");
+  };
+}
+
+/* A person's profile: their recipes (read-only for anyone else) and recent cooks. */
+function openPerson(id){ state.personId=id; state.person=null; show("person"); }
+function renderPerson(){
+  const el=document.getElementById("view-person"), id=state.personId;
+  const cached=state.person&&state.person.person.id===id ? state.person : null;
+  const p=cached?.person||people.byId(id);
+  const head=`<div class="detail-head"><button class="btn small ghost" id="pBack">‹ Archives</button>${p&&p.me?`<button class="btn small" id="pEdit">Edit profile</button>`:""}</div>`;
+  if(!cached){
+    el.innerHTML=head+`<div class="empty"><span class="spin"></span>Opening ${esc(possessive(p&&p.name))} recipes…</div>`;
+    api("/api/people/"+encodeURIComponent(id),{signal:timeout(10000)})
+      .then(d=>{ state.person=d; if(state.view==="person"&&state.personId===id) renderPerson(); })
+      .catch(()=>{ if(state.view==="person"&&state.personId===id){ el.innerHTML=head+`<div class="empty">Can't reach the server to show ${esc(possessive(p&&p.name))} recipes. Try again when you're back online.</div>`; wirePersonHead(); } });
+    wirePersonHead(); return;
+  }
+  const rs=Object.entries(cached.recipes||{}).filter(([,r])=>r).sort((a,b)=>(a[1].title||"").localeCompare(b[1].title||""));
+  const cooks=rs.flatMap(([rid,r])=>(r.cooks||[]).filter(c=>c&&c.date).map(c=>({rid,r,date:c.date,at:c.at||c.date}))).sort((a,b)=>(b.date+b.at).localeCompare(a.date+a.at));
+  const me=cached.person.me;
+  el.innerHTML=`${head}
+    <div class="profile">${avatar(cached.person,"lg")}<div><h2>${esc(cached.person.name)}</h2>
+      <div class="meta">${rs.length} recipe${rs.length===1?"":"s"} · ${cooks.length} cook${cooks.length===1?"":"s"}</div></div></div>
+    ${cooks.length?`<h3 class="tl-head">Recently cooked</h3><div class="tl-top">${cooks.slice(0,5).map(c=>{ const dt=new Date(c.date+"T00:00");
+      return `<button class="slot" data-rid="${esc(c.rid)}">${miniThumb(c.r)}<span class="t">${esc(c.r.title||"Untitled")}<span class="tl-sub">${DAYS[(dt.getDay()+6)%7]} ${dt.getDate()} ${MONTHS[dt.getMonth()]}${c.r.rating?" · "+stars(c.r.rating):""}</span></span></button>`; }).join("")}</div>`:""}
+    <h3 class="tl-head">${me?"Your recipes":esc(possessive(cached.person.name))+" recipes"}</h3>
+    ${rs.length?`<div class="rlist">${rs.map(([rid,r])=>cardHtml(r,`data-rid="${esc(rid)}"`, !me&&myCopyOf(id,rid)?`<div class="owner"><span class="inyours">In your recipes</span></div>`:"")).join("")}</div>`
+      :`<div class="empty">No recipes yet.</div>`}`;
+  wirePersonHead();
+  el.onclick=e=>{ const c=e.target.closest("[data-rid]"); if(!c) return; openTheirs(id,c.dataset.rid,"person"); };
+}
+function wirePersonHead(){
+  const el=document.getElementById("view-person");
+  el.querySelector("#pBack").onclick=()=>show("timeline");
+  const pe=el.querySelector("#pEdit"); if(pe) pe.onclick=()=>profileSheet(false);
+}
+
+/* Name and photo. Shown as a welcome the first time someone opens the app with no
+   name yet (that includes the owner after updating to 2.1), and from the version
+   sheet and your own profile after that. */
+let welcomeShown=false;
+function suggestName(email){ const w=String(email||"").split("@")[0].split(/[._+-]/)[0]; return w?w[0].toUpperCase()+w.slice(1):""; }
+function profileSheet(first){
+  const me=store.me; if(!me) { toast("Can't reach the server to change your profile. Try again when you're back online."); return; }
+  const draft={name:me.name||(first?suggestName(me.email):""), photo:me.photo||null};
+  const sh=openSheet(`<h3>${first?"Welcome to Bourdain":"Your profile"}</h3>
+    ${first?`<p class="muted small">What should we call you? Your name and photo appear next to your recipes and cooks when other people look.</p>`:""}
+    <div class="profile-edit"><span id="pfAv">${avatar(draft,"lg")}</span>
+      <div class="row"><button class="btn small" data-act="photo" id="pfPhoto">${draft.photo?"Change photo":"Add photo"}</button>${draft.photo?`<button class="btn small ghost" data-act="nophoto">Remove</button>`:""}</div></div>
+    <div class="field"><label for="pfName">Name</label><input class="input" id="pfName" maxlength="40" autocomplete="nickname" value="${esc(draft.name)}"></div>
+    <div class="row"><button class="btn primary" data-act="save">Save</button><button class="btn ghost" data-act="later">${first?"Later":"Cancel"}</button></div>`);
+  const paint=()=>{ draft.name=sh.querySelector("#pfName").value; sh.querySelector("#pfAv").innerHTML=avatar(draft,"lg"); };
+  sh.querySelector("#pfName").oninput=paint;
+  sheetActions(sh,{
+    later:closeSheet,
+    nophoto:b=>{ draft.photo=null; paint(); b.remove(); sh.querySelector("#pfPhoto").textContent="Add photo"; },
+    photo:async b=>{
+      const files=await pickPhotos(); if(!files.length) return;
+      b.disabled=true; b.innerHTML=`<span class="spin"></span>Uploading…`;
+      try{ draft.photo=(await store.uploadPhoto(await shrink(files[0]))).id; paint(); b.textContent="Change photo"; }
+      catch(e){ b.textContent=draft.photo?"Change photo":"Add photo"; toast(e&&e.status?"The server couldn't use that photo. Try a different one.":"Can't reach the server to add a photo. Try again when you're back online."); }
+      finally{ b.disabled=false; }
+    },
+    save:async b=>{
+      const name=sh.querySelector("#pfName").value.trim();
+      if(!name){ toast("Add a name first. It's how other people will know it's you."); sh.querySelector("#pfName").focus(); return; }
+      b.disabled=true; b.textContent="Saving…";
+      try{
+        const saved=await api("/api/me",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,photo:draft.photo}),signal:timeout(15000)});
+        store.me=saved; try{ localStorage.setItem(ME_KEY,JSON.stringify(saved)); }catch(_){}
+        people.list=null; people.at=0; state.person=null;
+        closeSheet(); toast(first?`Welcome, ${saved.name}.`:"Profile saved"); render();
+      }catch(e){ b.disabled=false; b.textContent="Save"; toast(e.code==="bad_name"?"Keep the name to 40 characters or fewer.":"Can't reach the server to save your profile. Try again when you're back online."); }
+    },
+  });
+}
+function maybeWelcome(){
+  if(welcomeShown||!store.me||store.me.name||state.view==="cook") return;
+  welcomeShown=true; profileSheet(true);
 }
 
 /* ---------- cooking ----------
@@ -1166,34 +1402,75 @@ function timelineEntries(){
   for(const [id,r] of Object.entries(state.recipes)) for(const c of (r.cooks||[])) if(c&&c.date) out.push({recipeId:id, date:c.date, at:c.at||c.date, mult:c.mult||1, who:"me"});
   return out.sort((a,b)=>b.date.localeCompare(a.date)||String(b.at).localeCompare(String(a.at)));
 }
+/* Everyone's cooks come from the server (/api/feed), refreshed when older than a
+   minute. Yours always come from this phone's copy, so they're current and work
+   offline. "Everyone" or "Just me" is remembered per phone. */
+const WHO_KEY="bourdain.archivesWho";
+const feed={
+  entries:null, at:0, failed:false, loading:null,
+  load(){
+    if(this.loading) return this.loading;
+    this.loading=api("/api/feed",{signal:timeout(10000)})
+      .then(d=>{ this.entries=d.entries||[]; this.failed=false; })
+      .catch(()=>{ this.failed=true; })
+      .finally(()=>{ this.at=Date.now(); this.loading=null; });
+    return this.loading;
+  },
+  stale(){ return Date.now()-this.at>60000; },
+};
+const archivesWho={ get(){ try{ return localStorage.getItem(WHO_KEY)==="me"?"me":"everyone"; }catch(_){ return "everyone"; } }, set(v){ try{ localStorage.setItem(WHO_KEY,v); }catch(_){} } };
 function renderTimeline(){
-  const el=document.getElementById("view-timeline"), all=timelineEntries();
-  if(!all.length){
-    el.innerHTML = store.loading ? `<div class="empty"><span class="spin"></span>Loading your cooks…</div>`
-      : `<div class="empty"><h3>Nothing cooked yet</h3>Open a recipe and tap Cook this. Each time you finish, it shows up here with the date.</div>`;
-    return;
+  const el=document.getElementById("view-timeline"), mine=timelineEntries();
+  const again=()=>{ if(state.view==="timeline") renderTimeline(); };
+  if(people.stale()&&!people.loading) people.load(true).then(again);
+  const shared=people.others().length>0;
+  const everyone=shared&&archivesWho.get()==="everyone";
+  if(everyone&&feed.stale()&&!feed.loading) feed.load().then(again);
+  const theirs=everyone&&feed.entries ? feed.entries.filter(e=>!e.who.me) : [];
+  const meP=people.list?.find(p=>p.me)||(store.me?{id:store.me.id,name:store.me.name,photo:store.me.photo,me:true}:null);
+  const row=shared?`<div class="people" role="list">${[meP,...people.others()].filter(Boolean).map(p=>`<button class="person" role="listitem" data-person="${esc(p.id)}">${avatar(p,"md")}<span>${p.me?"You":esc(p.name)}</span></button>`).join("")}</div>
+    <div class="seg" role="group" aria-label="Whose cooks"><button data-who="everyone" class="${everyone?"on":""}" aria-pressed="${everyone}">Everyone</button><button data-who="me" class="${everyone?"":"on"}" aria-pressed="${!everyone}">Just me</button></div>`:"";
+  if(!mine.length&&!theirs.length){
+    el.innerHTML = row + (store.loading ? `<div class="empty"><span class="spin"></span>Loading your cooks…</div>`
+      : `<div class="empty"><h3>Nothing cooked yet</h3>Open a recipe and tap Cook this. Each time you finish, it shows up here with the date.</div>`);
+    el.onclick=timelineClick; return;
   }
+  const all=[...mine.map(e=>({...e,mine:true})),...theirs.map(e=>({...e,mine:false,date:e.date,at:e.at}))]
+    .sort((a,b)=>b.date.localeCompare(a.date)||String(b.at).localeCompare(String(a.at)));
   const now=new Date(), ym=iso(now).slice(0,7), y=ym.slice(0,4);
-  const ids=Object.keys(state.recipes), tried=new Set(all.map(e=>e.recipeId));
-  const count={}; for(const e of all) count[e.recipeId]=(count[e.recipeId]||0)+1;
+  const ids=Object.keys(state.recipes), tried=new Set(mine.map(e=>e.recipeId));
+  const count={}; for(const e of mine) count[e.recipeId]=(count[e.recipeId]||0)+1;
   const top=Object.entries(count).filter(([,n])=>n>1).sort((a,b)=>b[1]-a[1]||lastCooked(state.recipes[b[0]]).localeCompare(lastCooked(state.recipes[a[0]]))).slice(0,3);
   const title=r=>esc(r.title||"Untitled");
-  const card=(id,right,sub)=>{ const r=state.recipes[id]; return `<button class="slot" data-open="${id}">${miniThumb(r)}<span class="t">${title(r)}${sub?`<span class="tl-sub">${sub}</span>`:""}</span>${right||""}</button>`; };
+  const card=(id,right,sub)=>{ const r=state.recipes[id]; return `<button class="slot" data-open="${esc(id)}">${miniThumb(r)}<span class="t">${title(r)}${sub?`<span class="tl-sub">${sub}</span>`:""}</span>${right||""}</button>`; };
+  const entry=e=>{
+    if(e.mine){ const r=state.recipes[e.recipeId];
+      const sub=[everyone?`${avatar(meP,"xs")}You`:"", r.rating?stars(r.rating):"", e.mult!==1?`${e.mult}× batch`:""].filter(Boolean).join(" · ");
+      return card(e.recipeId,"",sub); }
+    const sub=[`${avatar(e.who,"xs")}${esc(e.who.name||"Someone")}`, e.rating?stars(e.rating):"", e.mult!==1?`${e.mult}× batch`:""].filter(Boolean).join(" · ");
+    return `<button class="slot" data-owner="${esc(e.owner)}" data-rid="${esc(e.recipeId)}">${miniThumb({title:e.title,cover:e.cover,photos:e.firstPhoto?[e.firstPhoto]:[]})}<span class="t">${esc(e.title||"Untitled")}<span class="tl-sub">${sub}</span></span></button>`;
+  };
   // group by month, then by day
   const months=[]; for(const e of all){ const m=e.date.slice(0,7); let g=months[months.length-1]; if(!g||g.m!==m) months.push(g={m,days:[]}); let d=g.days[g.days.length-1]; if(!d||d.date!==e.date) g.days.push(d={date:e.date,items:[]}); d.items.push(e); }
-  el.innerHTML=`
+  el.innerHTML=`${row}
     <div class="stats">
-      <div class="stat"><b>${all.filter(e=>e.date.startsWith(ym)).length}</b><span>This month</span></div>
-      <div class="stat"><b>${all.filter(e=>e.date.startsWith(y)).length}</b><span>This year</span></div>
+      <div class="stat"><b>${mine.filter(e=>e.date.startsWith(ym)).length}</b><span>This month</span></div>
+      <div class="stat"><b>${mine.filter(e=>e.date.startsWith(y)).length}</b><span>This year</span></div>
       <div class="stat"><b>${tried.size}<small class="of"> / ${ids.length}</small></b><span>Recipes tried</span></div>
     </div>
     ${top.length?`<h3 class="tl-head">Most cooked</h3><div class="tl-top">${top.map(([id,n])=>card(id,`<span class="n">${n}×</span>`,state.recipes[id].rating?stars(state.recipes[id].rating):"")).join("")}</div>`:""}
+    ${everyone&&feed.failed?`<p class="hint feedhint">Showing just your cooks. Can't reach the server for everyone else's right now.</p>`:""}
     ${months.map(g=>{ const [yy,mm]=g.m.split("-").map(Number);
       return `<h3 class="tl-head">${MONTHS_LONG[mm-1]}${String(yy)===y?"":" "+yy}</h3><div class="feed">${g.days.map(d=>{ const dt=new Date(d.date+"T00:00");
         return `<div class="day"><div class="dn"><span class="w">${DAYS[(dt.getDay()+6)%7]}</span><span class="d">${dt.getDate()}</span></div>
-          <div class="slots">${d.items.map(e=>{ const r=state.recipes[e.recipeId]; const sub=[r.rating?stars(r.rating):"", e.mult!==1?`${e.mult}× batch`:""].filter(Boolean).join(" · ");
-            return card(e.recipeId,"",sub); }).join("")}</div></div>`; }).join("")}</div>`; }).join("")}`;
-  el.onclick=e=>{ const b=e.target.closest("[data-open]"); if(!b) return; state.detailId=b.dataset.open; state.mult=1; state.detailFrom="timeline"; show("detail"); };
+          <div class="slots">${d.items.map(entry).join("")}</div></div>`; }).join("")}</div>`; }).join("")}`;
+  el.onclick=timelineClick;
+}
+function timelineClick(e){
+  const w=e.target.closest("[data-who]"); if(w){ archivesWho.set(w.dataset.who); renderTimeline(); return; }
+  const p=e.target.closest("[data-person]"); if(p){ openPerson(p.dataset.person); return; }
+  const o=e.target.closest("[data-owner]"); if(o){ openTheirs(o.dataset.owner,o.dataset.rid,"timeline"); return; }
+  const b=e.target.closest("[data-open]"); if(!b) return; state.detailId=b.dataset.open; state.mult=1; state.detailFrom="timeline"; show("detail");
 }
 function slotSheet(k,ix){
   const day=planDay(k); const en=day.entries[ix]; if(!en) return;
@@ -1873,9 +2150,9 @@ const isStale=info=>info && (info.version!==APP.version || (info.commit!=="dev" 
 function fmtDate(isoDate){ const [y,m,d]=isoDate.split("-").map(Number); return `${d} ${MONTHS[m-1]} ${y}`; }
 async function openVersion(){
   const sh=openSheet(`<h3>Bourdain ${esc(APP.version)}</h3><p class="muted small" style="margin:0 0 10px">Build ${esc(APP.commit)}</p>
-    <div class="row verbtns"><button class="btn" data-act="export">Export my data</button><button class="btn ghost" data-act="close">Close</button></div>
+    <div class="row verbtns"><button class="btn" data-act="profile">Edit profile</button><button class="btn" data-act="export">Export my data</button><button class="btn ghost" data-act="close">Close</button></div>
     <div id="verBody"><p class="status"><span class="spin"></span>Checking the server…</p></div>`);
-  sheetActions(sh,{ close:closeSheet, export:exportData });
+  sheetActions(sh,{ close:closeSheet, export:exportData, profile:()=>profileSheet(false) });
   let info=null; try{ info=await api("/api/version",{signal:timeout(10000)}); }catch(e){ console.warn("version check failed",e); }
   const body=sh.querySelector("#verBody"); if(!sh.isConnected||!body) return; // another sheet opened meanwhile
   if(!info){ body.innerHTML=`<p class="vernote">Couldn't reach the server, so I can't check for a newer version or show the history. Try again when you're back on home Wi-Fi.</p>`; return; }
@@ -1919,6 +2196,7 @@ navigator.serviceWorker?.register?.("/sw.js").catch(()=>{});
   show(state.view); // sets the header date as well as rendering
   await store.init();
   if(!(state.view==="import"&&state.draft)) render(); // don't wipe a form the user started while it loaded
+  maybeWelcome();
   timers.tick(); timers.run(); // a timer may have ended while the app was closed
   if(store.online) checkForUpdate();
 })();

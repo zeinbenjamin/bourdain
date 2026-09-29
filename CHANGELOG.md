@@ -6,6 +6,13 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.1.0 — 2026-09-29
+- New: your profile. The first time you open this version, pick the name (and, if you like, a photo) other people will see. Change it any time with Edit profile, by tapping the Bourdain title.
+- Ready for sharing: once other people join, the Archives show everyone's cooks with their name and photo, with Everyone or Just me at the top. Tap someone to see their recipes and what they've cooked lately.
+- Their recipes open read-only, with Add to my recipes. That makes your own copy to cook, rate and change, marked "From Sam's recipes". Their recipe stays as it is.
+- Searching your recipes also shows matches from other people's books underneath.
+- Until someone else joins, everything else looks the same.
+
 ## 2.0.0 — 2026-09-29
 - Behind the scenes, everything in Bourdain now belongs to your own profile, ready for sharing it with a few other people later. Nothing looks or works differently.
 - New: Export my data. Tap the Bourdain title for one file with all your recipes, plan, pantry and their photos, to keep as a backup.
