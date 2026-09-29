@@ -170,6 +170,7 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .wk .note{display:block;font-family:var(--sans);font-size:12px;font-weight:500;color:var(--flame);margin-top:2px;visibility:hidden}
 .weeknav.current h2{color:var(--flame)}
 .weeknav.current .note{visibility:visible}
+.weeknav.current .btn{color:var(--flame);border-color:var(--flame)}
 .days{display:flex;flex-direction:column;gap:0}
 .day{display:grid;grid-template-columns:56px 1fr 44px;gap:12px;align-items:start;padding:12px 0;border-top:1px solid var(--line)}
 .day:last-child{border-bottom:1px solid var(--line)}
@@ -178,6 +179,9 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .dn .w{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:4px}
 .dn .d{font-family:var(--serif);font-weight:700;font-size:30px}
 .day.today .dn .w{color:var(--flame)}
+.day.today .slot{border-color:var(--flame)}
+/* nothing planned today: a filled red + as a nudge */
+.day.today.empty .addslot{background:var(--flame);border-color:var(--flame);color:var(--flame-ink)}
 .slots{display:flex;flex-direction:column;gap:6px;min-width:0}
 .slot{
   display:flex; align-items:center; gap:8px; background:var(--card); border:1px solid var(--line);
@@ -1076,7 +1080,7 @@ function renderPlan(){
       const r=state.recipes[e.recipeId];
       return `<button class="slot" data-slot="${k}" data-ix="${ix}">${miniThumb(r)}<span class="t">${esc(r?(r.title||"Untitled"):"(deleted recipe)")}</span></button>`;
     }).join("");
-    return `<div class="day ${k===today?"today":""}"><div class="dn"><span class="w">${n}</span><span class="d">${d.getDate()}</span></div>
+    return `<div class="day ${k===today?"today":""} ${day.entries.length?"":"empty"}"><div class="dn"><span class="w">${n}</span><span class="d">${d.getDate()}</span></div>
       <div class="slots">${slots}</div><button class="addslot" data-add="${k}" aria-label="Add a meal to ${n} ${d.getDate()}">+</button></div>`;
   }).join("");
   el.onclick=async e=>{

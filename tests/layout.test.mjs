@@ -86,6 +86,33 @@ try {
   await page.evaluate(() => { state.recipes.a.photos = ["d".repeat(32)]; renderPlan(); });
   const ph = await page.evaluate(() => { const i = document.querySelectorAll("#days .slot .mini")[2].querySelector("img"); return { src: i?.getAttribute("src"), fit: i && getComputedStyle(i).objectFit }; });
   check("plan: photo when there's no cover, cropped to the square", ph.src === "/api/photos/" + "d".repeat(32) && ph.fit === "cover", JSON.stringify(ph));
+  // this week in red: arrows, today's meals, and a filled + when today is empty (1.10.2)
+  const FLAME = "rgb(211, 7, 43)", WHITE = "rgb(255, 255, 255)";
+  const planLook = () => page.evaluate(() => {
+    const cs = (e) => e && getComputedStyle(e);
+    const today = document.querySelector("#days .day.today"), other = [...document.querySelectorAll("#days .day:not(.today)")];
+    const add = (d) => { const c = cs(d.querySelector(".addslot")); return { bg: c.backgroundColor, ink: c.color, line: c.borderTopColor }; };
+    return {
+      arrows: ["#prevWeek", "#nextWeek"].map((q) => ({ ink: cs(document.querySelector(q)).color, line: cs(document.querySelector(q)).borderTopColor })),
+      todaySlots: today ? [...today.querySelectorAll(".slot")].map((x) => cs(x).borderTopColor) : null,
+      otherSlots: other.flatMap((d) => [...d.querySelectorAll(".slot")].map((x) => cs(x).borderTopColor)),
+      todayAdd: today && add(today), otherAdds: other.map(add),
+    };
+  });
+  const k0 = await page.evaluate(() => iso(new Date()));
+  await page.evaluate((k) => { const o = Object.keys(state.plan).find((x) => x !== k && state.plan[x].entries.length); state.plan[k] = { date: k, entries: [{ recipeId: "a", servings: 2 }] }; renderPlan(); }, k0);
+  let look = await planLook();
+  check("plan (this week): ‹ and › are red, circle and arrow", look.arrows.every((a) => a.ink === FLAME && a.line === FLAME), JSON.stringify(look.arrows));
+  check("plan: today's meals are outlined in red, other days' aren't", look.todaySlots.length === 1 && look.todaySlots.every((c) => c === FLAME) && look.otherSlots.length > 0 && look.otherSlots.every((c) => c !== FLAME), JSON.stringify(look));
+  check("plan: today with a meal keeps the plain + circle", look.todayAdd.bg !== FLAME, JSON.stringify(look.todayAdd));
+  await page.evaluate((k) => { state.plan[k] = { date: k, entries: [] }; renderPlan(); }, k0);
+  look = await planLook();
+  check("plan: nothing planned today → a filled red + with a white +", look.todayAdd.bg === FLAME && look.todayAdd.line === FLAME && look.todayAdd.ink === WHITE, JSON.stringify(look.todayAdd));
+  check("plan: other empty days keep the plain + circle", look.otherAdds.every((a) => a.bg !== FLAME && a.ink === FLAME), JSON.stringify(look.otherAdds));
+  await page.click("#nextWeek");
+  look = await planLook();
+  check("plan (another week): arrows back to black, nothing red-filled", look.arrows.every((a) => a.ink !== FLAME && a.line !== FLAME) && look.todayAdd === null && look.otherAdds.every((a) => a.bg !== FLAME), JSON.stringify(look.arrows));
+  await page.click("#prevWeek");
   await page.click("#days .day .addslot");
   await page.waitForSelector(".sheet-bg.open");
   check("plan: '+' opens the recipe picker", await page.isVisible(".sheet-bg.open"));
