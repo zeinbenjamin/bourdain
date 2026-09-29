@@ -6,6 +6,10 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 1.10.4 — 2026-09-29
+- Plan: meals no longer sit in boxes, so there are fewer lines across the page. Today's meals no longer have a red outline.
+- Plan: fixed days with nothing planned sitting out of line with the rest of the week, a mistake from 1.10.2.
+
 ## 1.10.3 — 2026-09-29
 - Plan: tap the dates between the ‹ and › buttons to jump straight back to this week.
 

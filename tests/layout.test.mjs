@@ -118,11 +118,17 @@ try {
   await page.evaluate((k) => { const o = Object.keys(state.plan).find((x) => x !== k && state.plan[x].entries.length); state.plan[k] = { date: k, entries: [{ recipeId: "a", servings: 2 }] }; renderPlan(); }, k0);
   let look = await planLook();
   check("plan (this week): ‹ and › are red, circle and arrow", look.arrows.every((a) => a.ink === FLAME && a.line === FLAME), JSON.stringify(look.arrows));
-  check("plan: today's meals are outlined in red, other days' aren't", look.todaySlots.length === 1 && look.todaySlots.every((c) => c === FLAME) && look.otherSlots.length > 0 && look.otherSlots.every((c) => c !== FLAME), JSON.stringify(look));
+  // 1.10.4: no outline on any planned meal, today's included
+  const borders = await page.evaluate(() => [...document.querySelectorAll("#days .slot")].map((x) => getComputedStyle(x).borderTopWidth + " " + getComputedStyle(x).borderTopStyle));
+  check("plan: planned meals have no outline box, today's included", look.todaySlots.length === 1 && borders.length > 1 && borders.every((b) => b.startsWith("0px") || b.endsWith("none")), JSON.stringify(borders));
   check("plan: today with a meal keeps the plain + circle", look.todayAdd.bg !== FLAME, JSON.stringify(look.todayAdd));
   await page.evaluate((k) => { state.plan[k] = { date: k, entries: [] }; renderPlan(); }, k0);
   look = await planLook();
   check("plan: nothing planned today → a filled red + with a white +", look.todayAdd.bg === FLAME && look.todayAdd.line === FLAME && look.todayAdd.ink === WHITE, JSON.stringify(look.todayAdd));
+  // 1.10.4: days with nothing planned line up with the rest (they used to pick up the .empty message style)
+  const rows = await page.evaluate(() => [...document.querySelectorAll("#days .day")].map((d) => { const n = d.querySelector(".dn").getBoundingClientRect(), cs = getComputedStyle(d); return { left: Math.round(n.left), padTop: cs.paddingTop, align: cs.textAlign, line: cs.borderTopColor, meals: d.querySelectorAll(".slot").length, cls: d.className }; }));
+  const withMeal = rows.filter((r) => r.meals), without = rows.filter((r) => !r.meals);
+  check("plan: empty days line up with days that have meals (same indent, padding and rule)", withMeal.length && without.length && rows.every((r) => r.left === rows[0].left && r.padTop === rows[0].padTop && r.align === rows[0].align && r.line === rows[0].line) && !rows.some((r) => /\bempty\b/.test(r.cls)), JSON.stringify(rows));
   check("plan: other empty days keep the plain + circle", look.otherAdds.every((a) => a.bg !== FLAME && a.ink === FLAME), JSON.stringify(look.otherAdds));
   await page.click("#nextWeek");
   look = await planLook();
