@@ -33,6 +33,14 @@ services:
       OPENAI_API_KEY: "sk-REPLACE-ME"
       IMAGE_MODEL: "gpt-image-2"
       IMAGE_QUALITY: "medium"
+      # Sign-in through Cloudflare Access (2.3.0+). Leave these commented out until
+      # the Access application exists: without them every request is you, and
+      # anything arriving through Cloudflare is refused. See docs/multi-user.md.
+      # CF_ACCESS_TEAM: "your-team"           # from your-team.cloudflareaccess.com
+      # CF_ACCESS_AUD: "the-application-aud-tag"
+      # With sign-in on, requests that don't come through Cloudflare are you only
+      # from these networks (your home Wi-Fi, Tailscale). Anything else must sign in.
+      # TRUSTED_NETS: "192.168.1.0/24, 100.64.0.0/10"
       # Daily AI limits (2.2.0+) reset at midnight in this time zone. Without it, midnight UTC.
       TZ: "Australia/Sydney"
       DATA_DIR: "/data"

@@ -48,8 +48,8 @@ try {
     && u1.every((r) => r.input_tokens === 1000 && r.output_tokens === 500 && Math.abs(r.est_usd - want) < 1e-9 && r.outcome === "ok"), JSON.stringify(u1[0]));
   check("the summary adds it up per person and per kind", sum0.people[0].ai.today.import === 1 && sum0.people[0].ai.today.ideas === 2 && sum0.people[0].ai.month_calls === 4
     && sum0.month.calls === 4 && Math.abs(sum0.month.usd - 4 * want) < 1e-9 && sum0.month.byKind.find((k) => k.grp === "ideas")?.calls === 2, JSON.stringify(sum0.month));
-  check("defaults: 20 imports, 10 scans, 15 ideas, 5 covers a day, US$5 a month, the owner exempt",
-    JSON.stringify(sum0.defaults) === JSON.stringify({ import: 20, scan: 10, ideas: 15, cover: 5, monthly_usd: 5, admin_exempt: true }), JSON.stringify(sum0.defaults));
+  check("defaults: 20 imports, 10 scans, 15 ideas, 5 covers a day, US$5 a month, 500 MB of photos, the owner exempt",
+    JSON.stringify(sum0.defaults) === JSON.stringify({ import: 20, scan: 10, ideas: 15, cover: 5, monthly_usd: 5, storage_mb: 500, admin_exempt: true }), JSON.stringify(sum0.defaults));
 
   // --- limits: the owner is exempt by default
   let r = await putLimits({ defaults: { import: 1 } });

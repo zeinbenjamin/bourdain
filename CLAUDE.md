@@ -2,7 +2,7 @@
 
 A self-hosted cooking app: import recipes from links, screenshots or screen
 recordings, plan the week, track the pantry. Runs on a TrueNAS SCALE box at
-home. Built for Zein, and still used only by Zein. Since 2.0.0 every stored row
+home. Built for Zein, and still used only by Zein until the pilot starts. Since 2.0.0 every stored row
 has an owner, ready for a small pilot group; the plan, stage by stage, is in
 `docs/multi-user.md`.
 
@@ -235,6 +235,9 @@ people (see **Other people** below).
   never the contents: recipes added, edited, cooked, deleted, copied; plan and
   pantry changes; profile; every AI job. A repeat within a minute is folded.
   The daily sweep prunes activity after 183 days and `ai_usage` after 400.
+- **Photo storage** (2.3): uploads are recorded in `photos (id, owner, bytes)`,
+  and each person's total is capped by `storage_mb` (default 500) in the same
+  limits, 413 `storage_full` over it. Photos from before 2.3 aren't in the table.
 
 **The owner's view (2.2)** (`openAdmin`, `renderAdmin`, `view-admin`): a long
 press (600ms) on the version sheet's heading, only when `store.me.is_admin`.
@@ -274,6 +277,8 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   driven per call by `setMode({claude, image, scan, claudeDelay, imageDelay})`
   and logs what was sent (`MOCK_CLAUDE_REQ`, `MOCK_IMG_REQ`, `MOCK_SCAN`).
   Nothing in the tests calls a real API or needs a key.
+- `CF_ENV`, `viaCf(email)` and `cfToken(email, opts)` in `tests/lib.mjs` sign
+  requests in the way Cloudflare does (see **Signing in** under Gotchas).
 - Suites: `server` (headers, errors, codes, cover pipeline, sweep), `offline`
   (outbox and photo queue across server outages), `loading` (slow Wi-Fi, Stop,
   version sheet), `covers` (cover UI, import errors, shrinking), `review`
@@ -286,7 +291,9 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   data, setting aside and picking back up, Export), `people` (profiles, the
   welcome, People row, Everyone / Just me, read-only recipes, Add to my recipes,
   search across books, the feed), `ai` (jobs, prompts on the server, usage and
-  cost, limits, one at a time, activity, the owner's view), `migration` (the 1 → 2
+  cost, limits, one at a time, activity, the owner's view), `signin` (Cloudflare
+  tokens good and bad, trusted networks, each person's data their own, limits and
+  the owner's view for others, photo storage, #14, the Signed out bar), `migration` (the 1 → 2
   conversion, refusing to start, Cloudflare refused, `/api/me`, the export
   zip), `scan`,
   `video`.
@@ -341,8 +348,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v30"`
-in `public/sw.js` → `v31`, `v32`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v31"`
+in `public/sw.js` → `v32`, `v33`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -439,11 +446,31 @@ the app.
 Only bump it for a stored-data change with a migration, and never without the
 steps in that doc.
 
-**Nothing through Cloudflare yet.** Until 2.3 checks Cloudflare's sign-in,
-every `/api` request is the owner. Anything carrying Cloudflare headers
-(`Cf-Ray`, `Cf-Connecting-Ip`, `Cf-Access-Jwt-Assertion`) gets 403
-`cf_not_set_up`, and the phone says to use the home address. Don't loosen this
-before 2.3.
+**Signing in (2.3).** The middleware under "who is asking" in `server.js`
+decides `req.user` for every `/api` request except `/api/health` and
+`/api/version`:
+- **Not set up** (`CF_ACCESS_TEAM` / `CF_ACCESS_AUD` unset): every request is the
+  owner, and anything carrying Cloudflare headers (`Cf-Ray`,
+  `Cf-Connecting-Ip`, `Cf-Access-Jwt-Assertion`) gets 403 `cf_not_set_up`.
+  This is what every suite except `signin` runs as.
+- **Set up:** a `Cf-Access-Jwt-Assertion` token is checked (`verifyCfToken`:
+  RS256 against the team's certs, `iss`, `aud`, `exp`, an email) and names the
+  person; a new email gets a `users` row. A bad token, or Cloudflare headers with
+  no token, is 401 `signed_out`. No Cloudflare headers at all: the owner if the
+  socket address is in `TRUSTED_NETS`, else 401 `not_trusted`. Can't fetch the
+  certs: 503 `signin_unavailable`.
+- **Never** trust `X-Forwarded-For`, a plain email header, or a network for a
+  request carrying Cloudflare headers: the tunnel reaches the app from the NAS's
+  own address, so that would make every visitor the owner.
+- **Tests sign in for real.** `tests/lib.mjs` holds a signing key; the fake
+  Cloudflare in `mock-apis.mjs` serves its public half, and `viaCf(email)` makes
+  the headers. There is no test-only way in, and there must never be one.
+- **On the phone**, `api()` doesn't follow redirects: an expired Cloudflare login
+  comes back as a redirect or an HTML page, and `signinLost()` turns that (and
+  401 `signed_out`/`not_trusted`) into `signin.lost()`: the red `#signinBar`
+  ("Signed out. Tap to sign in again", which reloads) and "Signed out" in the
+  header, never "Offline". `keepForLater(e)` stops the outbox and photo queue
+  from dropping anything over a sign-in error, as they would for another 4xx.
 
 **Adding fields is safe; renaming is not.** Old recipes simply lack new fields —
 treat missing as empty. Renaming an existing field orphans every stored recipe
@@ -591,5 +618,5 @@ without the review step.
 Found in a review on 2026-09-24 and not yet fixed. Remove each line once it
 is fixed.
 
-- **`/api/fetch` can reach LAN addresses** (#14). Only matters if the app is ever
-  exposed beyond the home network.
+- None open. (#14, `/api/fetch` reaching LAN addresses, was fixed in 2.3.0:
+  `publicGet` checks every resolved address at connect time and every redirect.)

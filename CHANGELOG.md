@@ -6,6 +6,14 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.3.0 — 2026-09-29
+- Ready for the pilot: once you've set up Cloudflare's sign-in, Bourdain opens from outside home too. Each person signs in with their email and a one-time code, and gets their own book.
+- At home the app works as before, without signing in, from the networks you list.
+- If a sign-in runs out, a red bar says "Signed out. Tap to sign in again." It never says Offline, and anything you changed waits on the phone and syncs once you're back in.
+- Recipe links that point inside a home network (like 192.168.1.1) are refused.
+- Each person can keep up to 500 MB of photos. You're not held to it; change it in the owner's view.
+- The owner's view shows how the server recognised your phone, so you can check the setup.
+
 ## 2.2.0 — 2026-09-29
 - Ready for sharing: each person now has a daily AI allowance (20 imports, 10 fridge scans, 15 recipe ideas and 5 covers a day) and an estimated US$5 a month. You're not held to them. Over a limit, the app says which one and when there's more.
 - One AI job at a time per person, so a double tap can't spend twice.

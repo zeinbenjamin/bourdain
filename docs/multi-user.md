@@ -454,6 +454,50 @@ As planned, with these decisions made while building it:
 - **Still to do at the invite stage:** the note for pilot users saying their
   activity and AI usage are logged.
 
+## What 2.3.0 built
+
+As planned, with these decisions made while building it:
+
+- **Off until set up.** Without `CF_ACCESS_TEAM` and `CF_ACCESS_AUD`, 2.3
+  behaves exactly like 2.2: every request is Zein, and Cloudflare traffic is
+  refused with `cf_not_set_up`. So deploying 2.3 changes nothing on its own.
+- **The token check** (`verifyCfToken`): RS256 only, signed by a key from
+  `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs` (cached for an
+  hour, fetched again for a key it hasn't seen, at most once a minute), the
+  issuer, the AUD tag, not expired (a minute's slack), and an email (a service
+  token has none, and is refused). Only the header is read, not the cookie.
+- **Anyone Cloudflare lets in is a member.** A new email gets an account on its
+  first request, and the welcome asks their name. Cloudflare's allow-list is
+  the membership list, as decided. The email matching `OWNER_EMAIL` is Zein.
+- **The home network.** A request with **no Cloudflare headers at all** is Zein
+  if its address is in `TRUSTED_NETS`. The rule that makes the NAS-address
+  worry below safe: anything that arrived through the tunnel carries
+  Cloudflare's headers, and those requests always need a token, whatever
+  address they come from. `TRUSTED_NETS` empty (the default) means no network
+  is trusted and everyone signs in. `X-Forwarded-For` is never read.
+- **Checking it on the NAS:** the owner's view has a **Signing in** section
+  showing the setup, the address the server saw for this phone, whether it came
+  through Cloudflare, and how it was recognised.
+- **Signed out:** 401 `signed_out` for a bad or missing token through
+  Cloudflare, 401 `not_trusted` for an unknown network, 503
+  `signin_unavailable` when Cloudflare's keys can't be fetched. On the phone,
+  a redirect to Cloudflare's login or an HTML page in place of JSON counts as
+  signed out too.
+- **#14:** `publicGet` replaces `fetch` in the link fetcher. It uses Node's
+  `http`/`https` with a lookup that refuses private, loopback, link-local,
+  CGNAT, multicast and documentation ranges (IPv4 and IPv6, including
+  IPv4-mapped, NAT64, 6to4 and Teredo forms) at connect time, so a name can't
+  change address between the check and the connection. Redirects are followed
+  one hop at a time (up to 5), each checked. Pages over 5 MB are cut off.
+- **Photo storage:** a `photos` table records who uploaded what from 2.3 on;
+  `storage_mb` (default 500) caps each person's total, and the owner is exempt
+  while "No limits for you" is ticked. Photos from before 2.3 count for no one.
+- **Tests:** `signin` signs in the real way, with a key the fake Cloudflare
+  serves. The 403 for the owner's view is now tested with a real second person.
+  A redirect from a public site to a private address can't be tested without
+  a public test server; it goes through the same per-hop check as the first
+  address, which is tested.
+
 ## Stages
 
 Each stage ships and gets used before the next.
@@ -463,8 +507,8 @@ Each stage ships and gets used before the next.
 | **1.10.1** ✅ | Groundwork: the old app ignores 2.0-shaped data (needed for rollback). Shipped; see "What 1.10.1 set up". |
 | **2.0.0** ✅ | The migration. Owners on every row, users table, `/api/me`, per-user offline copy, Export. Still only Zein: every request is Zein, and Cloudflare traffic is refused until 2.3. The app looks the same. Shipped 2026-09-29. |
 | **2.1.0** ✅ | Shipped 2026-09-29; see "What 2.1.0 built". Everything about seeing other people (merged from the planned 2.1 and 2.2 on 2026-09-29, since both change the Archives): profiles (name, photo, welcome screen), People row, read-only recipes, Add to my recipes, search across everyone's books, and the Archives feed with names and avatars, Everyone / Just me. |
-| **2.2.0** 🔨 | Built 2026-09-29, waiting to be merged; see "What 2.2.0 built". `/api/ai` with server-side prompts, usage log, limits, admin screen, activity log. |
-| **2.3.0** | #14, upload cap, "Signed out" handling, Cloudflare token verification. |
+| **2.2.0** ✅ | Shipped 2026-09-29; see "What 2.2.0 built". `/api/ai` with server-side prompts, usage log, limits, admin screen, activity log. |
+| **2.3.0** 🔨 | Built 2026-09-29, waiting to be merged; see "What 2.3.0 built". #14, upload cap, "Signed out" handling, Cloudflare token verification. |
 | — | Set up Cloudflare Tunnel + Access (no code). Zein signs in through it first, then with a second test email, then invites the pilot users. |
 
 ## Setup Zein does (no code)
@@ -475,15 +519,23 @@ Each stage ships and gets used before the next.
   (Self-hosted, public hostname `bourdain.<domain>`) with an email allow-list of
   Zein only, and a one-time-PIN login.
 - **At 2.3.0, in this order:**
-  1. Deploy 2.3.0.
-  2. Add `CF_ACCESS_TEAM` / `CF_ACCESS_AUD` to the YAML, and redeploy.
-  3. **Only then** add `bourdain.<domain>` as a public hostname on Zein's
-     existing tunnel (the one the media server uses; no second `cloudflared`),
-     pointing at `http://<NAS IP>:8080`.
-  4. Test on mobile data, with Zein's email and a second one. Then add the
-     pilot users' emails.
-  - The team name and the Access application's audience (AUD) tag are the
-    values for `CF_ACCESS_TEAM` / `CF_ACCESS_AUD`.
+  1. Deploy 2.3.0. Nothing changes yet: sign-in is off until step 2.
+  2. Add to the YAML, and redeploy:
+     - `CF_ACCESS_TEAM` (the `<team>` in `<team>.cloudflareaccess.com`) and
+       `CF_ACCESS_AUD` (the Access application's AUD tag);
+     - `TRUSTED_NETS`: the home Wi-Fi's range (e.g. `192.168.1.0/24`) and
+       Tailscale's `100.64.0.0/10` if used. Not the Docker network.
+  3. At home, open the owner's view → **Signing in**. It should say
+     "Recognised by: home network", with the phone's own address (e.g.
+     192.168.1.23). If the address is a `172.x` one, Docker is hiding the real
+     address; trust that only if every device that can reach port 8080 is yours.
+  4. **Only then** add `bourdain.<domain>` as a public hostname on the existing
+     tunnel (the one the media server uses; no second `cloudflared`), pointing
+     at `http://<NAS IP>:8080`.
+  5. On mobile data, open `https://bourdain.<domain>`, sign in, and check the
+     owner's view says "Came through Cloudflare: Yes" and "Recognised by:
+     Cloudflare". Then with a second email. Then add the pilot users' emails,
+     with a note that activity and AI usage are logged.
   - Set the session length (e.g. 30 days) so pilot users rarely see the login.
 - **Keep:** daily snapshots and the off-NAS backup.
 - **Take:** a manual snapshot before 2.0.0.
