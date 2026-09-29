@@ -20,6 +20,9 @@ try {
   check("/api/health stays open", (await call("GET", "/api/health")).status === 200);
   let r = await call("GET", "/api/state");
   check("no token, not through Cloudflare, not a trusted network: 401 not_trusted", r.status === 401 && r.j?.code === "not_trusted", JSON.stringify(r));
+  check("…saying which address it saw, so a wrong TRUSTED_NETS can be spotted", /^(127\.0\.0\.1|::1)$/.test(r.j?.seen), JSON.stringify(r.j));
+  check("…and logging it once, with the trusted list", /refused a request from (127\.0\.0\.1|::1) with no Cloudflare sign-in: it isn't in TRUSTED_NETS \(empty\)/.test(s.log()) && s.log().split("refused a request from").length === 2);
+  await call("GET", "/api/state");
   r = await call("GET", "/api/state", viaCf(undefined));
   check("through Cloudflare with no token (Access not guarding it, or expired): 401 signed_out", r.status === 401 && r.j?.code === "signed_out", JSON.stringify(r));
   r = await call("GET", "/api/me", OWNER);
@@ -159,10 +162,13 @@ try {
   await page.waitForFunction(() => !store.loading); await sleep(500);
   check("after signing in again: no bar, and the waiting change reaches the server", !(await page.isVisible("#signinBar")) && (await (await fetch(s.url + "/api/state")).json()).recipes.w1?.title === "Written while signed out");
 
-  await page.route("**/api/state", (rt) => rt.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "x", code: "not_trusted" }) }));
+  await page.route("**/api/state", (rt) => rt.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "x", code: "not_trusted", seen: "172.16.0.1" }) }));
+  await page.route("**/api/admin/summary", (rt) => rt.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "x", code: "not_trusted", seen: "172.16.0.1" }) }));
   await page.reload(); await page.waitForFunction(() => !store.loading);
-  check("an untrusted network gets its own words", /doesn't recognise this network/.test(await page.textContent("#signinBar")));
-  await page.unroute("**/api/state");
+  check("an untrusted network gets its own words, with the address the server saw", /doesn't recognise this network \(it sees this device as 172\.16\.0\.1\)/.test(await page.textContent("#signinBar")), await page.textContent("#signinBar"));
+  await page.evaluate(() => openAdmin()); await page.waitForFunction(() => state.admin);
+  check("…and the owner's view says the same, not 'check the server logs'", /it sees this device as 172\.16\.0\.1/.test(await page.textContent("#view-admin")) && !/server logs/.test(await page.textContent("#view-admin")), await page.textContent("#view-admin"));
+  await page.unroute("**/api/state"); await page.unroute("**/api/admin/summary");
   await page.reload(); await page.waitForFunction(() => !store.loading);
 
   // the link fetcher's refusal, in the import form

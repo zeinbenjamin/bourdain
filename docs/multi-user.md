@@ -529,6 +529,9 @@ Each stage ships and gets used before the next.
      "Recognised by: home network", with the phone's own address (e.g.
      192.168.1.23). If the address is a `172.x` one, Docker is hiding the real
      address; trust that only if every device that can reach port 8080 is yours.
+     If the page shows a red "doesn't recognise this network" bar instead, the
+     bar (since 2.3.1) says which address the server saw; compare it with
+     `TRUSTED_NETS`. The app's log has the same line.
   4. **Only then** add `bourdain.<domain>` as a public hostname on the existing
      tunnel (the one the media server uses; no second `cloudflared`), pointing
      at `http://<NAS IP>:8080`.
