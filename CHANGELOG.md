@@ -6,6 +6,12 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 1.9.0 — 2026-09-29
+- New Timeline tab: everything you've cooked, newest first, grouped by month and day, with its stars and batch size.
+- At the top: how many times you've cooked this month and this year, how many of your recipes you've tried, and your three most cooked.
+- Tap any cook to open the recipe. Back takes you to the Timeline.
+- It fills in from the cook log you already have, so every cook you've logged is already there.
+
 ## 1.8.0 — 2026-09-29
 - The Import tab is gone. Tap + on Recipes and choose Import a recipe (a link, pasted text, screenshots or a screen recording) or Write one yourself.
 - If you leave an import before saving it, + offers to carry on with it, so it isn't lost.

@@ -74,7 +74,7 @@ section.view.active{display:block}
 .tabs{
   position:fixed; left:0; right:0; bottom:0; z-index:5;
   background:var(--card); border-top:1px solid var(--line);
-  display:grid; grid-template-columns:repeat(3,1fr);
+  display:grid; grid-template-columns:repeat(4,1fr);
   padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));
 }
 .tabs button{
@@ -185,6 +185,22 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .slot .mini.cover img{object-fit:contain}
 .slot .t{flex:1;min-width:0;font-family:var(--serif);font-weight:600;font-size:16px;line-height:1.25;overflow-wrap:anywhere}
 .addslot{width:44px;height:44px;border:1px solid var(--line);background:none;border-radius:999px;padding:0;color:var(--flame);font-family:var(--sans);font-size:24px;font-weight:400;line-height:1}
+
+/* Timeline */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--rule);border-bottom:1px solid var(--line);margin-bottom:18px}
+.stat{padding:10px 0 12px;text-align:center}
+.stat+.stat{border-left:1px solid var(--line)}
+.stat b{display:block;font-family:var(--serif);font-size:30px;font-weight:700;line-height:1.1}
+.stat .of{font-size:16px;font-weight:600;color:var(--ink-3)}
+.stat span{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--ink-3)}
+.tl-head{font-family:var(--sans);font-size:13px;letter-spacing:.02em;text-transform:uppercase;font-weight:700;margin:22px 0 0;padding-bottom:5px;border-bottom:1px solid var(--rule)}
+.tl-head:first-child{margin-top:0}
+.tl-top{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.slot .n{font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ink-2);white-space:nowrap}
+.slot .tl-sub{display:block;font-family:var(--sans);font-size:12px;font-weight:400;color:var(--ink-3);margin-top:2px}
+.slot .tl-sub .mstars{font-size:12px}
+.feed .day{grid-template-columns:56px 1fr}
+.feed .day:first-of-type{border-top:0}
 
 /* Picker sheet */
 .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:20;display:none}
@@ -400,6 +416,9 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
     <div id="pantryList"></div>
   </section>
 
+  <!-- TIMELINE -->
+  <section class="view" id="view-timeline"></section>
+
   <!-- IMPORT -->
   <section class="view" id="view-import">
     <div id="importForm">
@@ -440,6 +459,8 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
     <svg viewBox="0 0 24 24"><path d="M4 4h12a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2V4z"/><path d="M4 4v14a2 2 0 0 0 2 2h12"/><path d="M8 8h6M8 12h6"/></svg>Recipes</button>
   <button data-view="plan">
     <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Plan</button>
+  <button data-view="timeline">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Timeline</button>
   <button data-view="pantry">
     <svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M5 12h14M10 7v2M10 15v2"/></svg>Pantry</button>
 </nav>
@@ -612,8 +633,9 @@ function sourceType(u){ const h=hostOf(u); if(/instagram/.test(h))return "instag
 /* ---------- navigation ---------- */
 function show(view){
   state.view=view;
+  if(view!=="detail"&&view!=="cook") state.detailFrom=null; // set by the Timeline so the recipe's Back returns there
   document.querySelectorAll("section.view").forEach(s=>s.classList.toggle("active", s.id==="view-"+view));
-  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.view===view || ((view==="detail"||view==="cook"||view==="import")&&b.dataset.view==="recipes")));
+  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.view===view || ((view==="detail"||view==="cook"||view==="import")&&b.dataset.view===(state.detailFrom||"recipes"))));
   const sub=document.getElementById("topSub");
   const now=new Date(); sub.textContent = `${DAYS[(now.getDay()+6)%7]} ${now.getDate()} ${MONTHS[now.getMonth()]}`;
   document.getElementById("main").scrollTop=0;
@@ -629,6 +651,7 @@ function render(){
   if (state.view==="plan") renderPlan();
   if (state.view==="shop") renderShop();
   if (state.view==="pantry") renderPantry();
+  if (state.view==="timeline") renderTimeline();
   if (state.view==="import") renderImport();
   if (state.view==="cook") renderCook();
 }
@@ -697,7 +720,7 @@ function renderDetail(){
   const t=(r.prep_min||0)+(r.cook_min||0);
   const meta=[r.servings?`Serves ${r.servings}`:null, r.prep_min?`${r.prep_min} min prep`:null, r.cook_min?`${r.cook_min} min cook`:null].filter(Boolean).join(" · ");
   el.innerHTML=`
-    <div class="detail-head"><button class="btn small ghost" id="back">‹ Recipes</button>
+    <div class="detail-head"><button class="btn small ghost" id="back">‹ ${state.detailFrom==="timeline"?"Timeline":"Recipes"}</button>
       <div class="row"><button class="btn small" id="edit">Edit</button><button class="btn small danger" id="del">Delete</button></div></div>
     <h2>${esc(r.title)}</h2>
     <div class="meta">${esc(meta)}</div>
@@ -733,7 +756,7 @@ function renderDetail(){
   paintIng();
   el.querySelector("#multDown").onclick=()=>{ state.mult=Math.max(0.5,(state.mult||1)-0.5); paintIng(); };
   el.querySelector("#multUp").onclick=()=>{ state.mult=Math.min(10,(state.mult||1)+0.5); paintIng(); };
-  el.querySelector("#back").onclick=()=>show("recipes");
+  el.querySelector("#back").onclick=()=>show(state.detailFrom||"recipes");
   el.querySelector("#edit").onclick=()=>{ state.editingId=state.detailId; state.draft=JSON.parse(JSON.stringify(r)); show("import"); };
   el.querySelector("#del").onclick=()=>{
     const sh=openSheet(`<h3>Delete "${esc(r.title)}"?</h3><p class="muted small">It will also come off any days it's planned on.</p>
@@ -1032,6 +1055,45 @@ function renderPlan(){
   };
   const n=Object.keys(state.recipes).length;
   document.getElementById("planHint").textContent = n? "Tap a meal to change serves, open it, or take it off the day." : "Import some recipes first, then drop them into days here.";
+}
+/* ---------- timeline ----------
+   Every finished cook, newest first, read from each recipe's `cooks`. Nothing
+   is stored for it. Each entry carries `who` so a shared feed can add other
+   people's cooks later without changing how the page is built. */
+const MONTHS_LONG=["January","February","March","April","May","June","July","August","September","October","November","December"];
+function timelineEntries(){
+  const out=[];
+  for(const [id,r] of Object.entries(state.recipes)) for(const c of (r.cooks||[])) if(c&&c.date) out.push({recipeId:id, date:c.date, at:c.at||c.date, mult:c.mult||1, who:"me"});
+  return out.sort((a,b)=>b.date.localeCompare(a.date)||String(b.at).localeCompare(String(a.at)));
+}
+function renderTimeline(){
+  const el=document.getElementById("view-timeline"), all=timelineEntries();
+  if(!all.length){
+    el.innerHTML = store.loading ? `<div class="empty"><span class="spin"></span>Loading your cooks…</div>`
+      : `<div class="empty"><h3>Nothing cooked yet</h3>Open a recipe and tap Cook this. Each time you finish, it shows up here with the date.</div>`;
+    return;
+  }
+  const now=new Date(), ym=iso(now).slice(0,7), y=ym.slice(0,4);
+  const ids=Object.keys(state.recipes), tried=new Set(all.map(e=>e.recipeId));
+  const count={}; for(const e of all) count[e.recipeId]=(count[e.recipeId]||0)+1;
+  const top=Object.entries(count).filter(([,n])=>n>1).sort((a,b)=>b[1]-a[1]||lastCooked(state.recipes[b[0]]).localeCompare(lastCooked(state.recipes[a[0]]))).slice(0,3);
+  const title=r=>esc(r.title||"Untitled");
+  const card=(id,right,sub)=>{ const r=state.recipes[id]; return `<button class="slot" data-open="${id}">${miniThumb(r)}<span class="t">${title(r)}${sub?`<span class="tl-sub">${sub}</span>`:""}</span>${right||""}</button>`; };
+  // group by month, then by day
+  const months=[]; for(const e of all){ const m=e.date.slice(0,7); let g=months[months.length-1]; if(!g||g.m!==m) months.push(g={m,days:[]}); let d=g.days[g.days.length-1]; if(!d||d.date!==e.date) g.days.push(d={date:e.date,items:[]}); d.items.push(e); }
+  el.innerHTML=`
+    <div class="stats">
+      <div class="stat"><b>${all.filter(e=>e.date.startsWith(ym)).length}</b><span>This month</span></div>
+      <div class="stat"><b>${all.filter(e=>e.date.startsWith(y)).length}</b><span>This year</span></div>
+      <div class="stat"><b>${tried.size}<small class="of"> / ${ids.length}</small></b><span>Recipes tried</span></div>
+    </div>
+    ${top.length?`<h3 class="tl-head">Most cooked</h3><div class="tl-top">${top.map(([id,n])=>card(id,`<span class="n">${n}×</span>`,state.recipes[id].rating?stars(state.recipes[id].rating):"")).join("")}</div>`:""}
+    ${months.map(g=>{ const [yy,mm]=g.m.split("-").map(Number);
+      return `<h3 class="tl-head">${MONTHS_LONG[mm-1]}${String(yy)===y?"":" "+yy}</h3><div class="feed">${g.days.map(d=>{ const dt=new Date(d.date+"T00:00");
+        return `<div class="day"><div class="dn"><span class="w">${DAYS[(dt.getDay()+6)%7]}</span><span class="d">${dt.getDate()}</span></div>
+          <div class="slots">${d.items.map(e=>{ const r=state.recipes[e.recipeId]; const sub=[r.rating?stars(r.rating):"", e.mult!==1?`${e.mult}× batch`:""].filter(Boolean).join(" · ");
+            return card(e.recipeId,"",sub); }).join("")}</div></div>`; }).join("")}</div>`; }).join("")}`;
+  el.onclick=e=>{ const b=e.target.closest("[data-open]"); if(!b) return; state.detailId=b.dataset.open; state.mult=1; state.detailFrom="timeline"; show("detail"); };
 }
 function slotSheet(k,ix){
   const day=planDay(k); const en=day.entries[ix]; if(!en) return;
