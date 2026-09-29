@@ -100,6 +100,21 @@ try {
   await page.click("#edit");
   const handle = await box(".ingrow .h");
   check("edit form: drag handle on one line", handle.h < 30, JSON.stringify(handle));
+  // ingredient rows read as separate cards (1.8.0)
+  await page.click("#addIng"); await page.fill(".ingrow:nth-child(2) [data-f=item]", "butter");
+  const ing = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll(".ingrow")], r = rows.map((x) => x.getBoundingClientRect()), cs = getComputedStyle(rows[0]);
+    const bodyBg = getComputedStyle(document.body).backgroundColor, x = rows[0].querySelector(".x").getBoundingClientRect();
+    const sel = rows[0].querySelector("[data-f=unit]"), scs = getComputedStyle(sel), c = document.createElement("canvas").getContext("2d"); c.font = `${scs.fontSize} ${scs.fontFamily}`;
+    return { gap: r[1].top - r[0].bottom, bg: cs.backgroundColor, bodyBg, border: cs.borderTopWidth + " " + cs.borderTopStyle, x: { w: x.width, h: x.height, right: x.right, rowRight: r[0].right },
+      unitFits: c.measureText("whole").width <= sel.clientWidth - parseFloat(scs.paddingLeft) - parseFloat(scs.paddingRight) - 20, inputBg: getComputedStyle(rows[0].querySelector("[data-f=item]")).backgroundColor };
+  });
+  check("edit form: ingredients are grey cards with a border", ing.bg !== ing.bodyBg && ing.border === "1px solid" && ing.inputBg === ing.bodyBg, JSON.stringify(ing));
+  check("edit form: at least 8px between ingredient cards", ing.gap >= 8, `${ing.gap}px`);
+  check("edit form: ingredient × is 44px and stays inside its card", Math.round(ing.x.w) >= 44 && Math.round(ing.x.h) >= 44 && ing.x.right <= ing.x.rowRight + 0.5, JSON.stringify(ing.x));
+  check("edit form: unit box fits 'whole'", ing.unitFits);
+  const qtyFits = await page.evaluate(() => { const q = document.querySelector(".ingrow [data-f=quantity]"), old = q.value; q.value = "1000"; const ok = q.scrollWidth <= q.clientWidth; q.value = old; return ok; });
+  check("edit form: quantity box fits '1000'", qtyFits);
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
 } catch (e) { finish(e); } finally { await b?.browser.close(); await s?.cleanup(); }

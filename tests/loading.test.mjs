@@ -1,6 +1,6 @@
 // Opening the app on slow or flaky Wi-Fi: loading states, the service worker's
 // fallback, import Stop, the Plan picker with an untitled recipe, and the version sheet.
-import { suite, startServer, slowProxy, openBrowser, swCacheName, sleep } from "./lib.mjs";
+import { suite, startServer, slowProxy, openBrowser, swCacheName, sleep, addRecipe } from "./lib.mjs";
 
 const { check, finish } = suite("loading");
 let s, px, b;
@@ -58,7 +58,7 @@ try {
 
   // --- import Stop
   s.setMode({ claudeDelay: 8000 }); s.clearLog();
-  await page.click('#tabs button[data-view="import"]'); await page.fill("#srcText", "1 leek. Cook it.");
+  await addRecipe(page, "import"); await page.fill("#srcText", "1 leek. Cook it.");
   await page.click("#btnParse"); await page.waitForSelector("#stopParse"); await sleep(1000);
   await page.click("#stopParse"); await sleep(700);
   check("Stop: says it stopped", /Stopped\. Nothing was imported\./.test(await page.textContent("#importStatus")));

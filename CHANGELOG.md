@@ -6,6 +6,11 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 1.8.0 — 2026-09-29
+- The Import tab is gone. Tap + on Recipes and choose Import a recipe (a link, pasted text, screenshots or a screen recording) or Write one yourself.
+- If you leave an import before saving it, + offers to carry on with it, so it isn't lost.
+- When editing a recipe, each ingredient sits in its own grey box with space between, so the rows are easy to tell apart. The × to remove one is easier to tap, and the unit and amount boxes no longer cut off "whole" or "1000".
+
 ## 1.7.7 — 2026-09-27
 - Plan: meals no longer show how many they serve, so the week is less crowded. Tap a meal to see or change it.
 

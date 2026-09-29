@@ -1,6 +1,6 @@
 // Cover illustrations in the app, import error messages, and screenshot shrinking.
 import sharp from "sharp";
-import { suite, startServer, openBrowser, openApp, sleep } from "./lib.mjs";
+import { suite, startServer, openBrowser, openApp, sleep, addRecipe } from "./lib.mjs";
 
 const { check, finish } = suite("covers & imports");
 let s, b;
@@ -36,7 +36,7 @@ try {
   await page.click('#sheet [data-act="stop"]');
 
   // --- cover on the review screen keeps unsaved edits
-  s.setMode({}); await page.click('#tabs button[data-view="import"]'); await page.fill("#srcText", "2 chicken thighs, cook them");
+  s.setMode({}); await addRecipe(page, "import"); await page.fill("#srcText", "2 chicken thighs, cook them");
   await page.click("#btnParse"); await page.waitForSelector("#revCover");
   await page.fill("#fTitle", "Mock donburi (edited)");
   await page.click("#revCover"); await page.waitForSelector(".coverbox img", { timeout: 15000 });
@@ -46,7 +46,7 @@ try {
   check("review: saved recipe has the cover", imported && /^[a-f0-9]{32}$/.test(imported.cover || ""));
 
   // --- import error messages
-  await page.click('#tabs button[data-view="import"]');
+  await addRecipe(page, "import");
   for (const [mode, re] of [["max_tokens", /too long to finish in one reply/], ["credit", /out of credit/], ["529", /overloaded/]]) {
     s.setMode({ claude: mode }); await page.fill("#srcText", "some recipe text here"); await page.click("#btnParse");
     await page.waitForFunction(() => document.querySelector("#importStatus").classList.contains("err"));

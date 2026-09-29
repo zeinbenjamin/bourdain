@@ -74,7 +74,7 @@ section.view.active{display:block}
 .tabs{
   position:fixed; left:0; right:0; bottom:0; z-index:5;
   background:var(--card); border-top:1px solid var(--line);
-  display:grid; grid-template-columns:repeat(4,1fr);
+  display:grid; grid-template-columns:repeat(3,1fr);
   padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));
 }
 .tabs button{
@@ -225,12 +225,13 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .thumbs img{width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
 .status{margin-top:12px;font-family:var(--sans);font-size:13px;color:var(--ink-2)}
 .status.err{color:var(--red)}
-.ingrow{display:grid;grid-template-columns:22px 56px 72px 1fr 28px;gap:6px;margin-bottom:6px;align-items:center;background:var(--paper);border-radius:var(--r);padding:4px 0}
+/* each ingredient is its own grey card, so rows read apart on a phone */
+.ingrow{display:grid;grid-template-columns:22px 64px 80px 1fr 32px;gap:6px;margin-bottom:10px;align-items:center;background:var(--steel);border:1px solid var(--line);border-radius:6px;padding:8px 6px 8px 2px}
 .ingrow .h{color:var(--ink-3);font-size:18px;text-align:center;white-space:nowrap;letter-spacing:-3px;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;grid-row:1/3;align-self:center}
 .ingrow.dragging{opacity:.55;outline:2px solid var(--flame);outline-offset:-2px}
 .ingrow .input{padding:8px 8px;font-size:14px}
 .ingrow .aisle-sel{grid-column:2/4}
-.ingrow .x{border:0;background:none;color:var(--ink-3);font-size:18px}
+.ingrow .x{border:0;background:none;color:var(--ink-3);font-size:20px;width:44px;height:44px;padding:0;margin:-5px -6px;justify-self:center}
 .ingrow.two{grid-template-columns:1fr 1fr 28px}
 .review h2{font-size:28px;margin-bottom:12px}
 .review h3{font-family:var(--sans);font-size:13px;letter-spacing:.02em;text-transform:uppercase;font-weight:700;margin:22px 0 10px;padding-bottom:5px;border-bottom:1px solid var(--rule)}
@@ -338,7 +339,7 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
   <section class="view active" id="view-recipes">
     <div class="searchbar">
       <input class="input" id="search" type="search" placeholder="Search recipes or ingredients" autocomplete="off">
-      <button class="btn" id="btnManual" title="Add a recipe by hand">+</button>
+      <button class="btn" id="btnManual" aria-label="Add a recipe">+</button>
     </div>
     <div id="cookBanner"></div>
     <div class="listctl">
@@ -402,6 +403,7 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
   <!-- IMPORT -->
   <section class="view" id="view-import">
     <div id="importForm">
+      <div class="detail-head"><button class="btn small ghost" id="impBack">‹ Recipes</button></div>
       <h2 style="font-size:22px;margin-bottom:10px">Import a recipe</h2>
       <div class="field">
         <label for="srcUrl">Link to the recipe</label>
@@ -440,8 +442,6 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
     <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Plan</button>
   <button data-view="pantry">
     <svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M5 12h14M10 7v2M10 15v2"/></svg>Pantry</button>
-  <button data-view="import">
-    <svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5"/><path d="M4 18v2h16v-2"/></svg>Import</button>
 </nav>
 
 <div class="sheet-bg" id="sheetBg"></div>
@@ -613,7 +613,7 @@ function sourceType(u){ const h=hostOf(u); if(/instagram/.test(h))return "instag
 function show(view){
   state.view=view;
   document.querySelectorAll("section.view").forEach(s=>s.classList.toggle("active", s.id==="view-"+view));
-  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.view===view || ((view==="detail"||view==="cook")&&b.dataset.view==="recipes")));
+  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.view===view || ((view==="detail"||view==="cook"||view==="import")&&b.dataset.view==="recipes")));
   const sub=document.getElementById("topSub");
   const now=new Date(); sub.textContent = `${DAYS[(now.getDay()+6)%7]} ${now.getDate()} ${MONTHS[now.getMonth()]}`;
   document.getElementById("main").scrollTop=0;
@@ -652,8 +652,8 @@ function renderRecipes(){
   const el=document.getElementById("rlist");
   if (!Object.keys(state.recipes).length && store.loading){ el.innerHTML=`<div class="empty"><span class="spin"></span>Loading your recipes…</div>`; return; }
   if (!Object.keys(state.recipes).length){
-    el.innerHTML=`<div class="empty"><h3>Nothing in the book yet</h3>Import a recipe from a link, caption or screenshot, or add one by hand with the + button.<div style="margin-top:14px"><button class="btn primary" data-go="import">Import a recipe</button></div></div>`;
-    el.querySelector("[data-go]").onclick=()=>show("import"); return;
+    el.innerHTML=`<div class="empty"><h3>Nothing in the book yet</h3>Tap + to import a recipe from a link, caption, screenshots or a screen recording, or to write your own.<div style="margin-top:14px"><button class="btn primary" data-go="add">Add a recipe</button></div></div>`;
+    el.querySelector("[data-go]").onclick=()=>addSheet(); return;
   }
   if (!list.length){
     el.innerHTML=`<div class="empty">No recipes match that.${pref.filter!=="all"?`<div style="margin-top:12px"><button class="btn small" data-reset>Show all recipes</button></div>`:""}</div>`;
@@ -672,7 +672,22 @@ function renderRecipes(){
   el.onclick=e=>{ const c=e.target.closest(".rcard"); if(c){ if(state.detailId!==c.dataset.id) state.mult=1; state.detailId=c.dataset.id; show("detail"); } };
 }
 document.getElementById("search").addEventListener("input",e=>{ state.query=e.target.value; renderRecipes(); });
-document.getElementById("btnManual").onclick=()=>{ state.editingId=null; state.draft=blankRecipe(); show("import"); };
+// "+" asks how: import (link, text, screenshots, recording) or write one by hand.
+function addSheet(){
+  const open=state.draft&&!state.editingId ? state.draft : null; // an import or new recipe not saved yet
+  const name=open ? `“${esc(open.title||"Untitled")}”` : "";
+  const s=openSheet(`<h3>Add a recipe</h3>
+    ${open?`<button class="opt" data-act="resume">Carry on with ${name}<small>You haven't saved it yet</small></button>`:""}
+    <button class="opt" data-act="import">Import a recipe<small>${open?`Replaces ${name}`:"From a link, pasted text, screenshots or a screen recording"}</small></button>
+    <button class="opt" data-act="manual">Write one yourself<small>${open?`Replaces ${name}`:"Start from a blank recipe"}</small></button>`);
+  sheetActions(s,{
+    resume:()=>{ closeSheet(); show("import"); },
+    import:()=>{ closeSheet(); state.editingId=null; state.draft=null; state.draftManual=false; show("import"); },
+    manual:()=>{ closeSheet(); state.editingId=null; state.draft=blankRecipe(); state.draftManual=true; show("import"); },
+  });
+}
+document.getElementById("btnManual").onclick=addSheet;
+document.getElementById("impBack").onclick=()=>show("recipes");
 
 function blankRecipe(){ return {photos:[],title:"",description:"",source_url:"",source_type:"manual",servings:2,prep_min:null,cook_min:null,ingredients:[{raw_text:"",quantity:null,unit:"",item:"",prep:"",section:"",aisle:"other",optional:false}],steps:[""],tags:[]}; }
 
@@ -1271,7 +1286,7 @@ async function writeRecipe(idea,btn){
   try{
     const data=await store.ask(PARSE_PROMPT+`Write the full recipe for "${idea.title}" for 2 people, using these ingredients I already have where sensible: ${pantryText()}. Assume salt, pepper, oil and water are on hand.${idea.missing&&idea.missing.length?` It may also use: ${idea.missing.join(", ")}.`:""}`);
     if(!data||!data.title) throw {code:"empty_completion"};
-    state.draft=normalise(data,""); state.draft.photos=[]; state.editingId=null; state.ideas=null;
+    state.draft=normalise(data,""); state.draft.photos=[]; state.editingId=null; state.draftManual=false; state.ideas=null;
     show("import"); document.getElementById("main").scrollTop=0;
   }catch(e){ btn.disabled=false; btn.textContent=old; toast(aiError(e,"writing that one")); }
 }
@@ -1470,7 +1485,7 @@ async function runParse(){
   try{
     const data = await store.ask(input, state.images, parseCtl.signal);
     if(!data || data.error || !data.title){ status.className="status err"; status.textContent="Couldn't find a recipe in that. Try pasting more of the caption or a clearer screenshot."; btn.disabled=false; return; }
-    state.draft=normalise(data,url); state.editingId=null;
+    state.draft=normalise(data,url); state.editingId=null; state.draftManual=false;
     status.textContent=""; btn.disabled=false; renderImport(); document.getElementById("main").scrollTop=0;
   }catch(e){
     btn.disabled=false;
@@ -1672,7 +1687,10 @@ function renderReview(){
   const endDrag=()=>{ if(!drag) return; drag.classList.remove("dragging"); drag=null; };
   rowsEl.onpointerup=endDrag; rowsEl.onpointercancel=endDrag;
   el.querySelector("#addIng").onclick=()=>{ state.draft=collect(); state.draft.ingredients.push({raw_text:"",quantity:null,unit:"",item:"",prep:"",section:"",aisle:"other",optional:false}); renderReview(); setTimeout(()=>{ const rows=el.querySelectorAll(".ingrow"); rows[rows.length-1]?.querySelector("[data-f=item]").focus(); },0); };
-  el.querySelector("#revBack").onclick=()=>{ state.draft=null; if(state.editingId){ const id=state.editingId; state.editingId=null; state.detailId=id; show("detail"); } else renderImport(); };
+  el.querySelector("#revBack").onclick=()=>{ state.draft=null;
+    if(state.editingId){ const id=state.editingId; state.editingId=null; state.detailId=id; show("detail"); }
+    else if(state.draftManual){ state.draftManual=false; show("recipes"); } // nothing to go back to on the import form
+    else renderImport(); };
   let saving=false;
   const save=async()=>{
     if(saving) return; // on slow Wi-Fi a second tap would save the recipe again under a new id
@@ -1680,7 +1698,7 @@ function renderReview(){
     saving=true; for(const b of el.querySelectorAll("#revSave,#revSave2")){ b.disabled=true; b.textContent="Saving…"; }
     const id=state.editingId||uid(); r.created_at=state.editingId? (state.recipes[id]?.created_at||new Date().toISOString()) : new Date().toISOString(); r.updated_at=new Date().toISOString();
     state.recipes[id]=r; state.lastSavedId=id; const ok=await store.put("recipes",id,r);
-    state.draft=null; state.editingId=null; state.images=[]; document.getElementById("srcText").value=""; document.getElementById("srcUrl").value="";
+    state.draft=null; state.editingId=null; state.draftManual=false; state.images=[]; document.getElementById("srcText").value=""; document.getElementById("srcUrl").value="";
     if(ok) toast("Saved"); state.detailId=id; show("detail");
   };
   el.querySelector("#revSave").onclick=save; el.querySelector("#revSave2").onclick=save;

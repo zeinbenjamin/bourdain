@@ -1,6 +1,6 @@
 // Screen-recording import: frames come out of a real recording, and a recording
 // that never finishes seeking (some iOS videos) stops with a message instead of hanging.
-import { suite, startServer, openBrowser, openApp } from "./lib.mjs";
+import { suite, startServer, openBrowser, openApp, addRecipe } from "./lib.mjs";
 
 const { check, finish } = suite("video");
 let s, b;
@@ -23,7 +23,7 @@ try {
   });
   const video = { name: "rec.webm", mimeType: "video/webm", buffer: Buffer.from(b64, "base64") };
   const done = () => page.waitForFunction(() => /Got \d+ sheet|Couldn't read/.test(document.querySelector("#importStatus").textContent));
-  await page.click('#tabs button[data-view="import"]');
+  await addRecipe(page, "import");
   await page.setInputFiles("#srcImgs", video); await done();
   check("normal recording: frames extracted", /Got [1-9]\d* sheet/.test(await page.textContent("#importStatus")) && (await page.evaluate(() => state.images.length)) > 0, await page.textContent("#importStatus"));
   // Make every seek hang, as some iOS recordings do.
