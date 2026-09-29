@@ -105,8 +105,11 @@ how data persists, that is the only place to touch.
   draft uses (a discarded draft) is not counted as unsynced and is dropped after
   10 minutes. A 4xx or `image_failed` from the server removes the photo rather
   than retrying it forever.
-- `store.ask(prompt, images, signal)` — proxied Claude call, returns parsed JSON.
-  Aborting `signal` cancels it; the server then aborts its upstream call too.
+- `store.ai(kind, material, images, signal)` — one of the app's AI jobs
+  (`import`, `scan`, `ideas`, `write`), returns parsed JSON. The phone sends
+  only the material; the prompts live in `server.js` (see **AI jobs and
+  limits**). Aborting `signal` cancels it; the server then aborts its upstream
+  call too.
 - `store.fetchUrl(url)` — server-side page fetch
 - `store.uploadPhoto(blob)` — returns `{id}`
 - `makeCover(recipe, onDone)` — POSTs to `/api/cover` and calls `onDone(coverId)`.
@@ -209,6 +212,40 @@ people (see **Other people** below).
 - **Tests.** `startServer({named:true})` (the default) names the test owner so
   the welcome doesn't cover other suites.
 
+**AI jobs and limits (2.2)** (`AI_JOBS`, `runAi`, `aiBlock` in `server.js`):
+- **Prompts are the server's.** `POST /api/ai {kind, material, images}` builds
+  the prompt from `AI_JOBS[kind]` (`PARSE_PROMPT`, `SCAN_PROMPT`, the ideas and
+  write prompts), clips the material and caps the images (4 for an import, 6 for
+  a scan, none otherwise). There is no route that takes a prompt: that would be
+  free Claude on Zein's key for anyone signed in. `/api/claude` is gone.
+- **Every call that reaches Claude or OpenAI is logged** in `ai_usage` with
+  tokens (from the reply's `usage`), pictures and an estimated US$ cost
+  (`CLAUDE_PRICES`, and `image_usd`, a placeholder Zein sets in the owner's
+  view). Calls report through `up.meter`; `callClaude` and `paintCover` set
+  `reached` once the request left the server. A missing key or unreachable
+  provider isn't counted; a stop, timeout or provider error is.
+- **Limits** per person per day, grouped: `import`, `scan`, `ideas` (ideas and
+  write share it), `cover`; plus `monthly_usd`. Defaults in `DEFAULT_LIMITS`,
+  changes in the `settings` table (`limits`, `limits:<userId>`, `image_usd`).
+  The day is the server's local day, so the container needs `TZ`. Over a
+  limit: 429 `ai_limit` (with `kind`, `limit`), `ai_budget`, or `ai_busy` (one
+  job at a time). The admin is exempt from all three while `admin_exempt`.
+  `/api/cover` goes through `runAi` too, as kind `cover`.
+- **Activity** (`logActivity`): one row per thing someone did, by title or date,
+  never the contents: recipes added, edited, cooked, deleted, copied; plan and
+  pantry changes; profile; every AI job. A repeat within a minute is folded.
+  The daily sweep prunes activity after 183 days and `ai_usage` after 400.
+
+**The owner's view (2.2)** (`openAdmin`, `renderAdmin`, `view-admin`): a long
+press (600ms) on the version sheet's heading, only when `store.me.is_admin`.
+There is deliberately no button. People (email, last seen, counts, AI today
+against limits, this month), AI this month by kind with prices, the limits for
+everyone (and the cover price), per-person limits in a sheet, and the latest
+100 activity rows, filterable. `/api/admin/summary`, `/api/admin/activity` and
+`PUT /api/admin/limits` are 403 `not_admin` for anyone else; that check, not
+the hidden entrance, is the security. Back is "‹ Recipes", and the Recipes tab
+stays lit.
+
 **Recipe list sort and filter** (`listPrefs`, `sortRecipes`, `keepRecipe`)
 are remembered per phone in `localStorage["bourdain.listPrefs"]`. A saved sort or
 filter that is no longer an option falls back to the default in `listPrefs.get()`. A recipe card
@@ -248,7 +285,8 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   `dataversion` (data version stamps, per-user keys on the phone, adopting 1.x
   data, setting aside and picking back up, Export), `people` (profiles, the
   welcome, People row, Everyone / Just me, read-only recipes, Add to my recipes,
-  search across books, the feed), `migration` (the 1 → 2
+  search across books, the feed), `ai` (jobs, prompts on the server, usage and
+  cost, limits, one at a time, activity, the owner's view), `migration` (the 1 → 2
   conversion, refusing to start, Cloudflare refused, `/api/me`, the export
   zip), `scan`,
   `video`.
@@ -303,8 +341,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v29"`
-in `public/sw.js` → `v30`, `v31`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v30"`
+in `public/sw.js` → `v31`, `v32`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -351,7 +389,9 @@ pre-repo versions. Code that reads recipes should still treat `title` as
 possibly missing.
 
 **Adding a collection needs server edits too.** In `server.js`: add it to
-`COLLECTIONS` (or writes get a 404), create its table with `ownedTable()` (it
+`COLLECTIONS` and to the name list in the PUT and DELETE routes
+(`/api/:col(recipes|plan|pantry|shop)/:id`, which keeps `/api/admin/...` from
+being taken for a collection; otherwise writes get a 404), create its table with `ownedTable()` (it
 needs the `owner` column, or writes fail with a 500; an existing database needs
 it created in `openData()`), and add it to the `/api/state` response with
 `readAll(t, req.user.id)`. In `index.html`: add it to
@@ -362,8 +402,9 @@ it created in `openData()`), and add it to the `/api/state` response with
 such as `bad_api_key`, `no_credit`, `model_unavailable`, `overloaded`,
 `truncated`, `refused`, `image_rejected`, `no_image_key` and `image_refused`.
 Some carry a short `detail` from the provider. `aiError(e)` in `index.html` maps
-every code to a message saying what to do next. When you add a code, add its
-message there. Don't add another "try again" branch at a call site.
+every code to a message saying what to do next, including the limits
+(`ai_limit`, `ai_budget`, `ai_busy`), which `api()` passes on with `kind` and
+`limit`. When you add a code, add its message there. Don't add another "try again" branch at a call site.
 
 **Server errors are JSON with a `code`.** Every `/api` failure goes through the
 error handler at the bottom of `server.js`, which maps it to
@@ -536,9 +577,8 @@ dev sandbox. Tests use a fake OpenAI; the first real call happens on the NAS.
 ## Pantry scan
 
 "Scan fridge or pantry" (`scanPantry` in `index.html`) sends up to `SCAN_MAX`
-(6) photos, shrunk by `forReading`, to Claude through `store.ask` with
-`SCAN_PROMPT`. There is no new server route, so errors come through `aiError`
-like imports. The reply `{items:[{item, qty, unit, aisle, sure}]}` is cleaned
+(6) photos, shrunk by `forReading`, to Claude through `store.ai("scan")`;
+`SCAN_PROMPT` is in `server.js`. Errors come through `aiError` like imports. The reply `{items:[{item, qty, unit, aisle, sure}]}` is cleaned
 by `tidyScan`: lowercase, de-duplicated, aisle validated. It then goes to a
 review sheet. Items with `sure:false` start unticked. Items whose `itemKey`
 (crude singular form) matches something already in the pantry are listed as

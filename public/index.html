@@ -238,6 +238,31 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .slot .tl-sub{display:block;font-family:var(--sans);font-size:12px;font-weight:400;color:var(--ink-3);margin-top:2px}
 .slot .tl-sub .mstars{font-size:12px}
 .feed .day{grid-template-columns:56px 1fr}
+/* The owner's screen (2.2) */
+.verhead{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.adm-person{border-bottom:1px solid var(--line);padding:14px 0}
+.adm-top{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+.adm-who{display:flex;flex-direction:column;min-width:0;font-family:var(--sans);font-size:12px;color:var(--ink-3)}
+.adm-who b{font-family:var(--serif);font-size:17px;color:var(--ink)}
+.adm-who span{overflow-wrap:anywhere}
+.adm-person .meta{font-family:var(--sans);font-size:13px;color:var(--ink-2);margin:2px 0}
+.adm-sub{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--ink-3);margin:10px 0 4px}
+.adm-use{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px}
+.adm-use div{border:1px solid var(--line);border-radius:6px;padding:6px 2px;text-align:center;font-family:var(--sans);font-size:10px;color:var(--ink-3)}
+.adm-use b{display:block;font-size:16px;color:var(--ink)}
+.adm-use small{font-size:11px;font-weight:500;color:var(--ink-3)}
+.adm-use .full b{color:var(--flame)}
+.adm-btns{margin-top:8px}
+.adm-btns .btn{min-height:44px;padding:0 16px;font-size:13px}
+.adm-row{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-family:var(--sans);font-size:14px}
+.adm-note{margin:8px 0}
+.adm-lims{display:grid;grid-template-columns:1fr 1fr;gap:0 12px;margin-top:10px}
+.check{display:flex;align-items:center;gap:10px;min-height:44px;font-family:var(--sans);font-size:14px}
+.check input{width:22px;height:22px;accent-color:var(--flame)}
+.adm-filter{margin:10px 0 4px}
+.adm-act{display:grid;grid-template-columns:92px 1fr;gap:8px;padding:9px 0;border-bottom:1px solid var(--line);font-family:var(--sans);font-size:13px;line-height:1.35}
+.adm-act .t{color:var(--ink-3);font-size:12px}
+.adm-act i{font-style:normal;font-family:var(--serif);font-weight:600;overflow-wrap:anywhere}
 .feed .day:first-of-type{border-top:0}
 
 /* Picker sheet */
@@ -421,6 +446,8 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
   <!-- SOMEONE ELSE'S RECIPE (read-only) and A PERSON'S PROFILE (2.1) -->
   <section class="view detail" id="view-theirs"></section>
   <section class="view" id="view-person"></section>
+  <!-- THE OWNER'S SCREEN (2.2): opened by a long press on the version sheet's heading -->
+  <section class="view" id="view-admin"></section>
 
   <!-- COOK -->
   <section class="view detail" id="view-cook"></section>
@@ -533,7 +560,7 @@ const API = "";
 async function api(path, opts={}){
   const res = await fetch(API+path, opts);
   if(!res.ok){ let e; try{ e=await res.json(); }catch(_){ e={}; }
-    const err=new Error(e.error||res.statusText); err.code=e.code||("http_"+res.status); err.status=res.status; err.detail=e.detail; throw err; }
+    const err=new Error(e.error||res.statusText); err.code=e.code||("http_"+res.status); err.status=res.status; err.detail=e.detail; err.kind=e.kind; err.limit=e.limit; throw err; }
   return res.status===204? null : res.json();
 }
 const timeout=ms=>AbortSignal.timeout?AbortSignal.timeout(ms):undefined;
@@ -716,14 +743,16 @@ const store = {
     const n=this.outbox.length+photoQueue.pending;
     el.textContent = n ? `${n} change${n===1?"":"s"} not synced · ` : this.loading ? "Loading… · " : (!this.fromServer||!this.online) ? "Offline · " : "";
   },
-  /* Claude, proxied by our server so the API key never reaches the browser */
-  async ask(prompt, images, signal){
-    const body={prompt};
+  /* One of the app's AI jobs (import, scan, ideas, write), run by the server:
+     the prompts live there and every call counts against this person's limits.
+     Only the material goes from here, never a prompt. */
+  async ai(kind, material, images, signal){
+    const body={kind, material:material||{}};
     if(images&&images.length){
       body.images=[];
       for(const f of images){ body.images.push({ media_type:f.type||"image/jpeg", data:await toBase64(f) }); }
     }
-    const out=await api("/api/claude",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal});
+    const out=await api("/api/ai",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal});
     return out.json;
   },
   async fetchUrl(url){ return api("/api/fetch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url})}); },
@@ -762,7 +791,7 @@ function show(view){
   if(view!=="detail"&&view!=="cook") state.detailFrom=null; // set by the Timeline so the recipe's Back returns there
   document.querySelectorAll("section.view").forEach(s=>s.classList.toggle("active", s.id==="view-"+view));
   // Which tab stays lit for views that aren't tabs themselves
-  const tab = view==="person" ? "timeline"
+  const tab = view==="person" ? "timeline" : view==="admin" ? "recipes"
     : view==="theirs" ? ({recipes:"recipes",detail:"recipes"}[state.theirs?.from]||"timeline")
     : (view==="detail"||view==="cook"||view==="import") ? (state.detailFrom||"recipes") : view;
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.view===tab));
@@ -784,6 +813,7 @@ function render(){
   if (state.view==="timeline") renderTimeline();
   if (state.view==="person") renderPerson();
   if (state.view==="theirs") renderTheirs();
+  if (state.view==="admin") renderAdmin();
   if (state.view==="import") renderImport();
   if (state.view==="cook") renderCook();
 }
@@ -1634,18 +1664,7 @@ function renderIdeas(){
    as imports: everything is pre-ticked except items Claude isn't sure of. Items
    already in the pantry are listed but never added twice. */
 const SCAN_MAX=6;
-const SCAN_PROMPT=`You are looking at photos of a home fridge, freezer or pantry cupboard. List the food and cooking ingredients you can see, so they can be added to a pantry list.
-
-Reply with ONLY a JSON object, no prose: {"items":[{"item": string, "qty": number|null, "unit": string, "aisle": string, "sure": boolean}]}
-
-- item: canonical, lowercase, singular, generic name with no brand, e.g. "greek yoghurt", "chicken thigh", "soy sauce", "egg".
-- qty: a number only when you can clearly count whole items (eggs, cans, lemons, bottles). Otherwise null. Never guess weights or how full a container is.
-- unit: "" unless one of ["can","packet","bunch","slice","clove"] clearly fits the count.
-- aisle: one of ${JSON.stringify(AISLES)}.
-- sure: false when the item is partly hidden, the label is unreadable, or you are guessing what is inside an opaque container or tub.
-- The same item seen in several photos is listed once.
-- Skip salt, pepper, cooking oil and water (always assumed), and anything that is not food or drink (medicine, cleaning products, containers that are clearly empty).
-- If you can see no food at all, reply {"items":[]}.`;
+// The prompt for a scan lives in server.js (SCAN_PROMPT); only the photos go from here.
 const itemKey=t=>String(t||"").toLowerCase().trim().replace(/ies$/,"y").replace(/oes$/,"o").replace(/([^s])s$/,"$1");
 function tidyScan(out){
   const seen=new Set(), items=[];
@@ -1671,7 +1690,7 @@ async function scanPantry(){
   let items;
   try{
     const images=[]; for(const f of files) images.push(await forReading(f));
-    items=tidyScan(await store.ask(SCAN_PROMPT, images, ctl.signal));
+    items=tidyScan(await store.ai("scan", {}, images, ctl.signal));
   }catch(e){ if(e&&e.name==="AbortError") return; console.warn("scan failed",e); return fail(aiError(e,"scanning those photos")); }
   if(!mine()){ toast("The scan finished after it was closed, so nothing was added."); return; }
   if(!items.length) return fail("Couldn't spot any food in those photos. Try closer photos with the fridge light on.");
@@ -1711,9 +1730,7 @@ document.getElementById("cookFrom").onclick=async()=>{
   if(!have){ toast("Add a few things first"); return; }
   btn.disabled=true; box.innerHTML=`<p class="status"><span class="spin"></span>Thinking about dinner…</p>`;
   try{
-    const ideas=await store.ask(`I have these ingredients: ${have}.
-Assume salt, pepper, cooking oil and water are always on hand. Suggest 3 different dishes I could realistically cook. Favour ones needing nothing extra; a dish may need at most 2 common extra items.
-Reply with ONLY a JSON array of 3 objects: {"title": string, "why": string (one sentence on what it is and why it fits what I have), "missing": [string] (extra items I'd need to buy, empty array if none)}`);
+    const ideas=await store.ai("ideas", {have});
     state.ideas=Array.isArray(ideas)?ideas.slice(0,3):[]; renderIdeas();
   }catch(e){
     box.innerHTML="";
@@ -1724,7 +1741,7 @@ async function writeRecipe(idea,btn){
   if(!idea) return;
   const status=document.getElementById("ideas"); const old=btn.textContent; btn.disabled=true; btn.innerHTML=`<span class="spin"></span>Writing…`;
   try{
-    const data=await store.ask(PARSE_PROMPT+`Write the full recipe for "${idea.title}" for 2 people, using these ingredients I already have where sensible: ${pantryText()}. Assume salt, pepper, oil and water are on hand.${idea.missing&&idea.missing.length?` It may also use: ${idea.missing.join(", ")}.`:""}`);
+    const data=await store.ai("write", {title:idea.title, have:pantryText(), missing:idea.missing||[]});
     if(!data||!data.title) throw {code:"empty_completion"};
     state.draft=normalise(data,""); state.draft.photos=[]; state.editingId=null; state.draftManual=false; state.ideas=null;
     show("import"); document.getElementById("main").scrollTop=0;
@@ -1761,27 +1778,20 @@ function aiError(e, what="reading that"){
     image_unreachable:"The server couldn't reach OpenAI. Check the NAS is online, then try again.",
     image_failed:"The image model didn't send a picture back. Try again.",
     image_upstream_error:"OpenAI had a problem. Try again in a few minutes.",
+    ai_busy:"Still working on your last one. Give it a moment to finish.",
+    ai_budget:`That's this month's AI allowance used up. It resets on the 1st${store.me&&!store.me.is_admin?"; ask Zein if you need more":""}.`,
   };
+  if(c==="ai_limit"){ // daily limit for one kind of job; more tomorrow
+    const what={import:"imports",scan:"fridge scans",ideas:"recipe ideas",cover:"covers"}[e.kind]||"AI requests", n=e.limit;
+    return `You've used today's ${n?n+" ":""}${what}. More tomorrow.`;
+  }
   if(m[c]) return m[c];
   if(!e||!e.status) return "Couldn't reach the server. Check you're on home Wi-Fi, then try again.";
   return `Something went wrong ${what}. Try again.`;
 }
 
 /* ---------- import ---------- */
-const PARSE_PROMPT = `You are the import step of a personal recipe app. Extract exactly ONE recipe from the material below (it may be a social-media caption, text copied from a website, notes, and/or screenshots of a recipe or of a video's caption). Reply with ONLY a JSON object, no prose, in this shape:
-
-{"title": string, "description": string (one sentence, or ""), "servings": number|null, "prep_min": number|null, "cook_min": number|null,
- "ingredients": [{"raw_text": string (the line as written), "quantity": number|null, "unit": one of ["g","kg","ml","l","tsp","tbsp","cup","whole","clove","slice","can","packet","bunch","pinch","to taste",""], "item": string (canonical, lowercase, singular, no brand, e.g. "chicken breast", "soy sauce"), "prep": string (e.g. "diced", or ""), "section": string (sub-heading like "For the sauce", or ""), "aisle": one of ${JSON.stringify(AISLES)}, "optional": boolean}],
- "steps": [string, ...] (numbered method as separate imperative steps, in order),
- "tags": [string, ...] (2-5 short lowercase tags: cuisine, protein, style like "weeknight", "meal prep", "high protein"),
- "notes": string (tips, swaps, storage, or "")}
-
-If an image is a grid of video frames (a contact sheet from a screen recording), read the frames in order left-to-right then top-to-bottom, and treat on-screen text, captions and subtitles as the recipe source; ingredients often appear as overlaid text and quantities may be spoken in captions. Combine all frames into one recipe.
-
-Rules: convert vulgar fractions to decimals (½ -> 0.5). Convert ounces to g and fl oz/pints to ml. Use "whole" for countable items (2 eggs -> quantity 2, unit "whole", item "egg"). If a quantity is genuinely missing, use null and unit "". Ignore hashtags, follow-me lines, emoji and comments. If the material contains no recipe at all, reply {"error":"no recipe found"}.
-
-MATERIAL:
-`;
+// The import prompt lives in server.js (PARSE_PROMPT); only the link, text and images go from here.
 
 function renderImport(){
   const form=document.getElementById("importForm"), rev=document.getElementById("review");
@@ -1919,9 +1929,8 @@ async function runParse(){
   parseCtl=new AbortController();
   btn.disabled=true; status.className="status"; status.innerHTML=`<span class="spin"></span>Reading the recipe… <button class="btn small ghost" id="stopParse">Stop</button>`;
   status.querySelector("#stopParse").onclick=()=>parseCtl.abort();
-  let input = PARSE_PROMPT + (url?`Source URL: ${url}\n\n`:"") + (text?text.slice(0,20000):"(no text — read the screenshots)");
   try{
-    const data = await store.ask(input, state.images, parseCtl.signal);
+    const data = await store.ai("import", {url, text:text.slice(0,20000)}, state.images, parseCtl.signal);
     if(!data || data.error || !data.title){ status.className="status err"; status.textContent="Couldn't find a recipe in that. Try pasting more of the caption or a clearer screenshot."; btn.disabled=false; return; }
     state.draft=normalise(data,url); state.editingId=null; state.draftManual=false;
     status.textContent=""; btn.disabled=false; renderImport(); document.getElementById("main").scrollTop=0;
@@ -2142,6 +2151,127 @@ function renderReview(){
   el.querySelector("#revSave").onclick=save; el.querySelector("#revSave2").onclick=save;
 }
 
+/* ---------- the owner's screen (2.2) ----------
+   Hidden on purpose: a long press on the heading of the version sheet opens it,
+   and only for the admin; the server refuses its data to anyone else. Who's
+   using the app, what they've done, the AI each person used today and this
+   month, and the limits. Costs are estimates; the real bills are in the
+   Anthropic and OpenAI consoles. */
+const ACT_WORDS={ recipe_added:"added", recipe_edited:"edited", recipe_deleted:"deleted", cook_logged:"cooked", recipe_copied:"copied",
+  plan_changed:"changed the plan for", pantry_changed:"pantry:", pantry_removed:"took off the pantry:", profile_changed:"set their name to",
+  ai_import:"imported a recipe with AI", ai_scan:"scanned the fridge", ai_ideas:"asked for recipe ideas", ai_write:"had a recipe written", ai_cover:"painted a cover" };
+const LIMIT_GROUPS=["import","scan","ideas","cover"];
+const LIMIT_NAMES={ import:"Imports", scan:"Fridge scans", ideas:"Ideas + write", cover:"Covers" };
+const usd=n=>!n?"US$0":n<0.01?"under US$0.01":"US$"+n.toFixed(2);
+function whenShort(isoTs){
+  if(!isoTs) return "never";
+  const d=new Date(isoTs), t=`${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+  return iso(d)===iso(new Date()) ? `today ${t}` : `${DAYS[(d.getDay()+6)%7]} ${d.getDate()} ${MONTHS[d.getMonth()]} ${t}`;
+}
+// A press held for ms calls fn. Attached to an element inside a sheet, it goes with that sheet (openSheet clones a fresh one).
+function longPress(el,ms,fn){
+  let h; const stop=()=>clearTimeout(h);
+  el.addEventListener("pointerdown",()=>{ stop(); h=setTimeout(fn,ms); });
+  ["pointerup","pointerleave","pointercancel"].forEach(t=>el.addEventListener(t,stop));
+  el.addEventListener("contextmenu",e=>e.preventDefault());
+}
+function openAdmin(){ if(!store.me?.is_admin) return; closeSheet(); state.admin=null; state.adminWho=""; show("admin"); }
+async function loadAdmin(){
+  try{
+    const [sum,act]=await Promise.all([ api("/api/admin/summary",{signal:timeout(10000)}),
+      api("/api/admin/activity?limit=100"+(state.adminWho?"&user="+encodeURIComponent(state.adminWho):""),{signal:timeout(10000)}) ]);
+    state.admin={sum,act};
+  }catch(e){ state.admin={error:e}; }
+  if(state.view==="admin") renderAdmin();
+}
+function renderAdmin(){
+  const el=document.getElementById("view-admin"), a=state.admin;
+  const head=`<div class="detail-head"><button class="btn small ghost" id="aBack">‹ Recipes</button>${a&&!a.error?`<button class="btn small" id="aRefresh">Refresh</button>`:""}</div>`;
+  const wire=()=>{ el.querySelector("#aBack").onclick=()=>show("recipes"); const r=el.querySelector("#aRefresh"); if(r) r.onclick=()=>{ state.admin=null; renderAdmin(); }; };
+  if(!a){ el.innerHTML=head+`<div class="empty"><span class="spin"></span>Loading…</div>`; wire(); loadAdmin(); return; }
+  if(a.error){ el.innerHTML=head+`<div class="empty">${a.error.code==="not_admin"?"Only the owner can see this.":a.error.status?`The server couldn't load this (${esc(a.error.code)}). Check the server logs.`:"Can't reach the server. Try again when you're back on home Wi-Fi."}</div>`; wire(); return; }
+  const {sum,act}=a, d=sum.defaults, month=MONTHS[+sum.day.slice(5,7)-1];
+  const person=p=>{
+    const exempt=p.is_admin&&p.limits.admin_exempt;
+    const use=LIMIT_GROUPS.map(g=>{ const n=p.ai.today[g]||0, lim=p.limits[g];
+      return `<div class="${!exempt&&n>=lim?"full":""}"><b>${n}${exempt?"":`<small> / ${lim}</small>`}</b>${LIMIT_NAMES[g]}</div>`; }).join("");
+    return `<div class="adm-person" data-pid="${esc(p.id)}">
+      <div class="adm-top">${avatar(p,"md")}<div class="adm-who"><b>${esc(p.name||"No name yet")}${p.is_admin?" · you":""}</b><span>${esc(p.email)}</span><span>Last seen ${esc(whenShort(p.last_seen))}</span></div></div>
+      <div class="meta">${p.recipes} recipe${p.recipes===1?"":"s"} · ${p.cooks} cook${p.cooks===1?"":"s"} · ${p.copies} cop${p.copies===1?"y":"ies"}</div>
+      <div class="adm-sub">AI today${exempt?" · no limits":""}</div><div class="adm-use">${use}</div>
+      <div class="meta">This month: ${p.ai.month_calls} AI call${p.ai.month_calls===1?"":"s"} · ${usd(p.ai.month_usd)}${exempt?"":` of ${usd(p.limits.monthly_usd)}`}${p.overrides?" · <span class=\"inyours\">own limits</span>":""}</div>
+      <div class="row adm-btns"><button class="btn small" data-lim="${esc(p.id)}">Limits</button><button class="btn small ghost" data-acts="${esc(p.id)}">Activity</button></div>
+    </div>`;
+  };
+  const kinds=sum.month.byKind.length ? sum.month.byKind.map(k=>`<div class="adm-row"><span>${esc(LIMIT_NAMES[k.grp]||k.grp)}</span><span>${k.calls} · ${usd(k.usd)}</span></div>`).join("")
+    : `<p class="muted small">No AI used yet this month.</p>`;
+  const who=sum.people.find(p=>p.id===state.adminWho);
+  const acts=act.length ? act.map(r=>{
+    let t=r.target||""; if(r.action==="plan_changed"&&/^\d{4}-\d{2}-\d{2}$/.test(t)) t=fmtDate(t);
+    if(r.action.startsWith("ai_")&&t) t=`(didn't work: ${t})`;
+    return `<div class="adm-act"><span class="t">${esc(whenShort(r.at))}</span><span><b>${esc(r.name)}</b> ${esc(ACT_WORDS[r.action]||r.action)}${t?` <i>${esc(t)}</i>`:""}</span></div>`; }).join("")
+    : `<p class="muted small">Nothing yet.</p>`;
+  const num=(k,label,step=1)=>`<div class="field"><label for="lim_${k}">${label}</label><input class="input" id="lim_${k}" type="number" inputmode="decimal" min="0" step="${step}" value="${esc(String(d[k]))}"></div>`;
+  el.innerHTML=`${head}
+    <h2>Owner's view</h2>
+    <p class="muted small">Only you can see this. AI costs are estimates; the real bills are in the Anthropic and OpenAI consoles.</p>
+    <div class="stats"><div class="stat"><b>${sum.month.calls}</b><span>AI calls in ${month}</span></div><div class="stat"><b>${sum.month.usd<0.01?"$0":"$"+sum.month.usd.toFixed(2)}</b><span>Est. ${month}</span></div><div class="stat"><b>${sum.people.length}</b><span>People</span></div></div>
+    <h3 class="tl-head">People</h3>${sum.people.map(person).join("")}
+    <h3 class="tl-head">AI in ${month}</h3>${kinds}
+    <p class="muted small adm-note">Priced at US$${sum.prices.claude[0]} in / US$${sum.prices.claude[1]} out per million tokens (${esc(sum.prices.model)}${sum.prices.known?"":", price not known, so guessed"}) and ${usd(sum.prices.image_usd)} a cover picture.</p>
+    <h3 class="tl-head">Limits for everyone</h3>
+    <p class="muted small adm-note">Per person per day, reset at midnight. The monthly allowance is the estimated spend.</p>
+    <div class="adm-lims">${LIMIT_GROUPS.map(g=>num(g,LIMIT_NAMES[g])).join("")}${num("monthly_usd","Monthly US$",0.5)}
+      <div class="field"><label for="lim_image_usd">Cover picture, US$ each</label><input class="input" id="lim_image_usd" type="number" inputmode="decimal" min="0" step="0.01" value="${esc(String(sum.prices.image_usd))}"></div></div>
+    <label class="check"><input type="checkbox" id="lim_admin_exempt" ${d.admin_exempt?"checked":""}> No limits for you</label>
+    <p class="muted small adm-note">The cover price is a placeholder. Set it from your OpenAI bill.</p>
+    <button class="btn wide" id="limSave">Save limits</button>
+    <h3 class="tl-head">Recent activity</h3>
+    <select class="input adm-filter" id="actWho" aria-label="Whose activity"><option value="">Everyone</option>${sum.people.map(p=>`<option value="${esc(p.id)}" ${p.id===state.adminWho?"selected":""}>${esc(p.name||p.email)}</option>`).join("")}</select>
+    <div class="adm-acts">${acts}</div>
+    ${who||!state.adminWho?"":`<p class="muted small">That person is no longer here.</p>`}`;
+  wire();
+  el.querySelector("#actWho").onchange=e=>{ state.adminWho=e.target.value; loadAdmin(); };
+  el.querySelector("#limSave").onclick=saveDefaultLimits;
+  el.querySelectorAll("[data-lim]").forEach(b=>b.onclick=()=>personLimits(sum.people.find(p=>p.id===b.dataset.lim),d));
+  el.querySelectorAll("[data-acts]").forEach(b=>b.onclick=()=>{ state.adminWho=b.dataset.acts; loadAdmin().then(()=>document.getElementById("actWho")?.scrollIntoView({block:"start"})); });
+}
+// Reads limit inputs from a container. Blank ones are left out when blankOk; returns null (and toasts) if one is wrong.
+function readLimits(box,blankOk){
+  const out={};
+  for(const k of [...LIMIT_GROUPS,"monthly_usd"]){
+    const v=box.querySelector("#lim_"+k).value.trim();
+    if(v===""){ if(blankOk) continue; toast(`Fill in ${k==="monthly_usd"?"the monthly allowance":LIMIT_NAMES[k].toLowerCase()}.`); return null; }
+    const n=Number(v);
+    if(k==="monthly_usd" ? !(n>=0&&n<=1000) : !(Number.isInteger(n)&&n>=0&&n<=1000)){ toast(k==="monthly_usd"?"The monthly allowance is US$0 to US$1000.":"Daily limits are whole numbers from 0 to 1000."); return null; }
+    out[k]=n;
+  }
+  return out;
+}
+async function putLimits(body){
+  try{ await api("/api/admin/limits",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:timeout(10000)}); return true; }
+  catch(e){ toast(e.status?`The server didn't take that: ${e.message}.`:"Can't reach the server. Try again when you're back on home Wi-Fi."); return false; }
+}
+async function saveDefaultLimits(){
+  const el=document.getElementById("view-admin"), lim=readLimits(el,false); if(!lim) return;
+  const img=Number(el.querySelector("#lim_image_usd").value);
+  if(!(img>=0&&img<=10)){ toast("The cover price is US$0 to US$10."); return; }
+  lim.admin_exempt=el.querySelector("#lim_admin_exempt").checked;
+  if(await putLimits({defaults:lim, image_usd:img})){ toast("Limits saved"); loadAdmin(); }
+}
+function personLimits(p,d){
+  if(!p) return;
+  const o=p.overrides||{};
+  const f=(k,label,step=1)=>`<div class="field"><label for="lim_${k}">${label}</label><input class="input" id="lim_${k}" type="number" inputmode="decimal" min="0" step="${step}" placeholder="${esc(String(d[k]))}" value="${o[k]!=null?esc(String(o[k])):""}"></div>`;
+  const sh=openSheet(`<h3>${esc(possessive(p.name||p.email))} limits</h3>
+    <p class="muted small" style="margin:0 0 10px">Leave a box empty to use everyone's limit (shown in grey).${p.is_admin&&d.admin_exempt?" You have no limits while “No limits for you” is ticked.":""}</p>
+    <div class="adm-lims">${LIMIT_GROUPS.map(g=>f(g,LIMIT_NAMES[g])).join("")}${f("monthly_usd","Monthly US$",0.5)}</div>
+    <div class="row"><button class="btn" data-act="save">Save</button><button class="btn ghost" data-act="reset">Use everyone's</button><button class="btn ghost" data-act="close">Close</button></div>`);
+  sheetActions(sh,{ close:closeSheet,
+    save:async()=>{ const lim=readLimits(sh,true); if(!lim) return; if(await putLimits({user:p.id, overrides:Object.keys(lim).length?lim:null})){ closeSheet(); toast("Limits saved"); loadAdmin(); } },
+    reset:async()=>{ if(await putLimits({user:p.id, overrides:null})){ closeSheet(); toast(`${p.name||p.email} is back on everyone's limits`); loadAdmin(); } } });
+}
+
 /* ---------- version ---------- */
 const metaOf=n=>{ const v=document.querySelector(`meta[name="${n}"]`)?.content||""; return v.startsWith("__")?"dev":v; };
 const APP={ version:metaOf("app-version"), commit:metaOf("app-commit") };
@@ -2149,10 +2279,11 @@ document.getElementById("verLabel").textContent="v"+APP.version;
 const isStale=info=>info && (info.version!==APP.version || (info.commit!=="dev" && APP.commit!=="dev" && info.commit!==APP.commit));
 function fmtDate(isoDate){ const [y,m,d]=isoDate.split("-").map(Number); return `${d} ${MONTHS[m-1]} ${y}`; }
 async function openVersion(){
-  const sh=openSheet(`<h3>Bourdain ${esc(APP.version)}</h3><p class="muted small" style="margin:0 0 10px">Build ${esc(APP.commit)}</p>
+  const sh=openSheet(`<h3 id="verHead" class="verhead">Bourdain ${esc(APP.version)}</h3><p class="muted small" style="margin:0 0 10px">Build ${esc(APP.commit)}</p>
     <div class="row verbtns"><button class="btn" data-act="profile">Edit profile</button><button class="btn" data-act="export">Export my data</button><button class="btn ghost" data-act="close">Close</button></div>
     <div id="verBody"><p class="status"><span class="spin"></span>Checking the server…</p></div>`);
   sheetActions(sh,{ close:closeSheet, export:exportData, profile:()=>profileSheet(false) });
+  if(store.me?.is_admin) longPress(sh.querySelector("#verHead"),600,openAdmin); // the owner's screen: deliberately not a button
   let info=null; try{ info=await api("/api/version",{signal:timeout(10000)}); }catch(e){ console.warn("version check failed",e); }
   const body=sh.querySelector("#verBody"); if(!sh.isConnected||!body) return; // another sheet opened meanwhile
   if(!info){ body.innerHTML=`<p class="vernote">Couldn't reach the server, so I can't check for a newer version or show the history. Try again when you're back on home Wi-Fi.</p>`; return; }

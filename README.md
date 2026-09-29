@@ -133,6 +133,8 @@ Every import lands on a review screen before it's saved, because the model will 
 
 Tap **Make cover** on a recipe to get an illustrated cover. Claude describes the finished dish, then OpenAI's image model paints it on a transparent background. This needs an OpenAI API key: set `OPENAI_API_KEY` in the app YAML and redeploy. `IMAGE_MODEL` (default `gpt-image-2`) and `IMAGE_QUALITY` (`low`, `medium` or `high`, default `medium`) are optional. Each cover is billed to your OpenAI account; check its pricing page for current rates.
 
+**AI limits (2.2.0+).** Each person gets a daily allowance of imports, fridge scans, recipe ideas and covers, and an estimated monthly spend. The owner isn't held to them by default. Set `TZ` (for example `Australia/Sydney`) in the app YAML so they reset at your midnight rather than UTC. The owner changes them in the owner's view: tap the **Bourdain** title, then press and hold the heading of that sheet.
+
 ## Cost
 
 About one to two cents per recipe import, billed to your own Anthropic key. Nothing else costs anything.
