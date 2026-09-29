@@ -139,6 +139,7 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .empty h3{color:var(--ink);font-size:24px;margin-bottom:6px}
 
 /* Detail */
+.revhint{margin-bottom:12px}
 .detail-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px}
 .detail h2{font-size:34px;line-height:1.08;margin-bottom:8px;letter-spacing:-.02em}
 .detail .meta{font-family:var(--sans);color:var(--ink-3);font-size:12.5px}
@@ -430,17 +431,15 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
           <input class="input" id="srcUrl" type="url" placeholder="https://…" style="flex:1">
           <button class="btn primary" id="btnFetch" hidden>Fetch &amp; read</button>
         </div>
-        <p class="hint" id="fetchHint" hidden>Works for recipe websites and most TikToks. Instagram usually hides the caption, so paste it or add screenshots.</p>
       </div>
       <div class="field">
-        <label for="srcText">Paste the caption, recipe text, or notes</label>
+        <label for="srcText">Video caption, recipe text or notes</label>
         <textarea class="input" id="srcText" placeholder="Paste the Instagram/TikTok caption, or the recipe copied from a website. If the recipe is only in the video, take screenshots instead."></textarea>
       </div>
       <div class="field" id="imgField">
         <label>Screenshots or a screen recording</label>
         <label class="drop" for="srcImgs" id="dropLbl">Tap to add screenshots or a video of the reel playing</label>
         <input id="srcImgs" type="file" accept="image/*,video/*" multiple hidden>
-        <p class="hint">A screen recording is best: the page pulls the distinct frames out of it and reads the on-screen text and captions. Up to <span id="imgMax">4</span> images or sheets go to the reader.</p>
         <div class="thumbs" id="thumbs"></div>
       </div>
       <div class="row">
@@ -1411,8 +1410,6 @@ function renderImport(){
   form.hidden=false; rev.hidden=true;
   document.getElementById("imgField").style.display = "";
   document.getElementById("btnFetch").hidden = false;
-  document.getElementById("fetchHint").hidden = false;
-  document.getElementById("imgMax").textContent=state.imgMax;
   renderThumbs();
 }
 function renderThumbs(){ const t=document.getElementById("thumbs"); t.innerHTML=state.images.map((f,i)=>`<span style="position:relative;display:inline-block"><img src="${URL.createObjectURL(f)}" alt="Image ${i+1}"><button class="x" data-rmi="${i}" aria-label="Remove" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:0;background:var(--ink);color:var(--paper);font-size:14px;line-height:1;padding:0">×</button></span>`).join(""); }
@@ -1686,8 +1683,8 @@ function renderReview(){
   el.innerHTML=`
     <div class="detail-head"><button class="btn small ghost" id="revBack">‹ ${state.editingId?"Cancel":"Back"}</button>
       <button class="btn primary" id="revSave">${state.editingId?"Save changes":"Save recipe"}</button></div>
-    <h2>${state.editingId?"Edit recipe":"Check the import"}</h2>
-    ${state.editingId?"":`<p class="hint" style="margin-bottom:12px">Fix anything the reader got wrong before it goes into the book.</p>`}
+    <h2>${state.editingId?"Edit recipe":"New recipe"}</h2>
+    ${state.editingId?"":`<p class="hint revhint">Check everything looks right before it goes into the book.</p>`}
     <div class="field"><label>Title</label><input class="input" id="fTitle" value="${esc(d.title)}"></div>
     <div class="field"><label>Description</label><textarea class="input" id="fDesc" style="min-height:64px">${esc(d.description||"")}</textarea></div>
     <div class="row" style="margin-bottom:12px">
