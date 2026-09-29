@@ -342,17 +342,16 @@ Each stage ships and gets used before the next.
 |---|---|
 | **1.10.1** ✅ | Groundwork: the old app ignores 2.0-shaped data (needed for rollback). Shipped; see "What 1.10.1 set up". |
 | **2.0.0** | The migration. Owners on every row, users table, `/api/me`, per-user offline copy, Export. Still only Zein. Zein's traffic is identified by `TRUSTED_NETS`, Cloudflare isn't set up yet, and the app looks the same. |
-| **2.1.0** | Profiles (name, photo, welcome screen), People row, read-only recipes, Add to my recipes, search across everyone's books. |
-| **2.2.0** | Archives feed with names and avatars, Everyone / Just me. |
-| **2.3.0** | `/api/ai` with server-side prompts, usage log, limits, admin screen, activity log. |
-| **2.4.0** | #14, upload cap, "Signed out" handling, Cloudflare token verification. |
+| **2.1.0** | Everything about seeing other people (merged from the planned 2.1 and 2.2 on 2026-09-29, since both change the Archives): profiles (name, photo, welcome screen), People row, read-only recipes, Add to my recipes, search across everyone's books, and the Archives feed with names and avatars, Everyone / Just me. |
+| **2.2.0** | `/api/ai` with server-side prompts, usage log, limits, admin screen, activity log. |
+| **2.3.0** | #14, upload cap, "Signed out" handling, Cloudflare token verification. |
 | — | Set up Cloudflare Tunnel + Access (no code). Zein signs in through it first, then with a second test email, then invites the pilot users. |
 
 ## Setup Zein does (no code)
 
 - **Before 2.0.0:** add `OWNER_EMAIL` to the TrueNAS YAML, and mirror it in
   `docker-compose.yml` with a placeholder.
-- **At 2.4.0:**
+- **At 2.3.0:**
   - In Cloudflare: add the domain, create a Tunnel, and run `cloudflared` as a
     second TrueNAS app with the tunnel token.
   - Create an Access application for `bourdain.<domain>` with an email
