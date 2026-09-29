@@ -133,6 +133,8 @@ Every import lands on a review screen before it's saved, because the model will 
 
 Tap **Make cover** on a recipe to get an illustrated cover. Claude describes the finished dish, then OpenAI's image model paints it on a transparent background. This needs an OpenAI API key: set `OPENAI_API_KEY` in the app YAML and redeploy. `IMAGE_MODEL` (default `gpt-image-2`) and `IMAGE_QUALITY` (`low`, `medium` or `high`, default `medium`) are optional. Each cover is billed to your OpenAI account; check its pricing page for current rates.
 
+**Signing in from outside home (2.3.0+).** Bourdain can sit behind Cloudflare Access on your own domain, so a few people can use it from anywhere, each with their own recipes. It's off until you set `CF_ACCESS_TEAM` and `CF_ACCESS_AUD`; then `TRUSTED_NETS` (for example `192.168.1.0/24`) lists the networks where you're let in without signing in. The steps, in order, are in `docs/multi-user.md` under "Setup Zein does".
+
 **AI limits (2.2.0+).** Each person gets a daily allowance of imports, fridge scans, recipe ideas and covers, and an estimated monthly spend. The owner isn't held to them by default. Set `TZ` (for example `Australia/Sydney`) in the app YAML so they reset at your midnight rather than UTC. The owner changes them in the owner's view: tap the **Bourdain** title, then press and hold the heading of that sheet.
 
 ## Cost

@@ -7,11 +7,29 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { generateKeyPairSync, sign as cryptoSign } from "node:crypto";
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Every test server has an owner (2.0.0 refuses to start without one).
 export const OWNER_EMAIL_FOR_TESTS = "owner@example.com";
+
+/* Signing in the way production does (2.3). Tests hold a signing key; the fake
+   Cloudflare in mock-apis.mjs serves its public half as the team's certs, and the
+   server checks tokens exactly as it checks Cloudflare's. There is no test-only
+   way in. CF_ENV turns sign-in on for a test server. */
+export const CF = { team: "bourdain-test", aud: "test-aud", kid: "test-key" };
+export const CF_ENV = { CF_ACCESS_TEAM: CF.team, CF_ACCESS_AUD: CF.aud };
+const cfKeys = generateKeyPairSync("rsa", { modulusLength: 2048 });
+const CF_JWKS = JSON.stringify({ keys: [{ ...cfKeys.publicKey.export({ format: "jwk" }), kid: CF.kid, alg: "RS256", use: "sig" }] });
+export const otherKey = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey; // not Cloudflare's
+const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+export function cfToken(email, { aud = [CF.aud], iss = `https://${CF.team}.cloudflareaccess.com`, exp = Math.floor(Date.now() / 1000) + 3600, kid = CF.kid, alg = "RS256", key = cfKeys.privateKey, extra = {} } = {}) {
+  const head = b64({ alg, kid, typ: "JWT" }), body = b64({ aud, iss, exp, iat: Math.floor(Date.now() / 1000), ...(email ? { email } : {}), ...extra });
+  return `${head}.${body}.${cryptoSign("RSA-SHA256", Buffer.from(`${head}.${body}`), key).toString("base64url")}`;
+}
+// Headers a request carries after coming through the tunnel and Access.
+export const viaCf = (email, opts) => ({ "Cf-Ray": "8f00000000000000-SYD", "Cf-Connecting-Ip": "203.0.113.9", ...(email !== undefined ? { "Cf-Access-Jwt-Assertion": cfToken(email, opts) } : {}) });
 
 // PASS/FAIL collector. finish() prints and exits non-zero on any failure.
 export function suite(name) {
@@ -42,7 +60,7 @@ export async function startServer({ port, env = {}, mock = false, dataDir, named
   const launch = async (extraEnv = {}) => {
     proc = spawn("node", [...(mock ? ["--import", path.join(ROOT, "tests/mock-apis.mjs")] : []), "server.js"], {
       cwd: ROOT,
-      env: { ...process.env, PORT: String(port), DATA_DIR: data, MOCK_FILE: modeFile, ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", OWNER_EMAIL: OWNER_EMAIL_FOR_TESTS, ...env, ...extraEnv },
+      env: { ...process.env, PORT: String(port), DATA_DIR: data, MOCK_FILE: modeFile, MOCK_CF_JWKS: CF_JWKS, ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", OWNER_EMAIL: OWNER_EMAIL_FOR_TESTS, ...env, ...extraEnv },
     });
     proc.stdout.on("data", (d) => (log += d));
     proc.stderr.on("data", (d) => (log += d));

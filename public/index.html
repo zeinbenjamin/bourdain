@@ -67,6 +67,8 @@ a{color:inherit}
 .top .sync{color:var(--ink);font-weight:700}
 
 main{flex:1; overflow-y:auto; padding:0 0 84px}
+.signinbar{display:block;width:100%;min-height:48px;border:0;border-bottom:1px solid var(--rule);background:var(--flame);color:var(--paper);font-family:var(--sans);font-size:14px;font-weight:600;padding:10px 18px;text-align:left}
+.signinbar[hidden]{display:none}
 section.view{display:none; padding:16px 18px 24px; max-width:760px; margin:0 auto; width:100%}
 section.view.active{display:block}
 
@@ -416,6 +418,8 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
   <h1><button class="brand" id="brand" aria-label="Version and update history">Bourdain<span class="ver" id="verLabel"></span></button></h1>
   <span class="sub"><span id="syncSub" class="sync"></span><span id="topSub"></span></span>
 </header>
+<!-- Shown when the Cloudflare login has run out (2.3). Waiting changes stay on the phone. -->
+<button class="signinbar" id="signinBar" hidden></button>
 
 <main id="main">
 
@@ -558,11 +562,43 @@ const state = {
 /* ---------- persistence (server API) ---------- */
 const API = "";
 async function api(path, opts={}){
-  const res = await fetch(API+path, opts);
+  const res = await fetch(API+path, {redirect:"manual", ...opts});
+  if(signinLost(res)) throw signin.error();
   if(!res.ok){ let e; try{ e=await res.json(); }catch(_){ e={}; }
-    const err=new Error(e.error||res.statusText); err.code=e.code||("http_"+res.status); err.status=res.status; err.detail=e.detail; err.kind=e.kind; err.limit=e.limit; throw err; }
+    const err=new Error(e.error||res.statusText); err.code=e.code||("http_"+res.status); err.status=res.status; err.detail=e.detail; err.kind=e.kind; err.limit=e.limit;
+    if(NEEDS_SIGNIN.includes(err.code)) signin.lost(err.code);
+    throw err; }
+  if(signin.out) signin.back();
   return res.status===204? null : res.json();
 }
+/* Signing in (2.3). Through Cloudflare, an expired login doesn't answer with our
+   JSON: Cloudflare redirects to its login page (seen here as an opaque redirect,
+   since api() doesn't follow redirects) or serves that page itself. Either way,
+   and when the server says signed_out, the bar at the top says so and a tap
+   reloads the page so Cloudflare can ask. It is never "Offline", and nothing
+   waiting is dropped: flush() and the photo queue keep it (keepForLater). */
+const NEEDS_SIGNIN=["signed_out","not_trusted"];
+const keepForLater=e=>Boolean(e&&["signed_out","not_trusted","signin_unavailable","cf_not_set_up"].includes(e.code));
+function signinLost(res){
+  if(res.type==="opaqueredirect"||(res.status>=300&&res.status<400)) return true;
+  const ct=res.headers.get("content-type")||"";
+  return res.ok && res.status!==204 && /text\/html/.test(ct);
+}
+const signin={
+  out:null, // null, or why: "signed_out" | "not_trusted"
+  error(){ this.lost("signed_out"); return Object.assign(new Error("signed out"),{code:"signed_out",status:401}); },
+  lost(why){
+    if(this.out===why) return;
+    this.out=why;
+    const bar=document.getElementById("signinBar");
+    bar.textContent = why==="not_trusted"
+      ? "Bourdain doesn't recognise this network. Open it from its web address instead."
+      : "Signed out. Tap to sign in again.";
+    bar.hidden=false; bar.onclick=()=>location.reload();
+    store.paint();
+  },
+  back(){ this.out=null; document.getElementById("signinBar").hidden=true; store.paint(); },
+};
 const timeout=ms=>AbortSignal.timeout?AbortSignal.timeout(ms):undefined;
 /* Every write goes into a persistent outbox first and leaves it only once the
    server has accepted it, so nothing is lost to a dropped connection, a reload,
@@ -615,6 +651,9 @@ const store = {
       console.warn("couldn't load from the server, using this device's copy");
       const e=this.loadError;
       toast(e&&e.code==="cf_not_set_up" ? "Bourdain can't be opened from this address yet. Use your home address for now."
+        : e&&e.code==="signed_out" ? "You're signed out. Tap the red bar at the top to sign in again. This phone's copy is shown until then."
+        : e&&e.code==="not_trusted" ? "Bourdain doesn't recognise this network, so it's showing this phone's copy. Open it from its web address instead."
+        : e&&e.code==="signin_unavailable" ? "The server can't check your sign-in right now (it can't reach Cloudflare). Showing this phone's copy; try again in a minute."
         : e&&e.status ? `The server is up but couldn't load your recipes (${e.code}). Showing this phone's copy; check the server logs.`
         : "Can't reach the server. Changes are kept on this phone and sync when it's back.");
     }
@@ -696,6 +735,7 @@ const store = {
           this.online=true;
         }catch(e){
           if(e.code==="data_newer"){ this.setAsideAll(); break; } // the server was rolled back: keep everything for later, send nothing
+          if(keepForLater(e)){ console.warn("not signed in, keeping changes for later",e); break; }
           if(e.status>=400&&e.status<500){ op.refused=true; console.error("server refused a change, dropping it",op,e); toast("The server refused one change, so it wasn't kept. Check it and try again."); }
           else { console.warn("sync failed, will retry",e); this.online=false; break; }
         }
@@ -733,7 +773,7 @@ const store = {
     if(op.refused) return false;
     if(this.serverBehind) return false; // set aside with the rest; setAsideAll already said so
     if(!this.outbox.includes(op)) return true;
-    toast(`${verb} on this phone. It'll sync when the server's back.`);
+    toast(signin.out ? `${verb} on this phone. It'll sync once you sign in again.` : `${verb} on this phone. It'll sync when the server's back.`);
     return false;
   },
   put(col,id,data){ return this.write(col,id,data,"Saved"); },
@@ -741,7 +781,7 @@ const store = {
   paint(){
     const el=document.getElementById("syncSub"); if(!el) return;
     const n=this.outbox.length+photoQueue.pending;
-    el.textContent = n ? `${n} change${n===1?"":"s"} not synced · ` : this.loading ? "Loading… · " : (!this.fromServer||!this.online) ? "Offline · " : "";
+    el.textContent = signin.out ? "Signed out · " : n ? `${n} change${n===1?"":"s"} not synced · ` : this.loading ? "Loading… · " : (!this.fromServer||!this.online) ? "Offline · " : "";
   },
   /* One of the app's AI jobs (import, scan, ideas, write), run by the server:
      the prompts live there and every call counts against this person's limits.
@@ -1779,6 +1819,10 @@ function aiError(e, what="reading that"){
     image_failed:"The image model didn't send a picture back. Try again.",
     image_upstream_error:"OpenAI had a problem. Try again in a few minutes.",
     ai_busy:"Still working on your last one. Give it a moment to finish.",
+    signed_out:"You're signed out. Tap the red bar at the top to sign in again.",
+    not_trusted:"Bourdain doesn't recognise this network. Open it from its web address instead.",
+    signin_unavailable:"The server can't check your sign-in right now (it can't reach Cloudflare). Try again in a minute.",
+    cf_not_set_up:"Bourdain can't be opened from this address yet. Use your home address for now.",
     ai_budget:`That's this month's AI allowance used up. It resets on the 1st${store.me&&!store.me.is_admin?"; ask Zein if you need more":""}.`,
   };
   if(c==="ai_limit"){ // daily limit for one kind of job; more tomorrow
@@ -1918,6 +1962,8 @@ document.getElementById("btnFetch").onclick=async()=>{
     btn.disabled=false; status.className="status err";
     status.textContent = (e&&e.code==="fetch_failed")
       ? "The server couldn't read that page. Paste the text or add screenshots instead."
+      : (e&&e.code==="blocked_address") ? "That link points inside a private network, so Bourdain won't open it. Use a public recipe link, or paste the text."
+      : keepForLater(e) ? aiError(e)
       : "Couldn't reach the server. Check it's running, then try again.";
   }
 };
@@ -1966,16 +2012,19 @@ async function uploadPhotos(files){
     if(store.online){
       try{ ids.push((await store.uploadPhoto(blob)).id); continue; }
       catch(e){
-        if(e&&(e.code==="image_failed"||(e.status>=400&&e.status<500))){ toast("The server couldn't use that photo. Try a different one."); continue; }
+        if(e&&e.code==="storage_full"){ toast(storageFull(e)); continue; }
+        if(e&&(e.code==="image_failed"||(e.status>=400&&e.status<500))&&!keepForLater(e)){ toast("The server couldn't use that photo. Try a different one."); continue; }
         console.warn("photo upload failed, keeping it on this phone",e); store.online=false;
       }
     }
     try{ ids.push(await photoQueue.add(blob)); queued++; }
     catch(e){ console.warn(e); toast("Couldn't upload that photo, and this phone couldn't keep it for later."); }
   }
-  if(queued) toast(queued===1?"Photo saved on this phone. It'll upload when the server's back.":`${queued} photos saved on this phone. They'll upload when the server's back.`);
+  const when=signin.out?"once you sign in again":"when the server's back";
+  if(queued) toast(queued===1?`Photo saved on this phone. It'll upload ${when}.`:`${queued} photos saved on this phone. They'll upload ${when}.`);
   return ids;
 }
+const storageFull=e=>`Your photo storage is full${e.limit?` (${e.limit} MB)`:""}. Remove photos from recipes you don't need, or ask Zein for more room.`;
 function photoUrl(id){ return String(id).startsWith("local-") ? (photoQueue.urls[id]||"") : "/api/photos/"+id; }
 
 /* ---------- offline photo queue ----------
@@ -2014,7 +2063,7 @@ const photoQueue={
       if(!this.used(r.id)){ if(Date.now()-r.added>600000) await this.drop(r.id); continue; } // left behind by a discarded draft
       try{ const out=await store.uploadPhoto(r.blob); this.swap(r.id,out.id); await this.drop(r.id); changed=true; }
       catch(e){
-        if(e&&(e.code==="image_failed"||(e.status>=400&&e.status<500))){ this.swap(r.id,null); await this.drop(r.id); changed=true; toast("The server couldn't use one of the saved photos, so it was removed."); }
+        if(e&&(e.code==="image_failed"||(e.status>=400&&e.status<500))&&!keepForLater(e)){ this.swap(r.id,null); await this.drop(r.id); changed=true; toast(e.code==="storage_full"?storageFull(e)+" One photo kept on this phone was removed.":"The server couldn't use one of the saved photos, so it was removed."); }
         else { store.online=false; return; } // still unreachable: keep the rest for next time
       }
     }
@@ -2162,6 +2211,7 @@ const ACT_WORDS={ recipe_added:"added", recipe_edited:"edited", recipe_deleted:"
   ai_import:"imported a recipe with AI", ai_scan:"scanned the fridge", ai_ideas:"asked for recipe ideas", ai_write:"had a recipe written", ai_cover:"painted a cover" };
 const LIMIT_GROUPS=["import","scan","ideas","cover"];
 const LIMIT_NAMES={ import:"Imports", scan:"Fridge scans", ideas:"Ideas + write", cover:"Covers" };
+const fmtMB=b=>!b?"none":b<1024*1024?"under 1 MB":`${Math.round(b/1024/1024)} MB`;
 const usd=n=>!n?"US$0":n<0.01?"under US$0.01":"US$"+n.toFixed(2);
 function whenShort(isoTs){
   if(!isoTs) return "never";
@@ -2184,6 +2234,18 @@ async function loadAdmin(){
   }catch(e){ state.admin={error:e}; }
   if(state.view==="admin") renderAdmin();
 }
+// What the server saw for this request, so the owner can check TRUSTED_NETS on the NAS (docs/multi-user.md).
+function signinHtml(si){
+  if(!si) return "";
+  const you=si.you||{};
+  const setup = si.cloudflare
+    ? `Cloudflare Access (team ${esc(si.team)}). Without Cloudflare, only ${si.trusted.length?esc(si.trusted.join(", ")):"no networks (TRUSTED_NETS is empty)"} count as you.`
+    : `Not set up yet: every request is you, and anything through Cloudflare is refused. Set CF_ACCESS_TEAM and CF_ACCESS_AUD to turn it on.`;
+  return `<p class="muted small adm-note">${setup}</p>
+    <div class="adm-row"><span>This phone's address</span><span>${esc(you.ip||"?")}</span></div>
+    <div class="adm-row"><span>Came through Cloudflare</span><span>${you.cloudflare?"Yes":"No"}</span></div>
+    <div class="adm-row"><span>Recognised by</span><span>${esc(you.how||"?")}</span></div>`;
+}
 function renderAdmin(){
   const el=document.getElementById("view-admin"), a=state.admin;
   const head=`<div class="detail-head"><button class="btn small ghost" id="aBack">‹ Recipes</button>${a&&!a.error?`<button class="btn small" id="aRefresh">Refresh</button>`:""}</div>`;
@@ -2199,6 +2261,7 @@ function renderAdmin(){
       <div class="adm-top">${avatar(p,"md")}<div class="adm-who"><b>${esc(p.name||"No name yet")}${p.is_admin?" · you":""}</b><span>${esc(p.email)}</span><span>Last seen ${esc(whenShort(p.last_seen))}</span></div></div>
       <div class="meta">${p.recipes} recipe${p.recipes===1?"":"s"} · ${p.cooks} cook${p.cooks===1?"":"s"} · ${p.copies} cop${p.copies===1?"y":"ies"}</div>
       <div class="adm-sub">AI today${exempt?" · no limits":""}</div><div class="adm-use">${use}</div>
+      <div class="meta">Photos: ${fmtMB(p.storage_bytes)}${exempt?"":` of ${p.limits.storage_mb} MB`}</div>
       <div class="meta">This month: ${p.ai.month_calls} AI call${p.ai.month_calls===1?"":"s"} · ${usd(p.ai.month_usd)}${exempt?"":` of ${usd(p.limits.monthly_usd)}`}${p.overrides?" · <span class=\"inyours\">own limits</span>":""}</div>
       <div class="row adm-btns"><button class="btn small" data-lim="${esc(p.id)}">Limits</button><button class="btn small ghost" data-acts="${esc(p.id)}">Activity</button></div>
     </div>`;
@@ -2217,11 +2280,12 @@ function renderAdmin(){
     <p class="muted small">Only you can see this. AI costs are estimates; the real bills are in the Anthropic and OpenAI consoles.</p>
     <div class="stats"><div class="stat"><b>${sum.month.calls}</b><span>AI calls in ${month}</span></div><div class="stat"><b>${sum.month.usd<0.01?"$0":"$"+sum.month.usd.toFixed(2)}</b><span>Est. ${month}</span></div><div class="stat"><b>${sum.people.length}</b><span>People</span></div></div>
     <h3 class="tl-head">People</h3>${sum.people.map(person).join("")}
+    <h3 class="tl-head">Signing in</h3>${signinHtml(sum.signin)}
     <h3 class="tl-head">AI in ${month}</h3>${kinds}
     <p class="muted small adm-note">Priced at US$${sum.prices.claude[0]} in / US$${sum.prices.claude[1]} out per million tokens (${esc(sum.prices.model)}${sum.prices.known?"":", price not known, so guessed"}) and ${usd(sum.prices.image_usd)} a cover picture.</p>
     <h3 class="tl-head">Limits for everyone</h3>
-    <p class="muted small adm-note">Per person per day, reset at midnight. The monthly allowance is the estimated spend.</p>
-    <div class="adm-lims">${LIMIT_GROUPS.map(g=>num(g,LIMIT_NAMES[g])).join("")}${num("monthly_usd","Monthly US$",0.5)}
+    <p class="muted small adm-note">Per person per day, reset at midnight. The monthly allowance is the estimated spend. Photos is the most each person can upload in all.</p>
+    <div class="adm-lims">${LIMIT_GROUPS.map(g=>num(g,LIMIT_NAMES[g])).join("")}${num("monthly_usd","Monthly US$",0.5)}${num("storage_mb","Photos, MB each",50)}
       <div class="field"><label for="lim_image_usd">Cover picture, US$ each</label><input class="input" id="lim_image_usd" type="number" inputmode="decimal" min="0" step="0.01" value="${esc(String(sum.prices.image_usd))}"></div></div>
     <label class="check"><input type="checkbox" id="lim_admin_exempt" ${d.admin_exempt?"checked":""}> No limits for you</label>
     <p class="muted small adm-note">The cover price is a placeholder. Set it from your OpenAI bill.</p>
@@ -2239,10 +2303,11 @@ function renderAdmin(){
 // Reads limit inputs from a container. Blank ones are left out when blankOk; returns null (and toasts) if one is wrong.
 function readLimits(box,blankOk){
   const out={};
-  for(const k of [...LIMIT_GROUPS,"monthly_usd"]){
+  for(const k of [...LIMIT_GROUPS,"monthly_usd","storage_mb"]){
     const v=box.querySelector("#lim_"+k).value.trim();
-    if(v===""){ if(blankOk) continue; toast(`Fill in ${k==="monthly_usd"?"the monthly allowance":LIMIT_NAMES[k].toLowerCase()}.`); return null; }
+    if(v===""){ if(blankOk) continue; toast(`Fill in ${k==="monthly_usd"?"the monthly allowance":k==="storage_mb"?"the photo storage":LIMIT_NAMES[k].toLowerCase()}.`); return null; }
     const n=Number(v);
+    if(k==="storage_mb"){ if(!(Number.isInteger(n)&&n>=0&&n<=100000)){ toast("Photo storage is a whole number of MB, up to 100000."); return null; } out[k]=n; continue; }
     if(k==="monthly_usd" ? !(n>=0&&n<=1000) : !(Number.isInteger(n)&&n>=0&&n<=1000)){ toast(k==="monthly_usd"?"The monthly allowance is US$0 to US$1000.":"Daily limits are whole numbers from 0 to 1000."); return null; }
     out[k]=n;
   }
@@ -2265,7 +2330,7 @@ function personLimits(p,d){
   const f=(k,label,step=1)=>`<div class="field"><label for="lim_${k}">${label}</label><input class="input" id="lim_${k}" type="number" inputmode="decimal" min="0" step="${step}" placeholder="${esc(String(d[k]))}" value="${o[k]!=null?esc(String(o[k])):""}"></div>`;
   const sh=openSheet(`<h3>${esc(possessive(p.name||p.email))} limits</h3>
     <p class="muted small" style="margin:0 0 10px">Leave a box empty to use everyone's limit (shown in grey).${p.is_admin&&d.admin_exempt?" You have no limits while “No limits for you” is ticked.":""}</p>
-    <div class="adm-lims">${LIMIT_GROUPS.map(g=>f(g,LIMIT_NAMES[g])).join("")}${f("monthly_usd","Monthly US$",0.5)}</div>
+    <div class="adm-lims">${LIMIT_GROUPS.map(g=>f(g,LIMIT_NAMES[g])).join("")}${f("monthly_usd","Monthly US$",0.5)}${f("storage_mb","Photos, MB",50)}</div>
     <div class="row"><button class="btn" data-act="save">Save</button><button class="btn ghost" data-act="reset">Use everyone's</button><button class="btn ghost" data-act="close">Close</button></div>`);
   sheetActions(sh,{ close:closeSheet,
     save:async()=>{ const lim=readLimits(sh,true); if(!lim) return; if(await putLimits({user:p.id, overrides:Object.keys(lim).length?lim:null})){ closeSheet(); toast("Limits saved"); loadAdmin(); } },
@@ -2300,7 +2365,8 @@ document.getElementById("brand").onclick=openVersion;
 async function exportData(btn){
   const old=btn.textContent; btn.disabled=true; btn.innerHTML=`<span class="spin"></span>Preparing…`;
   try{
-    const res=await fetch(API+"/api/export",{signal:timeout(120000)});
+    const res=await fetch(API+"/api/export",{redirect:"manual",signal:timeout(120000)});
+    if(res.type==="opaqueredirect"||/text\/html/.test(res.headers.get("content-type")||"")) throw signin.error();
     if(!res.ok){ let e={}; try{ e=await res.json(); }catch(_){} throw Object.assign(new Error(e.error||res.statusText),{code:e.code,status:res.status}); }
     const name=(res.headers.get("Content-Disposition")||"").match(/filename="([^"]+)"/)?.[1]||"bourdain-export.zip";
     const url=URL.createObjectURL(await res.blob());
@@ -2309,7 +2375,7 @@ async function exportData(btn){
     toast(`Saved ${name}. It has your recipes, plan, pantry and their photos.`);
   }catch(e){
     console.warn("export failed",e);
-    toast(e.status ? `The server couldn't make the export (${e.code||e.status}). Check the server logs.` : "Couldn't reach the server to make the export. Try again when you're back on home Wi-Fi.");
+    toast(e.code==="signed_out" ? "You're signed out. Tap the red bar at the top to sign in again, then export." : e.status ? `The server couldn't make the export (${e.code||e.status}). Check the server logs.` : "Couldn't reach the server to make the export. Try again when you're back on home Wi-Fi.");
   }finally{ btn.disabled=false; btn.textContent=old; }
 }
 /* Quietly tell the user when the server has a newer build than the one this phone is running. */

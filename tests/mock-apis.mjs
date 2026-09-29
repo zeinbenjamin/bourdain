@@ -1,6 +1,6 @@
 // Test-only stand-ins for api.anthropic.com and api.openai.com, loaded into the server
 // with `node --import tests/mock-apis.mjs`. The mode is read from MOCK_FILE on every call
-// ({"claude": "...", "image": "...", "scan": "...", "claudeDelay": ms, "imageDelay": ms}), so one
+// ({"claude": "...", "image": "...", "scan": "...", "claudeDelay": ms, "imageDelay": ms, "cfCerts": "down"}), so one
 // server can be driven through every failure. Requests are logged as MOCK_CLAUDE_REQ,
 // MOCK_SCAN and MOCK_IMG_REQ so tests can check exactly what was sent.
 import { readFileSync } from "node:fs";
@@ -49,6 +49,11 @@ globalThis.fetch = async (url, opts = {}) => {
       ? "Glazed chicken pieces over soft scrambled egg and rice, topped with shredded nori, in a blue-and-white donburi bowl."
       : '{"title":"Mock donburi","servings":2,"ingredients":[{"raw_text":"2 chicken thighs","quantity":2,"unit":"whole","item":"chicken thigh","aisle":"meat & seafood"}],"steps":["Cook it."],"tags":["japanese"]}';
     return json(200, { content: [{ type: "text", text }], stop_reason: "end_turn", usage });
+  }
+  if (/^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com\/cdn-cgi\/access\/certs$/.test(u)) { // the team's signing keys (2.3)
+    console.log("MOCK_CF_CERTS " + u);
+    if (m.cfCerts === "down") return json(503, { error: "unavailable" });
+    return new Response(process.env.MOCK_CF_JWKS || '{"keys":[]}', { status: 200, headers: { "content-type": "application/json" } });
   }
   if (u.startsWith("https://api.openai.com")) {
     const body = JSON.parse(opts.body);

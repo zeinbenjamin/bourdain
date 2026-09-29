@@ -2,7 +2,11 @@ import express from "express";
 import multer from "multer";
 import Database from "better-sqlite3";
 import sharp from "sharp";
-import { randomUUID, randomBytes } from "node:crypto";
+import { randomUUID, randomBytes, createPublicKey, verify as cryptoVerify } from "node:crypto";
+import { BlockList, isIP } from "node:net";
+import { lookup as dnsLookup } from "node:dns";
+import http from "node:http";
+import https from "node:https";
 import { crc32 } from "node:zlib";
 import { mkdirSync, existsSync, createReadStream, readFileSync } from "node:fs";
 import { writeFile, readdir, stat, unlink } from "node:fs/promises";
@@ -147,20 +151,124 @@ app.get("/api/health", (_req, res) =>
 
 app.get("/api/version", (_req, res) => res.json({ version: VERSION, commit: COMMIT, dataVersion: DATA_VERSION, changelog: CHANGELOG }));
 
-/* ---------------- who is asking ----------------
-   2.0 is still single-user: Cloudflare sign-in isn't checked until 2.3 (see
-   docs/multi-user.md), so every request is the owner. Until then, anything that
-   arrives through Cloudflare is refused outright: a public hostname added to the
-   tunnel too early must show "not set up yet", never the owner's recipes.
+/* ---------------- who is asking (2.3) ----------------
+   Cloudflare Access sits in front of the public address and lets in only the
+   emails on its list. On every request it passes through, it adds a token
+   (Cf-Access-Jwt-Assertion) signed with the team's keys, naming the email. The
+   server checks the signature, that the token is for this app (the AUD tag) and
+   still valid, and never trusts a plain email header. See docs/multi-user.md.
+
+   - Not set up (no CF_ACCESS_TEAM / CF_ACCESS_AUD): single-user, as in 2.0.
+     Every request is the owner, and anything that came through Cloudflare is
+     refused, so a public hostname added too early never shows the recipes.
+   - Set up: a valid token decides who it is. Anything that came through
+     Cloudflare without one is refused. A request with no Cloudflare headers at
+     all is the owner only from TRUSTED_NETS (the home network); from anywhere
+     else it's refused. The tunnel always adds Cloudflare headers, so tunnel
+     traffic never counts as the home network, whatever address it comes from.
    /api/health and /api/version above stay open; they hold no data.            */
-let lastSeenWritten = 0;
-app.use("/api", (req, res, next) => {
-  if (req.get("cf-ray") || req.get("cf-connecting-ip") || req.get("cf-access-jwt-assertion"))
-    return res.status(403).json({ error: "Bourdain isn't set up for access through Cloudflare yet", code: "cf_not_set_up" });
-  req.user = OWNER;
-  if (Date.now() - lastSeenWritten > 5 * 60_000) { // a write per request would be wasteful; every 5 minutes is plenty
-    lastSeenWritten = Date.now();
+const CF_TEAM = (process.env.CF_ACCESS_TEAM || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\.cloudflareaccess\.com.*$/, "").replace(/\/.*$/, "");
+const CF_AUD = (process.env.CF_ACCESS_AUD || "").trim();
+const CF_ON = Boolean(CF_TEAM && CF_AUD);
+if (Boolean(CF_TEAM) !== Boolean(CF_AUD)) console.error("Only one of CF_ACCESS_TEAM and CF_ACCESS_AUD is set, so Cloudflare sign-in is off. Set both.");
+const CF_ISSUER = `https://${CF_TEAM}.cloudflareaccess.com`;
+const ipType = (ip) => (isIP(ip) === 6 ? "ipv6" : "ipv4");
+const plainIp = (ip) => String(ip || "").replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/, ""); // an IPv4 address arriving over IPv6
+function blockList(cidrs, label) {
+  const list = new BlockList(), kept = [];
+  for (const c of cidrs) {
+    const [addr, bits] = c.split("/"), type = isIP(addr);
+    const n = bits === undefined ? (type === 6 ? 128 : 32) : Number(bits);
+    if (!type || !Number.isInteger(n) || n < 0 || n > (type === 6 ? 128 : 32)) { console.error(`${label}: ignoring "${c}", which isn't an address or a range like 192.168.1.0/24`); continue; }
+    list.addSubnet(addr, n, type === 6 ? "ipv6" : "ipv4"); kept.push(`${addr}/${n}`);
+  }
+  return { has: (ip) => { ip = plainIp(ip); return Boolean(isIP(ip)) && list.check(ip, ipType(ip)); }, kept };
+}
+const TRUSTED = blockList((process.env.TRUSTED_NETS || "").split(/[\s,]+/).filter(Boolean), "TRUSTED_NETS");
+if (CF_ON) console.log(`sign-in: Cloudflare Access (${CF_TEAM}); without a token, only from ${TRUSTED.kept.join(", ") || "nowhere (TRUSTED_NETS is empty)"}`);
+else console.log("sign-in: not set up, so every request is the owner and Cloudflare traffic is refused");
+
+// The team's signing keys, cached for an hour and fetched again for a key we haven't seen (at most once a minute).
+const cfKeys = { byKid: new Map(), at: 0, tried: 0 };
+async function cfKey(kid) {
+  const fresh = Date.now() - cfKeys.at < 3600_000;
+  if (!(fresh && cfKeys.byKid.has(kid)) && Date.now() - cfKeys.tried > 60_000) {
+    cfKeys.tried = Date.now();
+    try {
+      const r = await fetch(`${CF_ISSUER}/cdn-cgi/access/certs`, { signal: AbortSignal.timeout(10000) });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const { keys = [] } = await r.json();
+      cfKeys.byKid = new Map(keys.filter((k) => k.kid && k.kty === "RSA").map((k) => [k.kid, createPublicKey({ key: k, format: "jwk" })]));
+      cfKeys.at = Date.now();
+    } catch (err) { console.error("couldn't fetch Cloudflare's signing keys:", err.message); }
+  }
+  if (!cfKeys.at) throw Object.assign(new Error("no signing keys"), { unavailable: true });
+  return cfKeys.byKid.get(kid);
+}
+const b64json = (s) => JSON.parse(Buffer.from(s, "base64url").toString("utf8"));
+// Returns the email in a valid token, or throws with the reason (logged, never shown).
+async function verifyCfToken(token) {
+  const parts = String(token).split(".");
+  if (parts.length !== 3) throw new Error("not a JWT");
+  const head = b64json(parts[0]), body = b64json(parts[1]);
+  if (head.alg !== "RS256") throw new Error(`unexpected alg ${head.alg}`);
+  const key = await cfKey(head.kid);
+  if (!key) throw new Error(`unknown key ${head.kid}`);
+  if (!cryptoVerify("RSA-SHA256", Buffer.from(`${parts[0]}.${parts[1]}`), key, Buffer.from(parts[2], "base64url"))) throw new Error("bad signature");
+  const now = Date.now() / 1000;
+  if (body.iss !== CF_ISSUER) throw new Error(`issuer ${body.iss}`);
+  if (!(Array.isArray(body.aud) ? body.aud : [body.aud]).includes(CF_AUD)) throw new Error("not for this app (aud)");
+  if (!(body.exp > now - 60)) throw new Error("expired");
+  if (body.nbf && body.nbf > now + 60) throw new Error("not valid yet");
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  if (!email.includes("@")) throw new Error("no email (a service token?)");
+  return email;
+}
+const userByEmail = (email) => db.prepare("SELECT * FROM users WHERE lower(email) = ?").get(email);
+// Someone Cloudflare let in for the first time gets a row; the welcome sheet asks their name.
+function signedInUser(email) {
+  let u = userByEmail(email);
+  if (!u) {
+    try { db.prepare("INSERT INTO users (id, email, is_admin, created_at) VALUES (?, ?, 0, ?)").run(newUserId(), email, new Date().toISOString()); }
+    catch (err) { if (!/UNIQUE/.test(err.message)) throw err; } // two first requests at once
+    u = userByEmail(email);
+    console.log(`new person signed in: ${email}`);
+  }
+  return u;
+}
+const clientIp = (req) => plainIp(req.socket.remoteAddress); // never X-Forwarded-For: anyone can send that
+const viaCloudflare = (req) => Boolean(req.get("cf-ray") || req.get("cf-connecting-ip") || req.get("cf-access-jwt-assertion"));
+const lastSeenAt = new Map();
+app.use("/api", async (req, res, next) => {
+  const cf = viaCloudflare(req), token = req.get("cf-access-jwt-assertion");
+  let how;
+  if (!CF_ON) {
+    if (cf) return res.status(403).json({ error: "Bourdain isn't set up for access through Cloudflare yet", code: "cf_not_set_up" });
+    req.user = OWNER; how = "home (sign-in not set up)";
+  } else if (token) {
+    try { req.user = signedInUser(await verifyCfToken(token)); how = "Cloudflare"; }
+    catch (err) {
+      if (err.unavailable) return res.status(503).json({ error: "can't check sign-in right now", code: "signin_unavailable" });
+      console.warn(`refused a Cloudflare token from ${clientIp(req)}: ${err.message}`);
+      return res.status(401).json({ error: "signed out", code: "signed_out" });
+    }
+  } else if (cf) {
+    // Through the tunnel with no token: Access isn't guarding this hostname, or the login expired.
+    return res.status(401).json({ error: "signed out", code: "signed_out" });
+  } else if (TRUSTED.has(clientIp(req))) {
+    req.user = OWNER; how = "home network";
+  } else {
+    return res.status(401).json({ error: "this network isn't trusted; use the Cloudflare address", code: "not_trusted" });
+  }
+  // Always the current row (a name change shows at once), and last seen at most every 5 minutes.
+  req.user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id) || req.user;
+  req.signin = { how, ip: clientIp(req), cloudflare: cf };
+  const seen = lastSeenAt.get(req.user.id) || 0;
+  if (Date.now() - seen > 5 * 60_000) {
+    lastSeenAt.set(req.user.id, Date.now());
+    const prev = req.user.last_seen ? Date.parse(req.user.last_seen) : 0;
     db.prepare("UPDATE users SET last_seen = ? WHERE id = ?").run(new Date().toISOString(), req.user.id);
+    if (Date.now() - prev > 6 * 3600_000) logActivity(req.user.id, "signed_in", how); // back after a while (or the first time)
   }
   next();
 });
@@ -389,7 +497,15 @@ app.post("/api/photos", upload.single("photo"), async (req, res) => {
       .resize(1600, 1600, { fit: "inside", withoutEnlargement: true })
       .jpeg({ quality: 82 })
       .toBuffer();
+    // Each person's photos share a storage cap (2.3). Photos from before 2.3 aren't
+    // in the table, so they count for nobody; they're all the owner's anyway.
+    const lim = limitsFor(req.user.id);
+    if (!(req.user.is_admin && lim.admin_exempt)) {
+      const used = db.prepare("SELECT COALESCE(SUM(bytes), 0) AS b FROM photos WHERE owner = ?").get(req.user.id).b;
+      if (used + jpeg.length > lim.storage_mb * 1024 * 1024) return res.status(413).json({ error: "photo storage full", code: "storage_full", limit: lim.storage_mb });
+    }
     await writeFile(path.join(PHOTO_DIR, `${id}.jpg`), jpeg);
+    db.prepare("INSERT INTO photos (id, owner, bytes, created_at) VALUES (?, ?, ?, ?)").run(id, req.user.id, jpeg.length, new Date().toISOString());
     res.json({ id, url: `/api/photos/${id}` });
   } catch (err) {
     console.error("photo failed", err);
@@ -524,12 +640,14 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS activity (id INTEGER PRIMARY KEY AUTOINCREMENT, user TEXT NOT NULL, at TEXT NOT NULL, action TEXT NOT NULL, target TEXT);
   CREATE INDEX IF NOT EXISTS activity_at ON activity (at);
   CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS photos (id TEXT PRIMARY KEY, owner TEXT NOT NULL, bytes INTEGER NOT NULL, created_at TEXT NOT NULL);
+  CREATE INDEX IF NOT EXISTS photos_owner ON photos (owner);
 `);
 const getSetting = (k) => { const r = db.prepare("SELECT value FROM settings WHERE key = ?").get(k); try { return r ? JSON.parse(r.value) : null; } catch { return null; } };
 const setSetting = (k, v) => v == null ? db.prepare("DELETE FROM settings WHERE key = ?").run(k)
   : db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(k, JSON.stringify(v));
 // Per person per day (local midnight: set TZ on the container), plus an estimated monthly budget.
-const DEFAULT_LIMITS = { import: 20, scan: 10, ideas: 15, cover: 5, monthly_usd: 5, admin_exempt: true };
+const DEFAULT_LIMITS = { import: 20, scan: 10, ideas: 15, cover: 5, monthly_usd: 5, storage_mb: 500, admin_exempt: true };
 const limitsFor = (userId) => ({ ...DEFAULT_LIMITS, ...(getSetting("limits") || {}), ...(userId ? getSetting(`limits:${userId}`) || {} : {}) });
 /* Estimated cost. Claude per million tokens, from Anthropic's price list
    (claude-sonnet-4-6: $3 in, $15 out). The image price is a placeholder, not a
@@ -618,7 +736,7 @@ function logActivity(user, action, target) {
   db.prepare("INSERT INTO activity (user, at, action, target) VALUES (?, ?, ?, ?)").run(user, new Date().toISOString(), action, t);
 }
 const requireAdmin = (req, res, next) => (req.user.is_admin ? next() : res.status(403).json({ error: "only the owner can see this", code: "not_admin" }));
-app.get("/api/admin/summary", requireAdmin, (_req, res) => {
+app.get("/api/admin/summary", requireAdmin, (req, res) => {
   const day = localDay(), month = day.slice(0, 7) + "%";
   const people = db.prepare("SELECT * FROM users ORDER BY is_admin DESC, created_at").all().map((u) => {
     const rs = Object.values(readAll("recipes", u.id)).filter(Boolean);
@@ -627,11 +745,13 @@ app.get("/api/admin/summary", requireAdmin, (_req, res) => {
     const m = db.prepare("SELECT COUNT(*) AS calls, COALESCE(SUM(est_usd), 0) AS usd FROM ai_usage WHERE user = ? AND day LIKE ?").get(u.id, month);
     return { id: u.id, email: u.email, name: u.name || null, photo: u.photo || null, is_admin: Boolean(u.is_admin), created_at: u.created_at, last_seen: u.last_seen,
       recipes: rs.length, cooks: rs.reduce((n, r) => n + (r.cooks || []).filter((c) => c && c.date).length, 0), copies: rs.filter((r) => r.copied_from).length,
-      ai: { today, month_calls: m.calls, month_usd: m.usd }, limits: limitsFor(u.id), overrides: getSetting(`limits:${u.id}`) };
+      ai: { today, month_calls: m.calls, month_usd: m.usd }, storage_bytes: db.prepare("SELECT COALESCE(SUM(bytes), 0) AS b FROM photos WHERE owner = ?").get(u.id).b, limits: limitsFor(u.id), overrides: getSetting(`limits:${u.id}`) };
   });
   const byKind = db.prepare("SELECT grp, COUNT(*) AS calls, COALESCE(SUM(est_usd), 0) AS usd FROM ai_usage WHERE day LIKE ? GROUP BY grp").all(month);
   res.json({ day, people, month: { calls: byKind.reduce((n, r) => n + r.calls, 0), usd: byKind.reduce((n, r) => n + r.usd, 0), byKind },
-    defaults: { ...DEFAULT_LIMITS, ...(getSetting("limits") || {}) }, prices: prices() });
+    defaults: { ...DEFAULT_LIMITS, ...(getSetting("limits") || {}) }, prices: prices(),
+    // How this request was recognised, so the owner can check on the NAS what the server sees (docs/multi-user.md).
+    signin: { cloudflare: CF_ON, team: CF_TEAM || null, trusted: TRUSTED.kept, you: req.signin } });
 });
 app.get("/api/admin/activity", requireAdmin, (req, res) => {
   const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 100));
@@ -648,6 +768,7 @@ app.put("/api/admin/limits", requireAdmin, (req, res) => {
     const out = {};
     for (const [k, v] of Object.entries(o)) {
       if (LIMIT_GROUPS.includes(k)) { if (!Number.isInteger(v) || v < 0 || v > 1000) throw new Error(`${k} must be a whole number from 0 to 1000`); out[k] = v; }
+      else if (k === "storage_mb") { if (!Number.isInteger(v) || v < 0 || v > 100000) throw new Error("storage_mb must be a whole number from 0 to 100000"); out[k] = v; }
       else if (k === "monthly_usd") { if (typeof v !== "number" || !(v >= 0) || v > 1000) throw new Error("monthly_usd must be 0 to 1000"); out[k] = Math.round(v * 100) / 100; }
       else if (k === "admin_exempt" && allowExempt) { if (typeof v !== "boolean") throw new Error("admin_exempt must be true or false"); out[k] = v; }
       else throw new Error(`unknown limit ${k}`);
@@ -881,9 +1002,59 @@ function schemaToRecipe(r) {
   };
 }
 
+/* The link fetcher only reaches the public internet (#14). Once other people can
+   sign in, a link to 192.168.1.1 or the NAS's own admin page must not come back
+   to them. Every address a name resolves to is checked at the moment of
+   connecting (so a name can't switch to a private address after the check),
+   redirects are followed one at a time and each hop is checked the same way. */
+const PRIVATE_NETS = blockList([
+  "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.0.0.0/24", "192.0.2.0/24",
+  "192.168.0.0/16", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4",
+  "::/128", "::1/128", "::ffff:0:0/96", "64:ff9b::/96", "100::/64", "2001::/32", "2001:db8::/32", "2002::/16", "fc00::/7", "fe80::/10", "ff00::/8",
+], "PRIVATE_NETS");
+class BlockedAddress extends Error {}
+function publicLookup(host, opts, cb) {
+  dnsLookup(host, { all: true }, (err, addrs) => {
+    if (err) return cb(err);
+    const bad = addrs.find((a) => PRIVATE_NETS.has(a.address));
+    if (bad || !addrs.length) return cb(new BlockedAddress(`${host} is a private address (${bad ? bad.address : "none"})`));
+    if (opts && opts.all) cb(null, addrs); else cb(null, addrs[0].address, addrs[0].family);
+  });
+}
+const MAX_PAGE = 5 * 1024 * 1024;
+function getOnce(u, signal) {
+  const host = u.hostname.replace(/^\[|\]$/g, "");
+  if (isIP(host) && PRIVATE_NETS.has(host)) return Promise.reject(new BlockedAddress(`${host} is a private address`)); // literals skip the lookup
+  return new Promise((resolve, reject) => {
+    const req = (u.protocol === "https:" ? https : http).request(u, {
+      headers: { "user-agent": "Mozilla/5.0 (compatible; Bourdain/1.0)", accept: "text/html,application/json" },
+      lookup: publicLookup, signal, agent: false,
+    }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) { res.resume(); return resolve({ redirect: res.headers.location }); }
+      const chunks = []; let size = 0;
+      res.on("data", (c) => { size += c.length; if (size > MAX_PAGE) { req.destroy(new Error("page too large")); return; } chunks.push(c); });
+      res.on("end", () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString("utf8") }));
+      res.on("error", reject);
+    });
+    req.on("error", (err) => reject(err instanceof BlockedAddress || err.cause instanceof BlockedAddress ? new BlockedAddress(err.message) : err));
+    req.end();
+  });
+}
+async function publicGet(url, signal) {
+  let u = new URL(url);
+  for (let hop = 0; hop <= 5; hop++) {
+    if (!/^https?:$/.test(u.protocol)) throw new BlockedAddress(`not a web address: ${u.protocol}`);
+    const r = await getOnce(u, signal);
+    if (!r.redirect) return r;
+    u = new URL(r.redirect, u);
+  }
+  throw new Error("too many redirects");
+}
+
 app.post("/api/fetch", async (req, res) => {
   const { url } = req.body || {};
   if (!/^https?:\/\//i.test(url || "")) return res.status(400).json({ error: "bad url", code: "bad_url" });
+  try { new URL(url); } catch { return res.status(400).json({ error: "bad url", code: "bad_url" }); }
 
   const targets = [url];
   // TikTok's public oEmbed endpoint returns the caption, which the page itself hides.
@@ -894,13 +1065,9 @@ app.post("/api/fetch", async (req, res) => {
 
   for (const target of targets) {
     try {
-      const r = await fetch(target, {
-        headers: { "user-agent": "Mozilla/5.0 (compatible; Bourdain/1.0)", accept: "text/html,application/json" },
-        signal: AbortSignal.timeout(20000),
-        redirect: "follow",
-      });
-      if (!r.ok) continue;
-      const body = await r.text();
+      const r = await publicGet(target, AbortSignal.timeout(20000));
+      if (r.status < 200 || r.status >= 300) continue;
+      const body = r.body;
 
       if (body.trim().startsWith("{")) {
         try {
@@ -922,6 +1089,11 @@ app.post("/api/fetch", async (req, res) => {
       const ogDesc = body.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)/i)?.[1];
       parts.push([ogDesc, stripTags(body).slice(0, 20000)].filter(Boolean).join("\n\n"));
     } catch (err) {
+      if (err instanceof BlockedAddress) {
+        console.warn();
+        if (target === url) return res.status(400).json({ error: "that link points inside a private network", code: "blocked_address" });
+        continue;
+      }
       console.warn("fetch failed", target, err.message);
     }
   }
