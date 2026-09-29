@@ -164,11 +164,11 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 
 /* Plan */
 .weeknav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.weeknav h2{font-size:22px;font-weight:700;letter-spacing:-.01em}
+.weeknav .wkt{display:block;font-family:var(--serif);font-size:22px;font-weight:700;letter-spacing:-.01em;line-height:1.1}
 .weeknav .btn{width:44px;height:44px;padding:0;flex:none;font-size:20px;line-height:1}
-.wk{text-align:center;min-width:0}
+.wk{text-align:center;min-width:0;min-height:44px;background:none;border:0;padding:0 6px;color:inherit;cursor:pointer}
 .wk .note{display:block;font-family:var(--sans);font-size:12px;font-weight:500;color:var(--flame);margin-top:2px;visibility:hidden}
-.weeknav.current h2{color:var(--flame)}
+.weeknav.current .wkt{color:var(--flame)}
 .weeknav.current .note{visibility:visible}
 .weeknav.current .btn{color:var(--flame);border-color:var(--flame)}
 .days{display:flex;flex-direction:column;gap:0}
@@ -396,7 +396,7 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
   <section class="view" id="view-plan">
     <div class="weeknav">
       <button class="btn small" id="prevWeek" aria-label="Previous week">‹</button>
-      <div class="wk"><h2 id="weekTitle"></h2><span class="note" id="weekNote">(this week)</span></div>
+      <button class="wk" id="thisWeek" aria-label="Back to this week"><span class="wkt" id="weekTitle"></span><span class="note" id="weekNote">(this week)</span></button>
       <button class="btn small" id="nextWeek" aria-label="Next week">›</button>
     </div>
     <div class="days" id="days"></div>
@@ -1148,6 +1148,7 @@ function slotSheet(k,ix){
 }
 document.getElementById("prevWeek").onclick=()=>{ state.week=addDays(state.week,-7); show(state.view); };
 document.getElementById("nextWeek").onclick=()=>{ state.week=addDays(state.week,7); show(state.view); };
+document.getElementById("thisWeek").onclick=()=>{ const m=mondayOf(new Date()); if(iso(m)===iso(state.week)) return; state.week=m; show(state.view); }; // tap the dates to come back to this week
 
 /* sheets */
 function openSheet(html){

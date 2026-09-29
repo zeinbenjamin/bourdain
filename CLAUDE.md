@@ -122,7 +122,9 @@ on the right that opens the recipe picker. When the week shown is the current on
 under it. The note keeps its space on other weeks, so the days don't jump. The
 ‹ › week buttons turn red too, today's meals get a red outline, and if nothing
 is planned today (`.day.today.empty`) its "+" is filled red with a white "+".
-Other weeks stay black. A planned meal
+Other weeks stay black. The date range between the arrows is a button (`#thisWeek`,
+`.wk`, with the range in `.wkt`, not a heading, since a heading can't sit in a
+button). Tapping it jumps back to the current week. A planned meal
 (`.slot`) shows `miniThumb(r)` (the recipe card's picture rule at 40px: cover whole
 on white, else first photo cropped, else the first letter), then the title, which
 wraps in full rather than truncating. Servings are not shown on the row; tapping
@@ -250,8 +252,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v25"`
-in `public/sw.js` → `v26`, `v27`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v26"`
+in `public/sw.js` → `v27`, `v28`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after

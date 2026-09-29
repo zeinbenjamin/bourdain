@@ -60,6 +60,21 @@ try {
   const navAfter = await box("#view-plan .weeknav");
   check("plan: next week has no note and plain ink", other.vis === "hidden" && other.title !== pl.fc, JSON.stringify(other));
   check("plan: changing week doesn't move the days", Math.abs(navAfter.h - navBefore.h) < 1, `${navBefore.h} → ${navAfter.h}`);
+  // tapping the dates goes back to this week (1.10.3)
+  const thisRange = await page.evaluate(() => weekLabel(mondayOf(new Date())));
+  await page.click("#nextWeek"); await page.click("#nextWeek");
+  check("plan: three weeks ahead, not this week", (await page.textContent("#weekTitle")) !== thisRange);
+  await page.click("#thisWeek");
+  const back = await page.evaluate(() => ({ t: document.getElementById("weekTitle").textContent, cur: document.querySelector("#view-plan .weeknav").classList.contains("current"), today: Boolean(document.querySelector("#days .day.today")) }));
+  check("plan: tapping the dates jumps back to this week", back.t === thisRange && back.cur && back.today, JSON.stringify(back));
+  for (let i = 0; i < 5; i++) await page.click("#prevWeek");
+  await page.click("#thisWeek");
+  check("plan: …from past weeks too", (await page.textContent("#weekTitle")) === thisRange);
+  await page.click("#thisWeek");
+  check("plan: tapping it on this week changes nothing", (await page.textContent("#weekTitle")) === thisRange);
+  const wk = await page.evaluate(() => { const b = document.getElementById("thisWeek"), r = b.getBoundingClientRect(), t = getComputedStyle(document.getElementById("weekTitle")); return { tag: b.tagName, label: b.getAttribute("aria-label"), h: Math.round(r.height), size: t.fontSize, family: t.fontFamily }; });
+  check("plan: the dates are a real 44px button, still styled as the heading", wk.tag === "BUTTON" && wk.label === "Back to this week" && wk.h >= 44 && wk.size === "22px" && /Source Serif|Georgia/.test(wk.family), JSON.stringify(wk));
+  await page.click("#nextWeek");
   await page.click("#prevWeek");
   const day = await box("#days .day"), addBtn = await box("#days .day .addslot");
   check("plan: '+' sits at the right edge of the day row", Math.abs(addBtn.right - day.right) <= 1 && addBtn.top - day.top <= 14, JSON.stringify({ day, addBtn }));
