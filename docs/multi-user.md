@@ -30,6 +30,22 @@ feed of who cooked what.
 - **People.** The Archives tab gets a row of avatars (photo or initial) at the
   top. Tapping one opens that person's profile: their recipes as read-only
   cards, and their cooks.
+- **Search across everyone's books** (added 2026-09-29). Typing in the Recipes
+  search box still filters my own recipes as now. Underneath, a second section,
+  **In other people's books**, lists matches from everyone else's recipes.
+  - It matches the same fields as my own search: title, description, tags and
+    ingredients.
+  - Each result is a normal recipe card plus the owner's photo or initial and
+    name ("Sam's"), with the owner's stars.
+  - Tapping one opens the read-only recipe with **Add to my recipes**. A recipe
+    I've already copied is marked **In your recipes**.
+  - The section appears once 2 or more letters are typed, waits for a short
+    pause in typing (about 300 ms) before asking the server, and shows the 20
+    best matches.
+  - The tag chips, sort and filter apply only to my own recipes, since they
+    describe my book.
+  - Offline, or when the server can't be reached, the section is hidden rather
+    than showing an error. My own results still work from the phone's copy.
 - **Someone else's recipe** opens read-only. It has no Edit, Delete, Cook this
   or Add to the week. Its one action is **Add to my recipes**.
 - **Add to my recipes** makes my own copy:
@@ -144,6 +160,7 @@ Cloudflare's login; everyone else never reaches the NAS.
 | `GET /api/me`, `PUT /api/me` | Read, or set name and photo. |
 | `GET /api/people` | Everyone's `{id, name, photo}`. |
 | `GET /api/people/:id/recipes` | That person's recipes, read-only. |
+| `GET /api/search?q=…` | Recipes from everyone **except** the caller matching `q` in title, description, tags or ingredients. Returns up to 20 `{owner, name, photo, id, title, cover, firstPhoto, rating, copied}`, with title matches first. `copied` is true when the caller already has a copy (`copied_from` points at it). Needs 2 or more characters. |
 | `POST /api/copy` | `{owner, id}` → new recipe owned by the caller, returns its id. |
 | `GET /api/feed?before=…` | Cooks from everyone, newest first, paged: `{who, recipeId, owner, title, date, mult, rating}`. |
 | `GET /api/export` | The caller's data as JSON plus their photos, as one zip. |
@@ -325,7 +342,7 @@ Each stage ships and gets used before the next.
 |---|---|
 | **1.10.1** ✅ | Groundwork: the old app ignores 2.0-shaped data (needed for rollback). Shipped; see "What 1.10.1 set up". |
 | **2.0.0** | The migration. Owners on every row, users table, `/api/me`, per-user offline copy, Export. Still only Zein. Zein's traffic is identified by `TRUSTED_NETS`, Cloudflare isn't set up yet, and the app looks the same. |
-| **2.1.0** | Profiles (name, photo, welcome screen), People row, read-only recipes, Add to my recipes. |
+| **2.1.0** | Profiles (name, photo, welcome screen), People row, read-only recipes, Add to my recipes, search across everyone's books. |
 | **2.2.0** | Archives feed with names and avatars, Everyone / Just me. |
 | **2.3.0** | `/api/ai` with server-side prompts, usage log, limits, admin screen, activity log. |
 | **2.4.0** | #14, upload cap, "Signed out" handling, Cloudflare token verification. |
@@ -354,7 +371,12 @@ Each stage ships and gets used before the next.
 - New suites:
   - `migration`: build a 1.x database, start 2.0, compare counts; also a
     migration that fails halfway, leaving the old data untouched.
-  - `people`: two users, can't read or write each other's rows, copy, feed.
+  - `people`: two users, can't read or write each other's rows, copy, feed,
+    and search across books:
+    - finds the other person's recipes and never the caller's own;
+    - marks ones already copied;
+    - hidden offline;
+    - tags, sort and filter leave it alone.
   - `ai-limits`: counts, 429s, one call at a time, the admin exemption.
   - `admin`: 403 for others, the long-press entrance.
 - Existing suites run as the owner, and should pass unchanged apart from
