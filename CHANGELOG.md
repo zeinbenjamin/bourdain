@@ -6,6 +6,10 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 1.9.1 — 2026-09-29
+- A new recipe is headed "New recipe", whether you imported it or are writing it yourself, instead of "Check the import".
+- The import page is less wordy: the notes under the link and screenshot boxes are gone, and the text box is now labelled "Video caption, recipe text or notes".
+
 ## 1.9.0 — 2026-09-29
 - New Timeline tab: everything you've cooked, newest first, grouped by month and day, with its stars and batch size.
 - At the top: how many times you've cooked this month and this year, how many of your recipes you've tried, and your three most cooked.

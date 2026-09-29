@@ -130,7 +130,9 @@ opens a sheet: **Import a recipe** (the import form, with "‹ Recipes" to go ba
 or **Write one yourself** (a blank review form; `state.draftManual` makes its Back
 return to the list rather than the import form). If an import or new recipe is
 open and unsaved, the sheet first offers **Carry on with "…"**, and the other two
-say they replace it. Tests reach both through `addRecipe(page, "import"|"manual")`
+say they replace it. The review form is headed "New recipe" either way (or "Edit
+recipe" for an existing one), with one neutral hint to check it before saving, so
+it reads the same after an import as when writing from scratch. Tests reach both through `addRecipe(page, "import"|"manual")`
 in `tests/lib.mjs`.
 
 **Edit form ingredients** (`renderReview`, `.ingrow`): each ingredient is a grey
@@ -234,8 +236,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v19"`
-in `public/sw.js` → `v20`, `v21`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v20"`
+in `public/sw.js` → `v21`, `v22`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
