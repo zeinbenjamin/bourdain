@@ -1023,6 +1023,8 @@ function avatar(p,size="sm"){
   const initial=esc(((p&&p.name)||"?").trim()[0]||"?").toUpperCase();
   return p&&p.photo ? `<span class="av ${size}"><img src="${photoUrl(p.photo)}" alt=""></span>` : `<span class="av ${size}" aria-hidden="true">${initial}</span>`;
 }
+// The People row has room for a first name only; the profile shows the full one.
+const firstName=n=>String(n||"").trim().split(/\s+/)[0]||"";
 const possessive=n=>n?`${n}'s`:"Someone's";
 // Is this someone else's recipe already copied into my book? Returns my copy's id.
 const myCopyOf=(owner,id)=>Object.entries(state.recipes).find(([,r])=>r&&r.copied_from&&r.copied_from.owner===owner&&r.copied_from.id===id)?.[0]||null;
@@ -1499,7 +1501,7 @@ function renderTimeline(){
   if(everyone&&feed.stale()&&!feed.loading) feed.load().then(again);
   const theirs=everyone&&feed.entries ? feed.entries.filter(e=>!e.who.me) : [];
   const meP=people.list?.find(p=>p.me)||(store.me?{id:store.me.id,name:store.me.name,photo:store.me.photo,me:true}:null);
-  const row=shared?`<div class="people" role="list">${[meP,...people.others()].filter(Boolean).map(p=>`<button class="person" role="listitem" data-person="${esc(p.id)}">${avatar(p,"md")}<span>${p.me?"You":esc(p.name)}</span></button>`).join("")}</div>
+  const row=shared?`<div class="people" role="list">${[meP,...people.others()].filter(Boolean).map(p=>`<button class="person" role="listitem" data-person="${esc(p.id)}" aria-label="${p.me?"You":esc(p.name)}">${avatar(p,"md")}<span>${p.me?"You":esc(firstName(p.name))}</span></button>`).join("")}</div>
     <div class="seg" role="group" aria-label="Whose cooks"><button data-who="everyone" class="${everyone?"on":""}" aria-pressed="${everyone}">Everyone</button><button data-who="me" class="${everyone?"":"on"}" aria-pressed="${!everyone}">Just me</button></div>`:"";
   if(!mine.length&&!theirs.length){
     el.innerHTML = row + (store.loading ? `<div class="empty"><span class="spin"></span>Loading your cooks…</div>`

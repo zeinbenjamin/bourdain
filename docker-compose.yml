@@ -21,6 +21,10 @@ services:
     # TrueNAS datasets with "app permissions" belong to the apps user (568). The image runs as
     # node (1000) by default, which can't open the SQLite file, so the container crash-loops.
     user: "568:568"
+    # The host's network, not Docker's: with Docker's port mapping every request
+    # appeared to come from Docker's gateway (172.16.2.1), so TRUSTED_NETS could
+    # never match. The app listens on PORT on the NAS itself; nothing else may use it.
+    network_mode: host
     environment:
       # The owner of everything already in the app, and its admin (2.0.0+). Use the
       # email you'll sign in with; changing it later renames the same account.
@@ -40,13 +44,13 @@ services:
       # CF_ACCESS_AUD: "the-application-aud-tag"
       # With sign-in on, requests that don't come through Cloudflare are you only
       # from these networks (your home Wi-Fi, Tailscale). Anything else must sign in.
-      # TRUSTED_NETS: "192.168.1.0/24, 100.64.0.0/10"
+      # Home Wi-Fi, plus each of your devices' Tailscale address (a PC that reaches
+      # the NAS over Tailscale shows up as 100.x.x.x, even at home).
+      # TRUSTED_NETS: "192.168.1.0/24, 100.88.81.69/32"
       # Daily AI limits (2.2.0+) reset at midnight in this time zone. Without it, midnight UTC.
       TZ: "Australia/Sydney"
       DATA_DIR: "/data"
       PORT: "8080"
-    ports:
-      - "8080:8080"
     volumes:
       - /mnt/YOUR-POOL/apps/bourdain/data:/data
       - /mnt/YOUR-POOL/apps/bourdain/photos:/data/photos

@@ -198,7 +198,8 @@ people (see **Other people** below).
   `bourdain.archivesWho`) appear only once someone else has a name. Your cooks
   come from the phone's copy; everyone else's from `/api/feed`. `people.stale()`
   and `feed.stale()` stop re-fetching within a minute, which is what stops the
-  Archives re-rendering in a loop. Keep it that way.
+  Archives re-rendering in a loop. Keep it that way. The People row shows
+  `firstName()` only (the full name is its `aria-label` and on the profile).
 - **Someone else's recipe** is read-only, and its only action is **Add to my
   recipes**. That makes a server-side copy with an empty rating and cook log,
   and `copied_from`. `myCopyOf()` finds an existing copy. `view-detail` and
@@ -348,8 +349,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v32"`
-in `public/sw.js` → `v33`, `v34`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v33"`
+in `public/sw.js` → `v34`, `v35`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -371,6 +372,10 @@ Without it the container crash-loops on SQLite open. The repo's
 **Redeploy needs `pull_policy: always`.** Without it TrueNAS restarts the image
 it already has, and the new build never arrives. That looks exactly like a
 deploy that didn't work, the same as a forgotten service worker bump.
+
+**The container uses the host's network** (`network_mode: host`, no `ports:`)
+since 2.3.1. With Docker's port mapping every request seemed to come from
+Docker's gateway, so `TRUSTED_NETS` could never match a real device.
 
 **`docker-compose.yml` mirrors the live TrueNAS YAML**, with the pool path and
 API key replaced by placeholders. If you change the YAML in TrueNAS, change this
