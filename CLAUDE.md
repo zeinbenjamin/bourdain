@@ -151,7 +151,8 @@ cooks off the timeline. A recipe opened from here sets `state.detailFrom =
 for the shared feed planned with multi-user (see **Pinned for v2**).
 
 **Recipe list sort and filter** (`listPrefs`, `sortRecipes`, `keepRecipe`)
-are remembered per phone in `localStorage["bourdain.listPrefs"]`. A recipe card
+are remembered per phone in `localStorage["bourdain.listPrefs"]`. A saved sort or
+filter that is no longer an option falls back to the default in `listPrefs.get()`. A recipe card
 reads top to bottom: title, a `.cstars` row with the Michelin stars (omitted
 entirely when the recipe has none), the `.meta` row (time · serves · source), and
 tags. Cards deliberately don't show the cook count; that is only on the recipe
@@ -236,8 +237,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v20"`
-in `public/sw.js` → `v21`, `v22`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v21"`
+in `public/sw.js` → `v22`, `v23`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
