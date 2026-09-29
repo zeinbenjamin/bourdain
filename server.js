@@ -238,7 +238,7 @@ function signedInUser(email) {
 }
 const clientIp = (req) => plainIp(req.socket.remoteAddress); // never X-Forwarded-For: anyone can send that
 const viaCloudflare = (req) => Boolean(req.get("cf-ray") || req.get("cf-connecting-ip") || req.get("cf-access-jwt-assertion"));
-const lastSeenAt = new Map();
+const lastSeenAt = new Map(), refusedAt = new Map();
 app.use("/api", async (req, res, next) => {
   const cf = viaCloudflare(req), token = req.get("cf-access-jwt-assertion");
   let how;
@@ -258,7 +258,14 @@ app.use("/api", async (req, res, next) => {
   } else if (TRUSTED.has(clientIp(req))) {
     req.user = OWNER; how = "home network";
   } else {
-    return res.status(401).json({ error: "this network isn't trusted; use the Cloudflare address", code: "not_trusted" });
+    // Say which address was seen, to the device itself and in the log, so a wrong
+    // TRUSTED_NETS (or Docker hiding the real address) can be spotted from the phone.
+    const ip = clientIp(req);
+    if (Date.now() - (refusedAt.get(ip) || 0) > 60_000) {
+      refusedAt.set(ip, Date.now());
+      console.warn(`refused a request from ${ip} with no Cloudflare sign-in: it isn't in TRUSTED_NETS (${TRUSTED.kept.join(", ") || "empty"})`);
+    }
+    return res.status(401).json({ error: "this network isn't trusted; use the Cloudflare address", code: "not_trusted", seen: ip });
   }
   // Always the current row (a name change shows at once), and last seen at most every 5 minutes.
   req.user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id) || req.user;

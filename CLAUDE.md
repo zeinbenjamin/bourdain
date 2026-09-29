@@ -348,8 +348,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v31"`
-in `public/sw.js` → `v32`, `v33`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v32"`
+in `public/sw.js` → `v33`, `v34`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -457,7 +457,9 @@ decides `req.user` for every `/api` request except `/api/health` and
   RS256 against the team's certs, `iss`, `aud`, `exp`, an email) and names the
   person; a new email gets a `users` row. A bad token, or Cloudflare headers with
   no token, is 401 `signed_out`. No Cloudflare headers at all: the owner if the
-  socket address is in `TRUSTED_NETS`, else 401 `not_trusted`. Can't fetch the
+  socket address is in `TRUSTED_NETS`, else 401 `not_trusted` with `seen` (the
+  address it saw, shown on the phone's red bar and logged once a minute), so a
+  wrong `TRUSTED_NETS` or Docker hiding the real address is visible. Can't fetch the
   certs: 503 `signin_unavailable`.
 - **Never** trust `X-Forwarded-For`, a plain email header, or a network for a
   request carrying Cloudflare headers: the tunnel reaches the app from the NAS's

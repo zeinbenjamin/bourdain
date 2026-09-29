@@ -565,8 +565,8 @@ async function api(path, opts={}){
   const res = await fetch(API+path, {redirect:"manual", ...opts});
   if(signinLost(res)) throw signin.error();
   if(!res.ok){ let e; try{ e=await res.json(); }catch(_){ e={}; }
-    const err=new Error(e.error||res.statusText); err.code=e.code||("http_"+res.status); err.status=res.status; err.detail=e.detail; err.kind=e.kind; err.limit=e.limit;
-    if(NEEDS_SIGNIN.includes(err.code)) signin.lost(err.code);
+    const err=new Error(e.error||res.statusText); err.code=e.code||("http_"+res.status); err.status=res.status; err.detail=e.detail; err.kind=e.kind; err.limit=e.limit; err.seen=e.seen;
+    if(NEEDS_SIGNIN.includes(err.code)) signin.lost(err.code, err.seen);
     throw err; }
   if(signin.out) signin.back();
   return res.status===204? null : res.json();
@@ -579,6 +579,8 @@ async function api(path, opts={}){
    waiting is dropped: flush() and the photo queue keep it (keepForLater). */
 const NEEDS_SIGNIN=["signed_out","not_trusted"];
 const keepForLater=e=>Boolean(e&&["signed_out","not_trusted","signin_unavailable","cf_not_set_up"].includes(e.code));
+// The server says which address it saw, so the owner can check it against TRUSTED_NETS.
+const untrustedMsg=seen=>`Bourdain doesn't recognise this network${seen?` (it sees this device as ${seen})`:""}. Open it from its web address instead.`;
 function signinLost(res){
   if(res.type==="opaqueredirect"||(res.status>=300&&res.status<400)) return true;
   const ct=res.headers.get("content-type")||"";
@@ -587,13 +589,12 @@ function signinLost(res){
 const signin={
   out:null, // null, or why: "signed_out" | "not_trusted"
   error(){ this.lost("signed_out"); return Object.assign(new Error("signed out"),{code:"signed_out",status:401}); },
-  lost(why){
-    if(this.out===why) return;
-    this.out=why;
+  seen:null, // the address the server saw, when it didn't trust the network
+  lost(why, seen){
+    if(this.out===why&&this.seen===(seen||null)) return;
+    this.out=why; this.seen=seen||null;
     const bar=document.getElementById("signinBar");
-    bar.textContent = why==="not_trusted"
-      ? "Bourdain doesn't recognise this network. Open it from its web address instead."
-      : "Signed out. Tap to sign in again.";
+    bar.textContent = why==="not_trusted" ? untrustedMsg(this.seen) : "Signed out. Tap to sign in again.";
     bar.hidden=false; bar.onclick=()=>location.reload();
     store.paint();
   },
@@ -652,7 +653,7 @@ const store = {
       const e=this.loadError;
       toast(e&&e.code==="cf_not_set_up" ? "Bourdain can't be opened from this address yet. Use your home address for now."
         : e&&e.code==="signed_out" ? "You're signed out. Tap the red bar at the top to sign in again. This phone's copy is shown until then."
-        : e&&e.code==="not_trusted" ? "Bourdain doesn't recognise this network, so it's showing this phone's copy. Open it from its web address instead."
+        : e&&e.code==="not_trusted" ? untrustedMsg(e.seen)+" Showing this phone's copy until then."
         : e&&e.code==="signin_unavailable" ? "The server can't check your sign-in right now (it can't reach Cloudflare). Showing this phone's copy; try again in a minute."
         : e&&e.status ? `The server is up but couldn't load your recipes (${e.code}). Showing this phone's copy; check the server logs.`
         : "Can't reach the server. Changes are kept on this phone and sync when it's back.");
@@ -1820,7 +1821,7 @@ function aiError(e, what="reading that"){
     image_upstream_error:"OpenAI had a problem. Try again in a few minutes.",
     ai_busy:"Still working on your last one. Give it a moment to finish.",
     signed_out:"You're signed out. Tap the red bar at the top to sign in again.",
-    not_trusted:"Bourdain doesn't recognise this network. Open it from its web address instead.",
+    not_trusted:untrustedMsg(e&&e.seen),
     signin_unavailable:"The server can't check your sign-in right now (it can't reach Cloudflare). Try again in a minute.",
     cf_not_set_up:"Bourdain can't be opened from this address yet. Use your home address for now.",
     ai_budget:`That's this month's AI allowance used up. It resets on the 1st${store.me&&!store.me.is_admin?"; ask Zein if you need more":""}.`,
@@ -2251,7 +2252,7 @@ function renderAdmin(){
   const head=`<div class="detail-head"><button class="btn small ghost" id="aBack">‹ Recipes</button>${a&&!a.error?`<button class="btn small" id="aRefresh">Refresh</button>`:""}</div>`;
   const wire=()=>{ el.querySelector("#aBack").onclick=()=>show("recipes"); const r=el.querySelector("#aRefresh"); if(r) r.onclick=()=>{ state.admin=null; renderAdmin(); }; };
   if(!a){ el.innerHTML=head+`<div class="empty"><span class="spin"></span>Loading…</div>`; wire(); loadAdmin(); return; }
-  if(a.error){ el.innerHTML=head+`<div class="empty">${a.error.code==="not_admin"?"Only the owner can see this.":a.error.status?`The server couldn't load this (${esc(a.error.code)}). Check the server logs.`:"Can't reach the server. Try again when you're back on home Wi-Fi."}</div>`; wire(); return; }
+  if(a.error){ el.innerHTML=head+`<div class="empty">${a.error.code==="not_admin"?"Only the owner can see this.":keepForLater(a.error)?esc(aiError(a.error)):a.error.status?`The server couldn't load this (${esc(a.error.code)}). Check the server logs.`:"Can't reach the server. Try again when you're back on home Wi-Fi."}</div>`; wire(); return; }
   const {sum,act}=a, d=sum.defaults, month=MONTHS[+sum.day.slice(5,7)-1];
   const person=p=>{
     const exempt=p.is_admin&&p.limits.admin_exempt;

@@ -6,6 +6,10 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.3.1 — 2026-09-29
+- When Bourdain doesn't recognise your network, the red bar now says which address it sees your device as, so you can check it against TRUSTED_NETS. The owner's view says the same instead of "check the server logs".
+- The server log also records each refused address, once a minute, with the networks it trusts.
+
 ## 2.3.0 — 2026-09-29
 - Ready for the pilot: once you've set up Cloudflare's sign-in, Bourdain opens from outside home too. Each person signs in with their email and a one-time code, and gets their own book.
 - At home the app works as before, without signing in, from the networks you list.
