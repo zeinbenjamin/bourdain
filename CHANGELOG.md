@@ -6,6 +6,10 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.0.0 — 2026-09-29
+- Behind the scenes, everything in Bourdain now belongs to your own profile, ready for sharing it with a few other people later. Nothing looks or works differently.
+- New: Export my data. Tap the Bourdain title for one file with all your recipes, plan, pantry and their photos, to keep as a backup.
+
 ## 1.10.4 — 2026-09-29
 - Plan: meals no longer sit in boxes, so there are fewer lines across the page. Today's meals no longer have a red outline.
 - Plan: fixed days with nothing planned sitting out of line with the rest of the week, a mistake from 1.10.2.

@@ -4,6 +4,7 @@
 #   YOUR-POOL             with your ZFS pool name (and adjust the dataset paths to match yours)
 #   sk-ant-...            with your Anthropic API key
 #   sk-...                with your OpenAI API key (only needed for recipe covers)
+#   you@example.com       with your own email (OWNER_EMAIL)
 #
 # Create these two datasets first (Datasets -> Add Dataset):
 #   /mnt/YOUR-POOL/apps/bourdain/data
@@ -20,6 +21,10 @@ services:
     # node (1000) by default, which can't open the SQLite file, so the container crash-loops.
     user: "568:568"
     environment:
+      # The owner of everything already in the app, and its admin (2.0.0+). Use the
+      # email you'll sign in with; changing it later renames the same account.
+      # The app won't start without it.
+      OWNER_EMAIL: "you@example.com"
       ANTHROPIC_API_KEY: "sk-ant-REPLACE-ME"
       CLAUDE_MODEL: "claude-sonnet-4-6"
       # Recipe covers: Claude describes the dish, OpenAI paints it. Leave the key as-is

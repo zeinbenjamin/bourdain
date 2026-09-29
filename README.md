@@ -105,7 +105,7 @@ Now Add to Home Screen works and you get a proper app icon.
 
 ```bash
 npm install
-DATA_DIR=./data ANTHROPIC_API_KEY=sk-ant-... npm start
+DATA_DIR=./data OWNER_EMAIL=you@example.com ANTHROPIC_API_KEY=sk-ant-... npm start
 # http://localhost:8080
 # add OPENAI_API_KEY=sk-... to the same line for covers
 ```
@@ -168,6 +168,10 @@ The tests start the real server with a throwaway database and drive the app in h
 
 
 **"Server unreachable — working offline"** — the app couldn't reach `/api/state`. It falls back to browser storage so you can keep cooking, but changes won't sync until the server's back. Check the container is running.
+
+**The app won't start and the log says "OWNER_EMAIL is not set"** — since 2.0.0 the app needs `OWNER_EMAIL` (your email) in the compose file. Add it and redeploy. Nothing was changed while it refused to start.
+
+**"Couldn't set up the database, so nothing was changed"** — the 2.0 migration failed and rolled itself back; your data is exactly as it was. The log line says why.
 
 **"No Anthropic API key is set"** — `ANTHROPIC_API_KEY` is missing or wrong in the compose file. Edit the app YAML and redeploy.
 
