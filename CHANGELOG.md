@@ -6,6 +6,10 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 1.10.2 — 2026-09-29
+- Plan: on the current week, the ‹ and › buttons are red to match the dates.
+- Plan: today's meals are outlined in red. If nothing's planned for today, its + is filled red as a nudge.
+
 ## 1.10.1 — 2026-09-29
 - Groundwork for sharing Bourdain with other people later. Nothing changes when you use the app.
 - If the app ever has to be rolled back from a future version, changes made in that newer version are kept safely on your phone instead of being sent to a server that can't read them.
