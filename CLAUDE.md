@@ -585,6 +585,7 @@ and filtering of the recipe list, and **Export my data** (a zip of everything yo
 own plus its photos, from the version sheet; `GET /api/export`, written by the
 small `zipStore()` in `server.js` with no dependency).
 
+Everything outstanding (pilot requests, setup, ideas) is in `docs/backlog.md`.
 Ideas not yet built: nutrition estimates, pantry quantities decremented by
 cooking, timer alerts while the phone is locked (would need push
 notifications), restoring the shopping list, and
