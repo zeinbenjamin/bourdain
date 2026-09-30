@@ -142,8 +142,12 @@ const readAll = (t, owner) => {
 
 /* ---------------- app ---------------- */
 const app = express();
-app.use(express.json({ limit: "30mb" }));
+// Screenshots travel to /api/ai as base64, so it takes up to 30 MB. Everything else
+// is a recipe or smaller: 2 MB, so nobody can fill the NAS with a few huge writes.
+app.use("/api/ai", express.json({ limit: "30mb" }));
+app.use(express.json({ limit: "2mb" }));
 app.disable("x-powered-by");
+app.use((_req, res, next) => { res.set("X-Content-Type-Options", "nosniff").set("Referrer-Policy", "same-origin"); next(); });
 
 app.get("/api/health", (_req, res) =>
   res.json({ ok: true, hasApiKey: Boolean(API_KEY), hasImageKey: Boolean(OPENAI_KEY), version: VERSION, commit: COMMIT, dataVersion: DATA_VERSION })
@@ -239,8 +243,30 @@ function signedInUser(email) {
 const clientIp = (req) => plainIp(req.socket.remoteAddress); // never X-Forwarded-For: anyone can send that
 const viaCloudflare = (req) => Boolean(req.get("cf-ray") || req.get("cf-connecting-ip") || req.get("cf-access-jwt-assertion"));
 const lastSeenAt = new Map(), refusedAt = new Map();
+/* Two checks for requests a browser sends on someone's behalf:
+   - A change sent from another website (a form or script on a page you happen
+     to visit) is refused: browsers say where a request came from in
+     Sec-Fetch-Site. Requests without it (older browsers, scripts) pass.
+   - The home network counts as the owner only for addresses a home device would
+     use: an IP address, localhost, a name with no dots, a .local/.lan/.home.arpa/
+     .internal or Tailscale (.ts.net) name, or HOME_HOSTS. A web page can make
+     your browser send requests to the NAS under its own name ("DNS rebinding");
+     without this, a site you visit at home could read and change everything.  */
+const HOME_HOSTS = new Set((process.env.HOME_HOSTS || "").toLowerCase().split(/[\s,]+/).filter(Boolean));
+function homeHost(req) {
+  const h = String(req.get("host") || "").toLowerCase().replace(/:\d+$/, "").replace(/^\[|\]$/g, "");
+  return isIP(h) || h === "localhost" || !h.includes(".") || /\.(local|lan|home\.arpa|internal|ts\.net)$/.test(h) || HOME_HOSTS.has(h) ? h || true : false;
+}
 app.use("/api", async (req, res, next) => {
+  const site = req.get("sec-fetch-site");
+  if (!["GET", "HEAD", "OPTIONS"].includes(req.method) && (site === "cross-site" || site === "same-site"))
+    return res.status(403).json({ error: "changes can only come from Bourdain itself", code: "cross_site" });
   const cf = viaCloudflare(req), token = req.get("cf-access-jwt-assertion");
+  if (!token && !cf && !homeHost(req)) {
+    const host = String(req.get("host") || "");
+    if (Date.now() - (refusedAt.get("host:" + host) || 0) > 60_000) { refusedAt.set("host:" + host, Date.now()); console.warn(`refused a request for ${host}: not an address a home device would use; add it to HOME_HOSTS if it's yours`); }
+    return res.status(403).json({ error: "unknown address for Bourdain", code: "unknown_host", seen: host });
+  }
   let how;
   if (!CF_ON) {
     if (cf) return res.status(403).json({ error: "Bourdain isn't set up for access through Cloudflare yet", code: "cf_not_set_up" });
@@ -356,11 +382,11 @@ app.get("/api/search", (req, res) => {
     if (u.id === req.user.id) continue;
     for (const [id, r] of Object.entries(recipesOf(u.id))) {
       if (!r) continue;
-      const title = (r.title || "").toLowerCase();
-      const hay = [title, r.description, ...(r.tags || []), ...(r.ingredients || []).map((i) => i && (i.item || i.raw_text))].join(" ").toLowerCase();
+      const title = str(r.title).toLowerCase();
+      const hay = [title, str(r.description), ...(Array.isArray(r.tags) ? r.tags : []), ...(Array.isArray(r.ingredients) ? r.ingredients : []).map((i) => i && (i.item || i.raw_text))].join(" ").toLowerCase();
       if (!hay.includes(q)) continue;
-      hits.push({ rank: title.includes(q) ? 0 : 1, owner: u.id, name: u.name, photo: u.photo || null, id, title: r.title || "", cover: r.cover || null,
-        firstPhoto: (r.photos || [])[0] || null, rating: r.rating ?? null, prep_min: r.prep_min || 0, cook_min: r.cook_min || 0, servings: r.servings || null,
+      hits.push({ rank: title.includes(q) ? 0 : 1, owner: u.id, name: u.name, photo: u.photo || null, id, title: str(r.title), cover: assetId(r.cover),
+        firstPhoto: assetId((Array.isArray(r.photos) && r.photos[0]) || null), rating: ratingOf(r.rating), prep_min: Number(r.prep_min) || 0, cook_min: Number(r.cook_min) || 0, servings: Number(r.servings) || null,
         copied: copies.get(`${u.id}/${id}`) || null });
     }
   }
@@ -368,6 +394,12 @@ app.get("/api/search", (req, res) => {
   res.json(hits.slice(0, 20).map(({ rank, ...h }) => h));
 });
 
+// Other people's phones render these, so each field is the type the app expects.
+const str = (v) => (typeof v === "string" ? v : "");
+const assetId = (v) => (typeof v === "string" && /^[a-f0-9]{32}$/.test(v) ? v : null);
+const ratingOf = (v) => (Number.isInteger(v) && v >= 0 && v <= 3 ? v : null);
+const feedEntry = (who, owner, recipeId, r, c) => ({ who, owner, recipeId, title: str(r.title), cover: assetId(r.cover), firstPhoto: assetId((Array.isArray(r.photos) && r.photos[0]) || null),
+  rating: ratingOf(r.rating), date: c.date, at: str(c.at) || c.date, mult: Number(c.mult) > 0 ? Number(c.mult) : 1 });
 // The Archives feed: everyone's finished cooks, newest first, paged by `before`.
 app.get("/api/feed", (req, res) => {
   const before = typeof req.query.before === "string" ? req.query.before : null;
@@ -376,10 +408,9 @@ app.get("/api/feed", (req, res) => {
   for (const u of named()) {
     const who = person(u, req.user.id);
     for (const [id, r] of Object.entries(recipesOf(u.id))) {
-      for (const c of (r && r.cooks) || []) {
-        if (!c || !c.date) continue;
-        out.push({ who, owner: u.id, recipeId: id, title: r.title || "", cover: r.cover || null, firstPhoto: (r.photos || [])[0] || null,
-          rating: r.rating ?? null, date: c.date, at: c.at || c.date, mult: c.mult || 1 });
+      for (const c of (r && Array.isArray(r.cooks) && r.cooks) || []) {
+        if (!c || !/^\d{4}-\d{2}-\d{2}$/.test(c.date)) continue; // one bad entry mustn't break everyone's Archives
+        out.push(feedEntry(who, u.id, id, r, c));
       }
     }
   }
@@ -387,8 +418,7 @@ app.get("/api/feed", (req, res) => {
   if (!out.some((e) => e.who.me)) {
     const u = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
     if (!u.name) for (const [id, r] of Object.entries(recipesOf(u.id))) for (const c of (r && r.cooks) || []) {
-      if (c && c.date) out.push({ who: { id: u.id, name: null, photo: u.photo || null, me: true }, owner: u.id, recipeId: id, title: r.title || "", cover: r.cover || null,
-        firstPhoto: (r.photos || [])[0] || null, rating: r.rating ?? null, date: c.date, at: c.at || c.date, mult: c.mult || 1 });
+      if (c && /^\d{4}-\d{2}-\d{2}$/.test(c.date)) out.push(feedEntry({ id: u.id, name: null, photo: u.photo || null, me: true }, u.id, id, r, c));
     }
   }
   const key = (e) => `${e.date}|${e.at}`;
@@ -495,6 +525,19 @@ app.delete("/api/:col(recipes|plan|pantry|shop)/:id", sameDataVersion, (req, res
 /* ---------------- photos ---------------- */
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
+/* A person's photo storage: photos they uploaded that are still in use (in one of
+   their recipes, or their profile photo), plus anything from the last day, which
+   may be in a draft not saved yet. Removing a photo frees its space. */
+function storageUsed(userId) {
+  const inUse = new Set();
+  for (const r of Object.values(readAll("recipes", userId))) for (const id of (r && Array.isArray(r.photos) && r.photos) || []) inUse.add(String(id));
+  const u = db.prepare("SELECT photo FROM users WHERE id = ?").get(userId);
+  if (u && u.photo) inUse.add(u.photo);
+  const dayAgo = new Date(Date.now() - 86_400_000).toISOString();
+  let used = 0;
+  for (const p of db.prepare("SELECT id, bytes, created_at FROM photos WHERE owner = ?").all(userId)) if (inUse.has(p.id) || p.created_at > dayAgo) used += p.bytes;
+  return used;
+}
 app.post("/api/photos", upload.single("photo"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "no file", code: "no_file" });
   try {
@@ -508,7 +551,7 @@ app.post("/api/photos", upload.single("photo"), async (req, res) => {
     // in the table, so they count for nobody; they're all the owner's anyway.
     const lim = limitsFor(req.user.id);
     if (!(req.user.is_admin && lim.admin_exempt)) {
-      const used = db.prepare("SELECT COALESCE(SUM(bytes), 0) AS b FROM photos WHERE owner = ?").get(req.user.id).b;
+      const used = storageUsed(req.user.id);
       if (used + jpeg.length > lim.storage_mb * 1024 * 1024) return res.status(413).json({ error: "photo storage full", code: "storage_full", limit: lim.storage_mb });
     }
     await writeFile(path.join(PHOTO_DIR, `${id}.jpg`), jpeg);
@@ -752,7 +795,7 @@ app.get("/api/admin/summary", requireAdmin, (req, res) => {
     const m = db.prepare("SELECT COUNT(*) AS calls, COALESCE(SUM(est_usd), 0) AS usd FROM ai_usage WHERE user = ? AND day LIKE ?").get(u.id, month);
     return { id: u.id, email: u.email, name: u.name || null, photo: u.photo || null, is_admin: Boolean(u.is_admin), created_at: u.created_at, last_seen: u.last_seen,
       recipes: rs.length, cooks: rs.reduce((n, r) => n + (r.cooks || []).filter((c) => c && c.date).length, 0), copies: rs.filter((r) => r.copied_from).length,
-      ai: { today, month_calls: m.calls, month_usd: m.usd }, storage_bytes: db.prepare("SELECT COALESCE(SUM(bytes), 0) AS b FROM photos WHERE owner = ?").get(u.id).b, limits: limitsFor(u.id), overrides: getSetting(`limits:${u.id}`) };
+      ai: { today, month_calls: m.calls, month_usd: m.usd }, storage_bytes: storageUsed(u.id), limits: limitsFor(u.id), overrides: getSetting(`limits:${u.id}`) };
   });
   const byKind = db.prepare("SELECT grp, COUNT(*) AS calls, COALESCE(SUM(est_usd), 0) AS usd FROM ai_usage WHERE day LIKE ? GROUP BY grp").all(month);
   res.json({ day, people, month: { calls: byKind.reduce((n, r) => n + r.calls, 0), usd: byKind.reduce((n, r) => n + r.usd, 0), byKind },

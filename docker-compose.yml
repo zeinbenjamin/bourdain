@@ -47,6 +47,9 @@ services:
       # Home Wi-Fi, plus each of your devices' Tailscale address (a PC that reaches
       # the NAS over Tailscale shows up as 100.x.x.x, even at home).
       # TRUSTED_NETS: "192.168.1.0/24, 100.88.81.69/32"
+      # If you open Bourdain at home by a name that isn't an IP address, a .local or
+      # .lan name or a Tailscale name, list it here (2.3.3+), or it's refused.
+      # HOME_HOSTS: "nas.example.com"
       # Daily AI limits (2.2.0+) reset at midnight in this time zone. Without it, midnight UTC.
       TZ: "Australia/Sydney"
       DATA_DIR: "/data"

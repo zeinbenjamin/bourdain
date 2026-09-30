@@ -6,6 +6,12 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.3.3 — 2026-09-30
+- Safety fixes from a review before the pilot. Someone else's recipe can no longer run anything on your phone, whatever it contains, and a source link only opens if it's a web address.
+- A website you visit at home can no longer use your browser to reach Bourdain as you.
+- One badly formed cook in someone's history can no longer stop the Archives from loading.
+- Removing photos from your recipes now frees up your photo storage.
+
 ## 2.3.2 — 2026-09-29
 - The People row at the top of the Archives shows first names only. Tap someone to see their full name on their profile.
 
