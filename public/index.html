@@ -577,9 +577,10 @@ async function api(path, opts={}){
    and when the server says signed_out, the bar at the top says so and a tap
    reloads the page so Cloudflare can ask. It is never "Offline", and nothing
    waiting is dropped: flush() and the photo queue keep it (keepForLater). */
-const NEEDS_SIGNIN=["signed_out","not_trusted"];
-const keepForLater=e=>Boolean(e&&["signed_out","not_trusted","signin_unavailable","cf_not_set_up"].includes(e.code));
+const NEEDS_SIGNIN=["signed_out","not_trusted","unknown_host"];
+const keepForLater=e=>Boolean(e&&["signed_out","not_trusted","unknown_host","signin_unavailable","cf_not_set_up"].includes(e.code));
 // The server says which address it saw, so the owner can check it against TRUSTED_NETS.
+const unknownHostMsg=seen=>`Bourdain doesn't open from ${seen?`“${seen}”`:"this address"} at home. Use the NAS's IP address, or add the name to HOME_HOSTS.`;
 const untrustedMsg=seen=>`Bourdain doesn't recognise this network${seen?` (it sees this device as ${seen})`:""}. Open it from its web address instead.`;
 function signinLost(res){
   if(res.type==="opaqueredirect"||(res.status>=300&&res.status<400)) return true;
@@ -594,7 +595,7 @@ const signin={
     if(this.out===why&&this.seen===(seen||null)) return;
     this.out=why; this.seen=seen||null;
     const bar=document.getElementById("signinBar");
-    bar.textContent = why==="not_trusted" ? untrustedMsg(this.seen) : "Signed out. Tap to sign in again.";
+    bar.textContent = why==="not_trusted" ? untrustedMsg(this.seen) : why==="unknown_host" ? unknownHostMsg(this.seen) : "Signed out. Tap to sign in again.";
     bar.hidden=false; bar.onclick=()=>location.reload();
     store.paint();
   },
@@ -654,6 +655,7 @@ const store = {
       toast(e&&e.code==="cf_not_set_up" ? "Bourdain can't be opened from this address yet. Use your home address for now."
         : e&&e.code==="signed_out" ? "You're signed out. Tap the red bar at the top to sign in again. This phone's copy is shown until then."
         : e&&e.code==="not_trusted" ? untrustedMsg(e.seen)+" Showing this phone's copy until then."
+        : e&&e.code==="unknown_host" ? unknownHostMsg(e.seen)+" Showing this phone's copy until then."
         : e&&e.code==="signin_unavailable" ? "The server can't check your sign-in right now (it can't reach Cloudflare). Showing this phone's copy; try again in a minute."
         : e&&e.status ? `The server is up but couldn't load your recipes (${e.code}). Showing this phone's copy; check the server logs.`
         : "Can't reach the server. Changes are kept on this phone and sync when it's back.");
@@ -823,6 +825,8 @@ function fmtQty(q){ if(q==null||q==="") return ""; const n=Number(q); if(!isFini
   const fs = fr[f]||""; if(fs) return (w?w:"")+fs; return String(+n.toFixed(2)); }
 function weekLabel(m){ const s=addDays(m,6); return `${m.getDate()} ${MONTHS[m.getMonth()]} – ${s.getDate()} ${MONTHS[s.getMonth()]}`; }
 function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"),Math.max(2200,msg.length*60)); } // long messages stay up long enough to read
+// Only http(s) links become links: a "javascript:" source link in someone else's recipe would run in your session.
+function webUrl(u){ return /^https?:\/\//i.test(String(u||"").trim()) ? String(u).trim() : ""; }
 function hostOf(u){ try{ return new URL(u).hostname.replace(/^www\./,""); }catch(e){ return ""; } }
 function sourceType(u){ const h=hostOf(u); if(/instagram/.test(h))return "instagram"; if(/tiktok/.test(h))return "tiktok"; if(/youtu/.test(h))return "youtube"; if(h)return "web"; return "manual"; }
 
@@ -924,7 +928,7 @@ function blankRecipe(){ return {photos:[],title:"",description:"",source_url:"",
    else's: source, description, tags, pictures; then ingredients with the batch
    scaler, method and notes. */
 function recipeMediaHtml(r){
-  return `${r.source_url?`<div class="source muted"><a href="${esc(r.source_url)}" target="_blank" rel="noopener">${esc(hostOf(r.source_url)||r.source_url)}</a></div>`:""}
+  return `${r.source_url?`<div class="source muted"><a href="${esc(webUrl(r.source_url))}" target="_blank" rel="noopener">${esc(hostOf(r.source_url)||r.source_url)}</a></div>`:""}
     ${r.description?`<p class="muted">${esc(r.description)}</p>`:""}
     <div class="tags" style="margin-top:8px;display:flex;gap:4px;flex-wrap:wrap">${(r.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>
     ${r.cover?`<img class="hero cover" src="${coverUrl(r.cover)}" alt="">`:r.photos&&r.photos.length?`<img class="hero" src="${photoUrl(r.photos[0])}" alt="">`:""}
@@ -1210,7 +1214,8 @@ const wake={
 document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible"&&state.view==="cook") wake.hold(); });
 
 /* Michelin stars as the real six-petal mark (the #mstar symbol), in --flame. */
-function stars(n){ return n?`<span class="mstars" role="img" aria-label="${n} Michelin star${n===1?"":"s"}">${'<svg class="mstar"><use href="#mstar"/></svg>'.repeat(n)}</span>`:""; }
+function stars(n){ n=Math.max(0,Math.min(3,Math.round(Number(n))||0)); // someone else's rating might be anything
+  return n?`<span class="mstars" role="img" aria-label="${n} Michelin star${n===1?"":"s"}">${'<svg class="mstar"><use href="#mstar"/></svg>'.repeat(n)}</span>`:""; }
 
 /* Sort and filter for the recipe list, remembered on this phone. */
 const listPrefs={
@@ -1424,7 +1429,7 @@ function historySheet(recipeId){
   const sh=openSheet(`<h3>${esc(r.title)}</h3><p class="muted small" style="margin:0 0 6px">Michelin rating</p>
     ${ratingOpts(r.rating??null)}
     <p class="muted small" style="margin:16px 0 0">${cooks.length?`Cooked ${cooks.length===1?"once":cooks.length+" times"}`:"Not cooked yet. Tap Cook this on the recipe to start."}</p>
-    ${cooks.length?`<ul class="cooks">${cooks.map(c=>`<li><span>${esc(fmtDate(c.date))}${c.mult&&c.mult!==1?` · ${c.mult}× batch`:""}</span><button class="x" data-act="rm" data-i="${c.i}" aria-label="Remove this date">×</button></li>`).join("")}</ul>`:""}
+    ${cooks.length?`<ul class="cooks">${cooks.map(c=>`<li><span>${esc(fmtDate(c.date))}${c.mult&&c.mult!==1?` · ${esc(c.mult)}× batch`:""}</span><button class="x" data-act="rm" data-i="${c.i}" aria-label="Remove this date">×</button></li>`).join("")}</ul>`:""}
     <div class="row" style="margin-top:12px"><button class="btn ghost" data-act="done">Done</button></div>`);
   const save=async msg=>{ r.updated_at=new Date().toISOString(); const ok=await store.put("recipes",recipeId,r); if(state.view==="detail") renderDetail(); if(ok&&msg) toast(msg); };
   sheetActions(sh,{
@@ -1518,9 +1523,9 @@ function renderTimeline(){
   const card=(id,right,sub)=>{ const r=state.recipes[id]; return `<button class="slot" data-open="${esc(id)}">${miniThumb(r)}<span class="t">${title(r)}${sub?`<span class="tl-sub">${sub}</span>`:""}</span>${right||""}</button>`; };
   const entry=e=>{
     if(e.mine){ const r=state.recipes[e.recipeId];
-      const sub=[everyone?`${avatar(meP,"xs")}You`:"", r.rating?stars(r.rating):"", e.mult!==1?`${e.mult}× batch`:""].filter(Boolean).join(" · ");
+      const sub=[everyone?`${avatar(meP,"xs")}You`:"", r.rating?stars(r.rating):"", e.mult!==1?`${esc(e.mult)}× batch`:""].filter(Boolean).join(" · ");
       return card(e.recipeId,"",sub); }
-    const sub=[`${avatar(e.who,"xs")}${esc(e.who.name||"Someone")}`, e.rating?stars(e.rating):"", e.mult!==1?`${e.mult}× batch`:""].filter(Boolean).join(" · ");
+    const sub=[`${avatar(e.who,"xs")}${esc(e.who.name||"Someone")}`, e.rating?stars(e.rating):"", e.mult!==1?`${esc(e.mult)}× batch`:""].filter(Boolean).join(" · ");
     return `<button class="slot" data-owner="${esc(e.owner)}" data-rid="${esc(e.recipeId)}">${miniThumb({title:e.title,cover:e.cover,photos:e.firstPhoto?[e.firstPhoto]:[]})}<span class="t">${esc(e.title||"Untitled")}<span class="tl-sub">${sub}</span></span></button>`;
   };
   // group by month, then by day
@@ -1590,7 +1595,7 @@ function pickRecipe(dateISO){
 }
 function pickDay(recipeId){
   const r=state.recipes[recipeId];
-  const s=openSheet(`<h3>Which day?</h3>${DAYS.map((n,i)=>{ const d=addDays(state.week,i); return `<button class="opt" data-act="day" data-k="${iso(d)}">${n} ${d.getDate()} ${MONTHS[d.getMonth()]}<small>${planDay(iso(d)).entries.map(e=>state.recipes[e.recipeId]?.title).filter(Boolean).join(", ")||"Nothing planned"}</small></button>`; }).join("")}
+  const s=openSheet(`<h3>Which day?</h3>${DAYS.map((n,i)=>{ const d=addDays(state.week,i); return `<button class="opt" data-act="day" data-k="${iso(d)}">${n} ${d.getDate()} ${MONTHS[d.getMonth()]}<small>${esc(planDay(iso(d)).entries.map(e=>state.recipes[e.recipeId]?.title).filter(Boolean).join(", ")||"Nothing planned")}</small></button>`; }).join("")}
     <div class="row" style="margin-top:10px"><button class="btn small" data-act="pw">‹ Earlier week</button><button class="btn small" data-act="nw">Later week ›</button></div>`);
   sheetActions(s,{
     pw:()=>{ state.week=addDays(state.week,-7); pickDay(recipeId); },
@@ -1824,6 +1829,8 @@ function aiError(e, what="reading that"){
     ai_busy:"Still working on your last one. Give it a moment to finish.",
     signed_out:"You're signed out. Tap the red bar at the top to sign in again.",
     not_trusted:untrustedMsg(e&&e.seen),
+    unknown_host:unknownHostMsg(e&&e.seen),
+    cross_site:"That change came from another website, so it wasn't made. Make it in Bourdain itself.",
     signin_unavailable:"The server can't check your sign-in right now (it can't reach Cloudflare). Try again in a minute.",
     cf_not_set_up:"Bourdain can't be opened from this address yet. Use your home address for now.",
     ai_budget:`That's this month's AI allowance used up. It resets on the 1st${store.me&&!store.me.is_admin?"; ask Zein if you need more":""}.`,
@@ -2028,7 +2035,10 @@ async function uploadPhotos(files){
   return ids;
 }
 const storageFull=e=>`Your photo storage is full${e.limit?` (${e.limit} MB)`:""}. Remove photos from recipes you don't need, or ask Zein for more room.`;
-function photoUrl(id){ return String(id).startsWith("local-") ? (photoQueue.urls[id]||"") : "/api/photos/"+id; }
+/* Photo and cover ids come from other people's recipes too, and the server doesn't
+   check what's stored, so only a real id ever becomes part of an <img> tag.   */
+const ASSET_ID=/^[a-f0-9]{32}$/;
+function photoUrl(id){ id=String(id??""); return id.startsWith("local-") ? (photoQueue.urls[id]||"") : ASSET_ID.test(id) ? "/api/photos/"+id : ""; }
 
 /* ---------- offline photo queue ----------
    Photos taken while the server is unreachable wait in IndexedDB (localStorage is
@@ -2074,7 +2084,7 @@ const photoQueue={
     if(changed && !(state.view==="import"&&state.draft)) render();
   },
 };
-function coverUrl(id){ return "/api/covers/"+id; }
+function coverUrl(id){ return ASSET_ID.test(String(id??"")) ? "/api/covers/"+id : ""; }
 
 /* Covers: the server has Claude describe the dish and OpenAI paint it. Takes up to
    a minute, so it runs in a sheet with Stop. Closing the sheet lets it finish in
@@ -2112,7 +2122,7 @@ async function applyCover(recipeId,coverId){
 }
 function pickPhotos(){ return new Promise(res=>{ const i=document.createElement("input"); i.type="file"; i.accept="image/*"; i.multiple=true; i.onchange=()=>res([...i.files]); i.click(); }); }
 function photosHtml(ids,editable){
-  return `<div class="photos">${(ids||[]).map(id=>`<div class="ph"><img src="${photoUrl(id)}" alt="">${editable?`<button class="x" data-rmp="${id}" aria-label="Remove photo"><span>×</span></button>`:""}</div>`).join("")}${editable?`<button class="add" data-addp>+ Photo</button>`:""}</div>`;
+  return `<div class="photos">${(ids||[]).map(id=>`<div class="ph"><img src="${photoUrl(id)}" alt="">${editable?`<button class="x" data-rmp="${esc(id)}" aria-label="Remove photo"><span>×</span></button>`:""}</div>`).join("")}${editable?`<button class="add" data-addp>+ Photo</button>`:""}</div>`;
 }
 
 /* review / edit form */

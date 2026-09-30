@@ -239,6 +239,8 @@ people (see **Other people** below).
 - **Photo storage** (2.3): uploads are recorded in `photos (id, owner, bytes)`,
   and each person's total is capped by `storage_mb` (default 500) in the same
   limits, 413 `storage_full` over it. Photos from before 2.3 aren't in the table.
+  `storageUsed()` counts only photos still in one of the person's recipes or
+  their profile, plus the last day's uploads (drafts), so removing a photo frees it.
 
 **The owner's view (2.2)** (`openAdmin`, `renderAdmin`, `view-admin`): a long
 press (600ms) on the version sheet's heading, only when `store.me.is_admin`.
@@ -294,7 +296,9 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   search across books, the feed), `ai` (jobs, prompts on the server, usage and
   cost, limits, one at a time, activity, the owner's view), `signin` (Cloudflare
   tokens good and bad, trusted networks, each person's data their own, limits and
-  the owner's view for others, photo storage, #14, the Signed out bar), `migration` (the 1 → 2
+  the owner's view for others, photo storage, #14, the Signed out bar), `security`
+  (a hostile recipe from someone else, DNS rebinding, cross-site writes, body
+  sizes, storage in use, malformed cooks), `migration` (the 1 → 2
   conversion, refusing to start, Cloudflare refused, `/api/me`, the export
   zip), `scan`,
   `video`.
@@ -349,8 +353,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v33"`
-in `public/sw.js` → `v34`, `v35`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v34"`
+in `public/sw.js` → `v35`, `v36`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -478,6 +482,24 @@ decides `req.user` for every `/api` request except `/api/health` and
   ("Signed out. Tap to sign in again", which reloads) and "Signed out" in the
   header, never "Offline". `keepForLater(e)` stops the outbox and photo queue
   from dropping anything over a sign-in error, as they would for another 4xx.
+
+**Other people's recipes are untrusted input (2.3.3).** The server stores
+documents as the phone sent them, and since the pilot, what one person stores is
+rendered on everyone's phone. So in `index.html`: `esc()` every value, including
+numbers from a recipe (a "rating" or "mult" may be any string); image sources only
+through `photoUrl()`/`coverUrl()`, which accept nothing but a 32-hex id (or a
+`local-` one); links only through `webUrl()` (http/https); stars only through
+`stars()`, which clamps to 0–3. The server's `feedEntry()` and search hits send
+typed fields only. The `security` suite plants a hostile recipe and checks
+nothing runs.
+
+**Requests a browser makes on someone's behalf.** The middleware refuses a write
+whose `Sec-Fetch-Site` is `cross-site`/`same-site` (403 `cross_site`), and counts
+a request as the owner by network only when its Host is a home address
+(`homeHost()`: an IP, localhost, a dotless name, .local/.lan/.home.arpa/.internal/
+.ts.net, or `HOME_HOSTS`; else 403 `unknown_host`). That second check stops DNS
+rebinding: a web page resolving its own name to the NAS. JSON bodies are capped
+at 2 MB, except `/api/ai` (30 MB, for screenshots).
 
 **Adding fields is safe; renaming is not.** Old recipes simply lack new fields —
 treat missing as empty. Renaming an existing field orphans every stored recipe
