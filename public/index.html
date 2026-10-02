@@ -208,6 +208,21 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 /* People (2.1): avatars, the People row and Everyone / Just me in the Archives, profiles */
 .av{flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;overflow:hidden;background:var(--steel);color:var(--ink-2);font-family:var(--serif);font-weight:700;border:1px solid var(--line);vertical-align:middle}
 .av img{width:100%;height:100%;object-fit:cover;display:block}
+.av.veg{background:var(--paper)}
+.av.veg img{object-fit:contain;padding:8%;box-sizing:border-box}
+.pf-or{margin:0 0 6px}
+.costline{font-family:var(--sans);font-size:14px;margin:6px 0 10px;padding:8px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.costline small{display:block;font-size:12px;color:var(--ink-3);margin-top:3px}
+.savings{font-family:var(--sans);font-size:13px;color:var(--ink-2);margin:-8px 0 16px}
+.guessnote{font-family:var(--sans);font-size:13px;line-height:1.45;border-left:3px solid var(--ink);padding:6px 0 6px 10px;margin:4px 0 14px}
+.guessnote b{display:block;font-size:13px}
+.guessnote.low{border-left-color:var(--flame)}
+.guessnote.low b{color:var(--flame)}
+.guessline.low{color:var(--flame)}
+.vegs{display:grid;grid-template-columns:repeat(auto-fill,minmax(48px,1fr));gap:4px;margin:0 0 14px}
+.vegpick{height:48px;border:1px solid var(--line);border-radius:50%;background:var(--paper);padding:5px;aspect-ratio:1;justify-self:center}
+.vegpick img{width:100%;height:100%;object-fit:contain;display:block}
+.vegpick.on{border:2px solid var(--flame)}
 .av.xs{width:18px;height:18px;font-size:10px;margin-right:5px;border:0}
 .av.sm{width:32px;height:32px;font-size:15px}
 .av.md{width:44px;height:44px;font-size:19px}
@@ -302,7 +317,7 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .adm-top{display:flex;align-items:center;gap:12px;margin-bottom:4px}
 .adm-who{display:flex;flex-direction:column;min-width:0;font-family:var(--sans);font-size:12px;color:var(--ink-3)}
 .adm-who span{overflow-wrap:anywhere}
-.adm-use{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0 4px}
+.adm-use{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:10px 0 4px}
 .adm-use div{border:1px solid var(--line);border-radius:6px;padding:6px 2px;text-align:center;font-family:var(--sans);font-size:10px;color:var(--ink-3)}
 .adm-use b{display:block;font-size:16px;color:var(--ink)}
 .adm-use small{font-size:11px;font-weight:500;color:var(--ink-3)}
@@ -830,6 +845,7 @@ const store = {
   },
   async write(col,id,doc,verb){
     const op=this.enqueue(col,id,doc);
+    if(col==="recipes"&&doc) setTimeout(()=>costs.want(id),0);
     const sending=this.flush();
     if(this.online) await sending; // when the server is already known to be down, don't make the user wait on it
     if(op.refused) return false;
@@ -971,11 +987,13 @@ function addSheet(){
   const s=openSheet(`<h3>Add a recipe</h3>
     ${open?`<button class="opt" data-act="resume">Carry on with ${name}<small>You haven't saved it yet</small></button>`:""}
     <button class="opt" data-act="import">Import a recipe<small>${open?`Replaces ${name}`:"From a link, pasted text, screenshots or a screen recording"}</small></button>
-    <button class="opt" data-act="manual">Write one yourself<small>${open?`Replaces ${name}`:"Start from a blank recipe"}</small></button>`);
+    <button class="opt" data-act="manual">Write one yourself<small>${open?`Replaces ${name}`:"Start from a blank recipe"}</small></button>
+    <button class="opt" data-act="guess">Guess from a photo of a dish<small>${open?`Replaces ${name}`:"Bourdain suggests a recipe and says how sure it is"}</small></button>`);
   sheetActions(s,{
     resume:()=>{ closeSheet(); show("import"); },
     import:()=>{ closeSheet(); state.editingId=null; state.draft=null; state.draftManual=false; show("import"); },
     manual:()=>{ closeSheet(); state.editingId=null; state.draft=blankRecipe(); state.draftManual=true; show("import"); },
+    guess:()=>guessFromPhoto(),
   });
 }
 document.getElementById("btnManual").onclick=addSheet;
@@ -988,7 +1006,9 @@ function blankRecipe(){ return {photos:[],title:"",description:"",source_url:"",
    scaler, method and notes. */
 function recipeMediaHtml(r){
   return `${r.source_url?`<div class="source muted"><a href="${esc(webUrl(r.source_url))}" target="_blank" rel="noopener">${esc(hostOf(r.source_url)||r.source_url)}</a></div>`:""}
+    ${guessHtml(r.guess,false)}
     ${r.description?`<p class="muted">${esc(r.description)}</p>`:""}
+    ${costHtml(r)}
     <div class="tags" style="margin-top:8px;display:flex;gap:4px;flex-wrap:wrap">${(r.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>
     ${r.cover?`<img class="hero cover" src="${coverUrl(r.cover)}" alt="">`:r.photos&&r.photos.length?`<img class="hero" src="${photoUrl(r.photos[0])}" alt="">`:""}
     ${r.cover ? (r.photos&&r.photos.length?photosHtml(r.photos,false):"") : (r.photos&&r.photos.length>1?photosHtml(r.photos.slice(1),false):"")}`;
@@ -1082,9 +1102,16 @@ const people={
   byId(id){ return (this.list||[]).find(p=>p.id===id); },
 };
 // A person's photo, or their initial on grey. sizes: xs (18), sm (32), md (44), lg (72)
+/* Profile pictures (2.5): an uploaded photo, one of the vegetable icons in
+   /avatars ("veg:tomato"), or the person's initial on grey. Only names on this
+   list become an image, since the value comes from other people's profiles. */
+const VEG=["tomato","carrot","onion","garlic","broccoli","eggplant","capsicum","mushroom","potato","lemon","avocado","corn","chilli","ginger","basil","spring-onion"];
+const vegOf=photo=>{ const m=/^veg:([a-z-]+)$/.exec(String(photo||"")); return m&&VEG.includes(m[1])?m[1]:null; };
 function avatar(p,size="sm"){
-  const initial=esc(((p&&p.name)||"?").trim()[0]||"?").toUpperCase();
-  return p&&p.photo ? `<span class="av ${size}"><img src="${photoUrl(p.photo)}" alt=""></span>` : `<span class="av ${size}" aria-hidden="true">${initial}</span>`;
+  const initial=esc(((p&&p.name)||"?").trim()[0]||"?").toUpperCase(), veg=vegOf(p&&p.photo);
+  if(veg) return `<span class="av ${size} veg"><img src="/avatars/${veg}.webp" alt=""></span>`;
+  const src=p&&p.photo?photoUrl(p.photo):"";
+  return src ? `<span class="av ${size}"><img src="${src}" alt=""></span>` : `<span class="av ${size}" aria-hidden="true">${initial}</span>`;
 }
 // The People row has room for a first name only; the profile shows the full one.
 const firstName=n=>String(n||"").trim().split(/\s+/)[0]||"";
@@ -1212,14 +1239,18 @@ function profileSheet(first){
   const sh=openSheet(`<h3>${first?"Welcome to Bourdain":"Your profile"}</h3>
     ${first?`<p class="muted small">What should we call you? Your name and photo appear next to your recipes and cooks when other people look.</p>`:""}
     <div class="profile-edit"><span id="pfAv">${avatar(draft,"lg")}</span>
-      <div class="row"><button class="btn small" data-act="photo" id="pfPhoto">${draft.photo?"Change photo":"Add photo"}</button>${draft.photo?`<button class="btn small ghost" data-act="nophoto">Remove</button>`:""}</div></div>
+      <div class="row"><button class="btn small" data-act="photo" id="pfPhoto">${draft.photo&&!vegOf(draft.photo)?"Change photo":"Add photo"}</button>${draft.photo?`<button class="btn small ghost" data-act="nophoto">Remove</button>`:""}</div></div>
+    <p class="muted small pf-or">Or pick one:</p>
+    <div class="vegs" role="group" aria-label="Pick a picture">${VEG.map(v=>`<button class="vegpick${draft.photo==="veg:"+v?" on":""}" data-act="veg" data-v="${v}" aria-label="${v.replace("-"," ")}"><img src="/avatars/${v}.webp" alt=""></button>`).join("")}</div>
     <div class="field"><label for="pfName">Name</label><input class="input" id="pfName" maxlength="40" autocomplete="nickname" value="${esc(draft.name)}"></div>
     <div class="row"><button class="btn primary" data-act="save">Save</button><button class="btn ghost" data-act="later">${first?"Later":"Cancel"}</button></div>`);
-  const paint=()=>{ draft.name=sh.querySelector("#pfName").value; sh.querySelector("#pfAv").innerHTML=avatar(draft,"lg"); };
+  const paint=()=>{ draft.name=sh.querySelector("#pfName").value; sh.querySelector("#pfAv").innerHTML=avatar(draft,"lg");
+    sh.querySelectorAll(".vegpick").forEach(b=>b.classList.toggle("on",draft.photo==="veg:"+b.dataset.v)); };
   sh.querySelector("#pfName").oninput=paint;
   sheetActions(sh,{
     later:closeSheet,
     nophoto:b=>{ draft.photo=null; paint(); b.remove(); sh.querySelector("#pfPhoto").textContent="Add photo"; },
+    veg:b=>{ draft.photo="veg:"+b.dataset.v; paint(); sh.querySelector("#pfPhoto").textContent="Add photo"; },
     photo:async b=>{
       const files=await pickPhotos(); if(!files.length) return;
       b.disabled=true; b.innerHTML=`<span class="spin"></span>Uploading…`;
@@ -1541,6 +1572,14 @@ function cookServes(servings,mult){
   if(s>0){ const n=Math.round(s*m*100)/100; return `${fmtQty(n)} serving${n===1?"":"s"}`; }
   return m!==1?`${fmtQty(m)}× batch`:"";
 }
+// What your own cooks saved against eating out, this month and this year.
+function savingsHtml(mine,ym,y){
+  let month=0, year=0, counted=0, missing=0;
+  for(const e of mine){ if(!e.date.startsWith(y)) continue; const r=state.recipes[e.recipeId], sv=r&&cookSaved(r.cost,r.servings,e.mult);
+    if(sv==null){ missing++; continue; } counted++; year+=sv; if(e.date.startsWith(ym)) month+=sv; }
+  if(!counted) return "";
+  return `<p class="savings">Cooking at home saved you about <b>${esc(aud(month))}</b> this month and <b>${esc(aud(year))}</b> this year, against eating out.${missing?` <span class="faint">${missing} cook${missing===1?"":"s"} not estimated yet.</span>`:""}</p>`;
+}
 function timelineEntries(){
   const out=[];
   for(const [id,r] of Object.entries(state.recipes)) for(const c of (r.cooks||[])) if(c&&c.date) out.push({recipeId:id, date:c.date, at:c.at||c.date, mult:c.mult||1, who:"me"});
@@ -1589,9 +1628,11 @@ function renderTimeline(){
   const card=(id,right,sub)=>{ const r=state.recipes[id]; return `<button class="slot" data-open="${esc(id)}">${miniThumb(r)}<span class="t">${title(r)}${sub?`<span class="tl-sub">${sub}</span>`:""}</span>${right||""}</button>`; };
   const entry=e=>{
     if(e.mine){ const r=state.recipes[e.recipeId];
-      const sub=[everyone?`${avatar(meP,"xs")}You`:"", r.rating?stars(r.rating):"", esc(cookServes(r.servings,e.mult))].filter(Boolean).join(" · ");
+      const sv=cookSaved(r.cost,r.servings,e.mult);
+      const sub=[everyone?`${avatar(meP,"xs")}You`:"", r.rating?stars(r.rating):"", esc(cookServes(r.servings,e.mult)), sv!=null?`about ${esc(aud(sv))} saved`:""].filter(Boolean).join(" · ");
       return card(e.recipeId,"",sub); }
-    const sub=[`${avatar(e.who,"xs")}${esc(e.who.name||"Someone")}`, e.rating?stars(e.rating):"", esc(cookServes(e.servings,e.mult))].filter(Boolean).join(" · ");
+    const sv=cookSaved(e.cost,e.servings,e.mult);
+    const sub=[`${avatar(e.who,"xs")}${esc(e.who.name||"Someone")}`, e.rating?stars(e.rating):"", esc(cookServes(e.servings,e.mult)), sv!=null?`about ${esc(aud(sv))} saved`:""].filter(Boolean).join(" · ");
     return `<button class="slot" data-owner="${esc(e.owner)}" data-rid="${esc(e.recipeId)}">${miniThumb({title:e.title,cover:e.cover,photos:e.firstPhoto?[e.firstPhoto]:[]})}<span class="t">${esc(e.title||"Untitled")}<span class="tl-sub">${sub}</span></span></button>`;
   };
   // group by month, then by day
@@ -1602,6 +1643,7 @@ function renderTimeline(){
       <div class="stat"><b>${mine.filter(e=>e.date.startsWith(y)).length}</b><span>This year</span></div>
       <div class="stat"><b>${tried.size}<small class="of"> / ${ids.length}</small></b><span>Recipes tried</span></div>
     </div>
+    ${savingsHtml(mine,ym,y)}
     ${top.length?`<h3 class="tl-head">Most cooked</h3><div class="tl-top">${top.map(([id,n])=>card(id,`<span class="n">${n}×</span>`,state.recipes[id].rating?stars(state.recipes[id].rating):"")).join("")}</div>`:""}
     ${everyone&&feed.failed?`<p class="hint feedhint">Showing just your cooks. Can't reach the server for everyone else's right now.</p>`:""}
     ${months.map(g=>{ const [yy,mm]=g.m.split("-").map(Number);
@@ -1903,7 +1945,7 @@ function aiError(e, what="reading that"){
     ai_budget:`That's this month's AI allowance used up. It resets on the 1st${store.me&&!store.me.is_admin?"; ask Zein if you need more":""}.`,
   };
   if(c==="ai_limit"){ // daily limit for one kind of job; more tomorrow
-    const what={import:"imports",scan:"fridge scans",ideas:"recipe ideas",cover:"covers"}[e.kind]||"AI requests", n=e.limit;
+    const what={import:"imports and photo guesses",scan:"fridge scans",ideas:"recipe ideas",cover:"covers",cost:"cost estimates"}[e.kind]||"AI requests", n=e.limit;
     return `You've used today's ${n?n+" ":""}${what}. More tomorrow.`;
   }
   if(m[c]) return m[c];
@@ -2016,7 +2058,7 @@ document.getElementById("btnFetch").onclick=async()=>{
     const f = await store.fetchUrl(url);
     if(!f || !f.text || f.text.length<40){
       status.className="status err";
-      status.textContent = /instagram/.test(hostOf(url)) ? "Instagram didn't hand over the caption. Paste it below, or add screenshots, then tap Read recipe." : "That page came back empty. Paste the recipe text or add screenshots instead.";
+      status.textContent = /instagram/.test(hostOf(url)) ? "Instagram didn't hand over the caption. Paste it below, or add screenshots, then tap Read recipe." : sourceType(url)==="youtube" ? "That video's description doesn't include the recipe. Screen-record the video while it shows the recipe, and add the recording instead." : "That page came back empty. Paste the recipe text or add screenshots instead.";
       btn.disabled=false; return;
     }
     document.getElementById("srcText").value = f.text.slice(0,20000);
@@ -2054,7 +2096,11 @@ async function runParse(){
   status.querySelector("#stopParse").onclick=()=>parseCtl.abort();
   try{
     const data = await store.ai("import", {url, text:text.slice(0,20000)}, state.images, parseCtl.signal);
-    if(!data || data.error || !data.title){ status.className="status err"; status.textContent="Couldn't find a recipe in that. Try pasting more of the caption or a clearer screenshot."; btn.disabled=false; return; }
+    if(!data || data.error || !data.title){ status.className="status err";
+      status.textContent=/^(youtube|instagram|tiktok)$/.test(sourceType(url))
+        ? "That video's description doesn't include the recipe. Screen-record the video while it shows the recipe, and add the recording instead."
+        : "Couldn't find a recipe in that. Try pasting more of the caption or a clearer screenshot.";
+      btn.disabled=false; return; }
     state.draft=normalise(data,url); state.editingId=null; state.draftManual=false;
     status.textContent=""; btn.disabled=false; renderImport(); document.getElementById("main").scrollTop=0;
   }catch(e){
@@ -2192,6 +2238,95 @@ function photosHtml(ids,editable){
   return `<div class="photos">${(ids||[]).map(id=>`<div class="ph"><img src="${photoUrl(id)}" alt="">${editable?`<button class="x" data-rmp="${esc(id)}" aria-label="Remove photo"><span>×</span></button>`:""}</div>`).join("")}${editable?`<button class="add" data-addp>+ Photo</button>`:""}</div>`;
 }
 
+/* ---------- cost: home vs eating out (2.5) ----------
+   See docs/cost-comparison.md. Each recipe gets one estimate, an AI job on the
+   server: what it costs to make at Australian supermarket prices, and one serve
+   eaten out, casual and mid-range. The comparison uses their average. It's kept
+   on the recipe as `cost`, with a hash of what it was worked out from, and is
+   redone only when the ingredients or servings change. Estimates run in the
+   background, one at a time, and only when the server has a Claude key.
+   Every serving made counts, leftovers included. */
+const aud=n=>{ n=Number(n)||0; return n>=10?"$"+Math.round(n):"$"+n.toFixed(2).replace(/\.00$/,""); };
+function hashStr(s){ let h=5381; for(let i=0;i<s.length;i++) h=((h<<5)+h+s.charCodeAt(i))|0; return (h>>>0).toString(36); }
+const costOk=c=>Boolean(c&&Number(c.home_per_serve)>=0&&Number(c.out_per_serve)>=0);
+// What one cook saved: (eating out − home) per serve × every serving made.
+function cookSaved(cost,servings,mult){
+  if(!costOk(cost)) return null;
+  const serves=(Number(servings)>0?Number(servings):Number(cost.serves)||2)*(Number(mult)>0?Number(mult):1);
+  return Math.max(0,(Number(cost.out_per_serve)-Number(cost.home_per_serve))*serves);
+}
+const costs={
+  queue:[], busy:false, failed:{}, off:false,
+  hash(r){ return hashStr(JSON.stringify([Number(r.servings)||null,(Array.isArray(r.ingredients)?r.ingredients:[]).map(i=>[i&&i.quantity!=null?Number(i.quantity):null,(i&&i.unit)||"",(i&&(i.item||i.raw_text))||""])])); },
+  needs(r){ return Boolean(r&&r.title&&(Array.isArray(r.ingredients)?r.ingredients:[]).some(i=>i&&(i.item||i.raw_text))&&(!r.cost||r.cost.hash!==this.hash(r))); },
+  ok(){ return !this.off&&Boolean(store.me&&store.me.ai)&&store.online&&!signin.out; },
+  want(id){ const r=state.recipes[id]; if(!this.needs(r)||this.queue.includes(id)||Date.now()-(this.failed[id]||0)<3600000) return; this.queue.push(id); this.run(); },
+  sweep(){ // cooked recipes first: they're what the Archives add up
+    const ids=Object.keys(state.recipes).filter(id=>this.needs(state.recipes[id]));
+    ids.sort((a,b)=>(((state.recipes[b].cooks||[]).length>0)-((state.recipes[a].cooks||[]).length>0)));
+    ids.forEach(id=>this.want(id));
+  },
+  async run(){
+    if(this.busy||!this.ok()) return;
+    const id=this.queue.shift(); if(!id) return;
+    this.busy=true;
+    try{
+      const r=state.recipes[id]; if(!this.needs(r)) return;
+      const h=this.hash(r);
+      const est=await store.ai("cost",{ title:r.title, servings:r.servings,
+        ingredients:(r.ingredients||[]).filter(i=>i&&(i.item||i.raw_text)).map(i=>[i.quantity!=null?fmtQty(i.quantity):"",unitLabel(i.unit),i.item||i.raw_text,i.prep?`(${i.prep})`:""].filter(Boolean).join(" ")) });
+      const now=state.recipes[id]; if(!now||this.hash(now)!==h) return; // changed while it was worked out: the next pass redoes it
+      now.cost={...est, hash:h, at:new Date().toISOString()};
+      store.enqueue("recipes",id,now); store.flush(); // quietly, without a "Saved" toast
+      if(state.view==="timeline") renderTimeline(); else if(state.view==="detail"&&state.detailId===id) renderDetail();
+    }catch(e){
+      this.failed[id]=Date.now();
+      if(e&&["no_api_key","ai_limit","ai_budget","bad_kind"].includes(e.code)) this.off=true; // no more today, or not on this server
+    }finally{ this.busy=false; if(this.queue.length&&!this.off) setTimeout(()=>this.run(),800); }
+  },
+};
+function costHtml(r){
+  const c=r&&r.cost; if(!costOk(c)) return "";
+  return `<div class="costline"><span>About <b>${esc(aud(c.home_per_serve))}</b> a serve to make · about <b>${esc(aud(c.out_per_serve))}</b> eating out</span>
+    <small>Estimated${c.comparable?` against ${esc(c.comparable)}`:""}: casual ${esc(aud(c.casual_per_serve))}, mid-range ${esc(aud(c.mid_per_serve))} a serve, at Australian prices.</small></div>`;
+}
+
+/* ---------- guess a recipe from a photo of a dish (2.5) ----------
+   Claude names the dish and writes a likely recipe, with how sure it is (0-100,
+   shown as low / medium / high). It lands on the review form like any import,
+   with the photo as the recipe's picture and the guess saved on the recipe. */
+const guessLevel=n=>n>=75?"High":n>=45?"Medium":"Low";
+function guessHtml(g,long){
+  if(!g) return "";
+  const n=Math.max(0,Math.min(100,Math.round(Number(g.confidence))||0)), lv=guessLevel(n);
+  if(!long) return `<div class="source muted guessline ${lv.toLowerCase()}">Guessed from a photo · ${lv} confidence (${n}%)</div>`;
+  const alts=(Array.isArray(g.alternatives)?g.alternatives:[]).filter(Boolean);
+  return `<div class="guessnote ${lv.toLowerCase()}" role="note"><b>Guessed from a photo · ${lv} confidence (${n}%)</b>
+    <span>Looks like ${esc(g.dish||"this dish")}${alts.length?`; it could also be ${esc(alts.join(", "))}`:""}.${g.basis?` ${esc(g.basis)}`:""} Check the ingredients and amounts before saving.</span></div>`;
+}
+async function guessFromPhoto(){
+  closeSheet();
+  if(!store.online){ toast("Guessing a recipe needs the server. Try again when you're back online."); return; }
+  const files=(await pickPhotos()).slice(0,3); if(!files.length) return;
+  const ctl=new AbortController();
+  const sh=openSheet(`<h3>Looking at your dish</h3>
+    <p class="status" id="guessStatus"><span class="spin"></span>Working out what it is and how to make it. This can take half a minute.</p>
+    <div class="row" style="margin-top:12px"><button class="btn ghost" data-act="stop">Stop</button></div>`);
+  sheetActions(sh,{ stop:()=>{ ctl.abort(); closeSheet(); toast("Stopped. Nothing was added."); } });
+  const mine=()=>sh.isConnected&&sh.classList.contains("open");
+  const fail=msg=>{ if(!mine()) return toast(msg); sh.querySelector("h3").textContent="Couldn't guess that one"; const st=sh.querySelector("#guessStatus"); st.className="status err"; st.textContent=msg;
+    sh.querySelector('[data-act="stop"]').textContent="Close"; sheetActions(sh,{ stop:closeSheet }); };
+  try{
+    const images=[]; for(const f of files) images.push(await forReading(f));
+    const data=await store.ai("dish",{},images,ctl.signal);
+    if(!data||data.error||!data.title){ fail("That doesn't look like a dish Bourdain can recognise. Try a closer photo of the food, from above."); return; }
+    const ids=await uploadPhotos(files.slice(0,1)); // the photo becomes the recipe's picture
+    state.draft={...normalise(data,""), source_type:"photo", photos:ids, guess:data.guess||null}; state.editingId=null; state.draftManual=true;
+    if(mine()) closeSheet();
+    if(state.view==="import") renderImport(); else show("import");
+  }catch(e){ if(e&&e.name==="AbortError") return; console.warn("guess failed",e); fail(aiError(e,"reading that photo")); }
+}
+
 /* review / edit form */
 function renderReview(){
   const d=state.draft; const el=document.getElementById("review");
@@ -2201,7 +2336,7 @@ function renderReview(){
     <div class="detail-head"><button class="btn small ghost" id="revBack">‹ ${state.editingId?"Cancel":"Back"}</button>
       <button class="btn primary" id="revSave">${state.editingId?"Save changes":"Save recipe"}</button></div>
     <h2>${state.editingId?"Edit recipe":"New recipe"}</h2>
-    ${state.editingId?"":`<p class="hint revhint">Check everything looks right before it goes into the book.</p>`}
+    ${d.guess&&!state.editingId?guessHtml(d.guess,true):state.editingId?"":`<p class="hint revhint">Check everything looks right before it goes into the book.</p>`}
     <div class="field"><label>Title</label><input class="input" id="fTitle" value="${esc(d.title)}"></div>
     <div class="field"><label>Description</label><textarea class="input" id="fDesc" style="min-height:64px">${esc(d.description||"")}</textarea></div>
     <div class="row" style="margin-bottom:12px">
@@ -2289,15 +2424,15 @@ function renderReview(){
    Health shows only what the server can check; the rest says "Not monitored". */
 const ACT_WORDS={ recipe_added:"added", recipe_edited:"edited", recipe_deleted:"deleted", cook_logged:"cooked", recipe_copied:"copied",
   plan_changed:"changed the plan for", pantry_changed:"pantry:", pantry_removed:"took off the pantry:", profile_changed:"set their name to",
-  ai_import:"imported a recipe with AI", ai_scan:"scanned the fridge", ai_ideas:"asked for recipe ideas", ai_write:"had a recipe written", ai_cover:"painted a cover",
+  ai_import:"imported a recipe with AI", ai_scan:"scanned the fridge", ai_ideas:"asked for recipe ideas", ai_write:"had a recipe written", ai_cover:"painted a cover", ai_dish:"guessed a recipe from a photo",
   signed_in:"signed in via" };
 const AUDIT_WORDS={ limits_changed:"changed everyone's limits:", person_limits_changed:"changed limits for", cover_price_changed:"changed the cover price:",
   account_paused:"paused", account_resumed:"resumed", person_joined:"signed in for the first time:", deployed:"deployed", restarted:"restarted" };
 const ACT_CATS=[["nosignin","All but sign-ins"],["content","Content"],["ai","AI"],["security","Sign-ins"],["all","Everything"]];
-const KIND_NAMES={ import:"import", scan:"fridge scan", ideas:"recipe ideas", write:"recipe writing", cover:"cover" };
+const KIND_NAMES={ import:"import", scan:"fridge scan", ideas:"recipe ideas", write:"recipe writing", cover:"cover", dish:"dish guess", cost:"cost estimate" };
 const ACT_PERIODS=[["today","Today"],["7d","Last 7 days"],["30d","Last 30 days"],["all","All time"]];
-const LIMIT_GROUPS=["import","scan","ideas","cover"];
-const LIMIT_NAMES={ import:"Imports", scan:"Fridge scans", ideas:"Ideas + write", cover:"Covers" };
+const LIMIT_GROUPS=["import","scan","ideas","cover","cost"];
+const LIMIT_NAMES={ import:"Imports", scan:"Fridge scans", ideas:"Ideas + write", cover:"Covers", cost:"Cost estimates" };
 const fmtMB=b=>!b?"0 MB":b<10*1024*1024?`${Math.max(0.1,b/1024/1024).toFixed(1)} MB`:b<1024**3?`${Math.round(b/1024/1024)} MB`:`${(b/1024**3).toFixed(1)} GB`;
 const usd=n=>!n?"US$0":n<0.01?"under US$0.01":"US$"+n.toFixed(2);
 const plural=(n,one,many)=>`${n} ${n===1?one:(many||one+"s")}`;
@@ -2662,6 +2797,7 @@ navigator.serviceWorker?.register?.("/sw.js").catch(()=>{});
   await store.init();
   if(!(state.view==="import"&&state.draft)) render(); // don't wipe a form the user started while it loaded
   maybeWelcome();
+  costs.sweep();
   timers.tick(); timers.run(); // a timer may have ended while the app was closed
   if(store.online) checkForUpdate();
 })();

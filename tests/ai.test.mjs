@@ -49,7 +49,7 @@ try {
   check("the summary adds it up per person and per kind", sum0.people[0].ai.today.import === 1 && sum0.people[0].ai.today.ideas === 2 && sum0.people[0].ai.month_calls === 4
     && sum0.month.calls === 4 && Math.abs(sum0.month.usd - 4 * want) < 1e-9 && sum0.month.byKind.find((k) => k.grp === "ideas")?.calls === 2, JSON.stringify(sum0.month));
   check("defaults: 20 imports, 10 scans, 15 ideas, 5 covers a day, US$5 a month, 500 MB of photos, the owner exempt",
-    JSON.stringify(sum0.defaults) === JSON.stringify({ import: 20, scan: 10, ideas: 15, cover: 5, monthly_usd: 5, storage_mb: 500, admin_exempt: true }), JSON.stringify(sum0.defaults));
+    JSON.stringify(sum0.defaults) === JSON.stringify({ import: 20, scan: 10, ideas: 15, cover: 5, cost: 40, monthly_usd: 5, storage_mb: 500, admin_exempt: true }), JSON.stringify(sum0.defaults));
 
   // --- limits: the owner is exempt by default
   let r = await putLimits({ defaults: { import: 1 } });
@@ -185,7 +185,7 @@ try {
   await page.fill("#srcText", "2 chicken thighs, cook them"); await page.click("#btnParse");
   await page.waitForFunction(() => document.querySelector("#importStatus").classList.contains("err"));
   const msg = await page.textContent("#importStatus");
-  check("import over the limit: says how many and when there's more", /You've used today's 1 imports\. More tomorrow\./.test(msg), msg);
+  check("import over the limit: says how many and when there's more", /You've used today's 1 imports and photo guesses\. More tomorrow\./.test(msg), msg);
   await putLimits({ defaults: { import: 20, admin_exempt: true } });
 
   const longPress = async (sel, ms) => { const bx = await page.locator(sel).boundingBox(); await page.mouse.move(bx.x + bx.width / 2, bx.y + bx.height / 2); await page.mouse.down(); await sleep(ms); await page.mouse.up(); };

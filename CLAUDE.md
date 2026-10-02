@@ -28,7 +28,10 @@ Four collections, each stored as JSON blobs keyed by **(owner, id)**: `recipes`,
 `plan`, `pantry`, `shop`. The server does not validate their shape; the client
 owns it. The server sets `owner` from who's asking (`req.user`), never from the
 phone, and every read and write is scoped to it. Alongside them:
-- `users (id, email, name, photo, is_admin, created_at, last_seen)`. The owner
+- `users (id, email, name, photo, is_admin, created_at, last_seen)`. `photo` is
+  an uploaded photo id or, since 2.5, `veg:<name>` for one of the 16 vegetable
+  pictures in `public/avatars/` (`VEG_AVATARS` in `server.js`, `VEG` in
+  `index.html`; `avatar()` draws them). The owner
   is the `is_admin` user, created from `OWNER_EMAIL`. `name` is null until the
   person picks one in the welcome sheet; only named people are shown to others,
   and emails never are.
@@ -41,12 +44,14 @@ A recipe:
 ```js
 {
   title, description, servings, prep_min, cook_min, notes,
-  source_url, source_type,          // web | instagram | tiktok | youtube | manual
+  source_url, source_type,          // web | instagram | tiktok | youtube | manual | photo (guessed from a dish, 2.5)
   photos: [assetId],                // first one is the hero image, unless there's a cover
   cover: assetId,                   // optional AI illustration, served from /api/covers/:id (WebP)
   rating: 0|1|2|3,                  // optional Michelin-style stars; 0 = rated "no stars", missing = not rated
   cooks: [{date, at, mult}],        // one per finished cook: local ISO date, timestamp, batch multiplier
   copied_from: {owner, id, name, title}, // set on a copy made with Add to my recipes (2.1); the credit line
+  cost: {home_per_serve, casual_per_serve, mid_per_serve, out_per_serve, course, currency, hash, at}, // 2.5, see Cost
+  guess: {dish, cuisine, confidence, alternatives, basis}, // 2.5, set by Guess from a photo
   tags: [string],
   ingredients: [{
     raw_text,                       // the line as originally written, kept for re-parsing
@@ -112,7 +117,7 @@ how data persists, that is the only place to touch.
   10 minutes. A 4xx or `image_failed` from the server removes the photo rather
   than retrying it forever.
 - `store.ai(kind, material, images, signal)` — one of the app's AI jobs
-  (`import`, `scan`, `ideas`, `write`), returns parsed JSON. The phone sends
+  (`import`, `scan`, `ideas`, `write`, `dish`, `cost`), returns parsed JSON. The phone sends
   only the material; the prompts live in `server.js` (see **AI jobs and
   limits**). Aborting `signal` cancels it; the server then aborts its upstream
   call too.
@@ -222,8 +227,8 @@ people (see **Other people** below).
 **AI jobs and limits (2.2)** (`AI_JOBS`, `runAi`, `aiBlock` in `server.js`):
 - **Prompts are the server's.** `POST /api/ai {kind, material, images}` builds
   the prompt from `AI_JOBS[kind]` (`PARSE_PROMPT`, `SCAN_PROMPT`, the ideas and
-  write prompts), clips the material and caps the images (4 for an import, 6 for
-  a scan, none otherwise). There is no route that takes a prompt: that would be
+  write prompts, `DISH_PROMPT`, `COST_PROMPT`), clips the material and caps the images (4 for an import, 6 for
+  a scan, 3 for a dish guess, none otherwise). There is no route that takes a prompt: that would be
   free Claude on Zein's key for anyone signed in. `/api/claude` is gone.
 - **Every call that reaches Claude or OpenAI is logged** in `ai_usage` with
   tokens (from the reply's `usage`), pictures and an estimated US$ cost
@@ -231,8 +236,9 @@ people (see **Other people** below).
   view). Calls report through `up.meter`; `callClaude` and `paintCover` set
   `reached` once the request left the server. A missing key or unreachable
   provider isn't counted; a stop, timeout or provider error is.
-- **Limits** per person per day, grouped: `import`, `scan`, `ideas` (ideas and
-  write share it), `cover`; plus `monthly_usd`. Defaults in `DEFAULT_LIMITS`,
+- **Limits** per person per day, grouped: `import` (imports and dish guesses), `scan`, `ideas` (ideas and
+  write share it), `cover`, `cost` (40 a day; it skips the one-at-a-time rule
+  and the activity log, since the phone runs it in the background); plus `monthly_usd`. Defaults in `DEFAULT_LIMITS`,
   changes in the `settings` table (`limits`, `limits:<userId>`, `image_usd`).
   The day is the server's local day, so the container needs `TZ`. Over a
   limit: 429 `ai_limit` (with `kind`, `limit`), `ai_budget`, or `ai_busy` (one
@@ -301,8 +307,9 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   start without one), `slowProxy` (fake slow Wi-Fi), `openBrowser`, and the `suite`
   PASS/FAIL collector.
 - `tests/mock-apis.mjs`: fake Claude and OpenAI, loaded with `--import`. It is
-  driven per call by `setMode({claude, image, scan, claudeDelay, imageDelay})`
-  and logs what was sent (`MOCK_CLAUDE_REQ`, `MOCK_IMG_REQ`, `MOCK_SCAN`).
+  driven per call by `setMode({claude, image, scan, claudeDelay, imageDelay, cost, dish, youtube})`
+  and logs what was sent (`MOCK_CLAUDE_REQ`, `MOCK_IMG_REQ`, `MOCK_SCAN`, `MOCK_COST`, `MOCK_DISH`).
+  It also fakes YouTube's oEmbed and watch page.
   Nothing in the tests calls a real API or needs a key.
 - `CF_ENV`, `viaCf(email)` and `cfToken(email, opts)` in `tests/lib.mjs` sign
   requests in the way Cloudflare does (see **Signing in** under Gotchas).
@@ -325,8 +332,8 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   (a hostile recipe from someone else, DNS rebinding, cross-site writes, body
   sizes, storage in use, malformed cooks), `migration` (the 1 → 2
   conversion, refusing to start, Cloudflare refused, `/api/me`, the export
-  zip), `scan`,
-  `video`.
+  zip), `cost` (estimates, savings in the Archives, re-estimating), `dish`
+  (Guess from a photo, YouTube links), `scan`, `video`.
 - `slowProxy` delays: `shell` (index.html), `state` (`/api/state`), `write`
   (PUT/DELETE).
 
@@ -378,8 +385,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v35"`
-in `public/sw.js` → `v36`, `v37`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v36"`
+in `public/sw.js` → `v37`, `v38`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -537,7 +544,10 @@ Four routes in, most to least reliable:
 1. **Recipe site link** — server parses embedded schema.org `Recipe` data, then
    hands that clean text to the model only to structure quantities. Accurate.
 2. **TikTok link** — server also hits TikTok's public oEmbed endpoint for the
-   caption the page itself hides.
+   caption the page itself hides. **YouTube links** (2.5, `youtubeId`,
+   `youtubeText`): oEmbed for the title and channel, plus `shortDescription`
+   from the watch page (sent with a consent cookie). Only the description is
+   read, so a recipe that's only spoken needs a screen recording.
 3. **Screenshots** — sent to the model as images.
 4. **Screen recording** — the browser samples frames, drops near-duplicates by
    comparing downscaled pixel diffs, and tiles survivors into contact sheets
@@ -547,6 +557,13 @@ Four routes in, most to least reliable:
 Instagram links work when the recipe is written in the caption or comments. When
 it is only said or shown in the video, screenshots or a recording are the way
 in; that case is why they exist.
+
+**Guess from a photo** (2.5, `guessFromPhoto`, the `dish` job): up to 3 photos
+of a plated dish. Claude names it, gives a 0–100 confidence and alternatives,
+and writes a likely recipe. The first photo becomes the recipe's picture,
+`source_type` is `photo`, and `guess` is kept. `guessHtml()` shows it: High
+≥75, Medium 45–74, Low <45 (Low in `--flame`), on the review form in full and
+on the recipe page as one line.
 
 **Every import lands on a review screen before saving.** The model misreads
 quantities occasionally. Do not add a path that saves straight to the library.
@@ -633,6 +650,22 @@ conversion; a one-time migration on server start, gated by a stored data
 version; and handling for **old-format writes still sitting in a phone's
 outbox**. Those arrive after the migration, so the server must convert them or
 the client must finish syncing before it switches format.
+
+## Cost
+
+Home cost vs eating out (2.5; decisions and figures in `docs/cost-comparison.md`).
+The `cost` job takes a recipe's title, servings and ingredient lines and returns,
+in AUD, the home cost (Coles/Woolworths, only what's used; `STAPLE_PRICES` keeps
+common items consistent) and a casual and a mid-range price per serve for a
+comparable dish at the right course. The server computes `home_per_serve` and
+`out_per_serve` (the average). On the phone, `costs` estimates in the background,
+one at a time, any recipe whose `cost.hash` (title-free hash of servings and
+ingredients) is missing or stale, and saves it with `store.enqueue` (no toast).
+It runs only when `store.me.ai` (the server has a Claude key). Saved per cook =
+(out − home) per serve × servings × batch (`cookSaved`). The recipe page shows
+`costHtml()`; the Archives show each cook's saving and `savingsHtml()` totals.
+`feedEntry` sends others' `cost` per serve. A recipe PUT that only changes `cost`
+isn't logged as an edit.
 
 ## Covers
 

@@ -5,16 +5,11 @@ the CHANGELOG records what shipped.
 
 ## From pilot users
 
-| Item | Raised | Notes |
-| --- | --- | --- |
-| **YouTube links don't import** ("Doesn't work bro") | 2026-09-30 | The link fetcher has no YouTube handling: it reads the page like any website, and YouTube's page hides the description (it's inside `ytInitialPlayerResponse` as `shortDescription`), or serves a consent or bot check instead. Fix idea: a YouTube route like TikTok's (oEmbed for the title, plus the page's `shortDescription`). Until then, a screen recording works. Ask which video, to test with. |
-| **Photo of a dish → a recipe** ("a recipe Shazam") | 2026-09-30 | Take a photo of a plated dish (e.g. at a restaurant); Claude names the dish and writes a likely recipe, which lands on the review screen as usual. Likely a new AI job (`dish`) sharing the import limit, with the photo as the recipe's first photo. The result is a guess, so the review screen should say so. |
+Nothing open. YouTube links and Guess from a photo shipped in 2.5.0.
 
 ## Requested by Zein
 
-| Item | Notes |
-| --- | --- |
-| **Home cost vs eating out** | Estimate each recipe's cost per serve to make (Australian supermarket prices) against eating out, so the Archives can say roughly what each cook saved. Decided 2026-10-02: compare against the **average of casual and mid-range** prices, and **leftovers count fully** (all servings made). Plan, open questions and example figures: `docs/cost-comparison.md`. |
+Nothing open. Home cost vs eating out shipped in 2.5.0.
 
 ## Admin actions not built (from the 2026-10-02 brief)
 
@@ -49,7 +44,8 @@ the CHANGELOG records what shipped.
 
 | Item | Notes |
 | --- | --- |
-| Anyone on home Wi-Fi counts as Zein | While `TRUSTED_NETS` trusts Docker's gateway. Host networking, or a guest network, narrows it. |
-| No cap on recipe count or writes per person | Photos are capped (500 MB). |
-| Recipes of someone without a name yet are readable by id | Ids are random. |
-| Large uploads are processed on the NAS | Several 25 MB uploads at once could slow it. |
+| Anyone on home Wi-Fi counts as Zein | Only when they open the NAS address directly (`192.168.1.109:8080`), not `bourdain.elevengrant.com`, which always asks Cloudflare who it is. While `TRUSTED_NETS` trusts Docker's gateway. Host networking, or a guest network, narrows it. |
+
+Accepted 2026-10-02, not to be built: no cap on recipe count or writes per
+person (photos are capped); recipes of someone without a name are readable by
+id (ids are random); large uploads are processed on the NAS (fine for the pilot).
