@@ -26,7 +26,7 @@ try {
   const d = db();
   d.prepare("INSERT INTO users (id, email, name, created_at) VALUES ('sam', 'sam@example.com', NULL, datetime())").run(); // not named yet
   const ins = d.prepare("INSERT INTO recipes (owner, id, doc, updated_at) VALUES (?, ?, ?, datetime())");
-  ins.run("sam", "katsu", JSON.stringify({ title: "Chicken katsu curry", rating: 3, tags: ["japanese"], description: "Crisp panko chicken.", ingredients: [{ item: "panko", quantity: 80, unit: "g" }, { item: "chicken thigh", quantity: 2, unit: "whole" }], steps: ["Bread the chicken.", "Fry for 6 minutes."], photos: [], cooks: [ago(0), ago(3)] }));
+  ins.run("sam", "katsu", JSON.stringify({ title: "Chicken katsu curry", rating: 3, servings: 2, tags: ["japanese"], description: "Crisp panko chicken.", ingredients: [{ item: "panko", quantity: 80, unit: "g" }, { item: "chicken thigh", quantity: 2, unit: "whole" }], steps: ["Bread the chicken.", "Fry for 6 minutes."], photos: [], cooks: [ago(0), ago(3)] }));
   ins.run("sam", "dal", JSON.stringify({ title: "Tarka dal", rating: 1, ingredients: [{ item: "red lentils" }], steps: ["Simmer."], photos: [], cooks: [ago(2)] }));
   d.close();
 
@@ -122,6 +122,7 @@ try {
   const statsEvery = await page.$$eval(".stat b", (xs) => xs.map((x) => x.textContent));
   const feedEvery = await page.$$eval(".feed .slot", (xs) => xs.map((x) => x.textContent.replace(/\s+/g, " ").trim()));
   check("Everyone: Sam's cooks in the feed, with his name", /Everyone/.test(await page.textContent(".seg .on")) && feedEvery.filter((t) => /Chicken katsu curry.*Sam/.test(t)).length === 2 && feedEvery.some((t) => /Tarka dal.*Sam/.test(t)) && feedEvery.some((t) => /Leek soup.*You/.test(t)), JSON.stringify(feedEvery));
+  check("…with the servings they made", feedEvery.some((t) => /Chicken katsu curry.*Sam.*2 servings/.test(t)), JSON.stringify(feedEvery));
   await page.click('.seg [data-who="me"]');
   const feedMe = await page.$$eval(".feed .slot", (xs) => xs.map((x) => x.textContent));
   check("Just me: only mine", feedMe.length === 1 && /Leek soup/.test(feedMe[0]) && !feedMe.some((t) => /Sam/.test(t)));

@@ -6,6 +6,15 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.4.0 — 2026-10-02
+- Litres now show as a capital L (1½ L stock), so they can't be mistaken for a 1.
+- New ingredient unit: drizzle, for things like olive oil to finish.
+- The Archives show how many servings each cook made (a 4-serve recipe at a 2× batch reads "8 servings"), instead of the batch size.
+- The owner's view is now an admin overview: anything that needs you at the top, then the numbers that matter, whether each part of Bourdain is working, AI cost, people and recent activity. Tap a person, AI usage, activity, the audit log or errors for the detail.
+- System health only says "Operational" when Bourdain has actually checked. Backups aren't visible to it, so they say "Not monitored".
+- You can pause someone's account from their page. They can't open Bourdain until you resume it, and nothing is deleted.
+- Every change to limits, cover price or accounts, and every deploy, is kept in an audit log that can't be edited.
+
 ## 2.3.3 — 2026-09-30
 - Safety fixes from a review before the pilot. Someone else's recipe can no longer run anything on your phone, whatever it contains, and a source link only opens if it's a web address.
 - A website you visit at home can no longer use your browser to reach Bourdain as you.

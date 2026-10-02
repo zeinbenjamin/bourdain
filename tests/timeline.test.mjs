@@ -25,9 +25,9 @@ try {
     katsu: [ago(1), ago(3)],
     rice: [ago(0)],
     stew: [ago(20), ago(21), ago(22), ago(23)],
-    toast: [ago(2), ago(4)],
+    toast: [ago(2, { mult: 2 }), ago(4)],
   };
-  await s.put("recipes", "soup", { title: "Leek soup", rating: 2, ingredients: [], steps: ["Simmer."], photos: [], cooks: cooks.soup });
+  await s.put("recipes", "soup", { title: "Leek soup", rating: 2, servings: 4, ingredients: [], steps: ["Simmer."], photos: [], cooks: cooks.soup });
   await s.put("recipes", "katsu", { title: "Chicken katsu curry", rating: 3, ingredients: [], steps: [], photos: [], cooks: cooks.katsu });
   await s.put("recipes", "rice", { ingredients: [], steps: [], photos: [], cooks: [...cooks.rice, null, { mult: 1 }] }); // no title; junk entries
   await s.put("recipes", "stew", { title: "Beef stew", ingredients: [], steps: [], photos: [], cooks: cooks.stew });
@@ -57,7 +57,10 @@ try {
   const longMonth = (x) => x.toLocaleString("en-GB", { month: "long" });
   check("month headings: this year's without the year, older ones with it", heads[0] === "Most cooked" && heads[1].toLowerCase() === longMonth(today).toLowerCase() && heads[heads.length - 1].toLowerCase() === `${longMonth(lastYear)} ${lastYear.getFullYear()}`.toLowerCase(), heads.join(" | "));
   const soupRow = await page.textContent('.feed .day:nth-of-type(2) [data-open="soup"]');
-  check("feed: batch size shown when it wasn't 1×", /2× batch/.test(soupRow), soupRow);
+  check("feed: servings made (4 serves × a 2× batch = 8 servings), not the batch", /8 servings/.test(soupRow) && !/batch/.test(soupRow), soupRow);
+  check("feed: a 1× cook shows the recipe's servings", /4 servings/.test(await page.textContent('.feed [data-open="soup"] >> nth=-1')));
+  const toastRow = await page.textContent('.feed [data-open="toast"] >> nth=0');
+  check("feed: a recipe without servings falls back to the batch size", /2× batch/.test(toastRow) && !/servings/.test(toastRow), toastRow);
   check("feed: stars drawn as Michelin stars, never ★", (await page.locator('.feed [data-open="katsu"]').first().locator('svg.mstar').count()) === 3 && !(await page.textContent("#view-timeline")).includes("★"));
   check("feed: a recipe without a title shows 'Untitled'", /Untitled/.test(await page.textContent('.feed [data-open="rice"]')));
   check("feed: recipes never cooked aren't listed", (await page.locator('#view-timeline [data-open="never"]').count()) === 0);

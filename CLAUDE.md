@@ -58,6 +58,12 @@ A recipe:
 }
 ```
 
+Units are `UNITS` in `index.html` (and the list in `PARSE_PROMPT`). Show a unit
+only through `unitLabel()`: litres are stored as `"l"` but shown as "L", and
+"whole" shows as nothing. "drizzle" (2.4) has no quantity. The Archives show
+servings made (`cookServes()`: recipe servings × batch), falling back to the
+batch size when a recipe has no servings.
+
 Splitting ingredients into `quantity` / `unit` / `item` at import time is what
 makes shopping-list merging and pantry matching possible. Keep `raw_text`
 always — it is the fallback if parsing logic improves later.
@@ -242,15 +248,33 @@ people (see **Other people** below).
   `storageUsed()` counts only photos still in one of the person's recipes or
   their profile, plus the last day's uploads (drafts), so removing a photo frees it.
 
-**The owner's view (2.2)** (`openAdmin`, `renderAdmin`, `view-admin`): a long
-press (600ms) on the version sheet's heading, only when `store.me.is_admin`.
-There is deliberately no button. People (email, last seen, counts, AI today
-against limits, this month), AI this month by kind with prices, the limits for
-everyone (and the cover price), per-person limits in a sheet, and the latest
-100 activity rows, filterable. `/api/admin/summary`, `/api/admin/activity` and
-`PUT /api/admin/limits` are 403 `not_admin` for anyone else; that check, not
-the hidden entrance, is the security. Back is "‹ Recipes", and the Recipes tab
-stays lit.
+**The owner's view (2.2, rebuilt as an admin overview in 2.4)** (`openAdmin`,
+`renderAdmin`, `view-admin`): a long press (600ms) on the version sheet's
+heading, only when `store.me.is_admin`. There is deliberately no button.
+- **Screens** (`state.adminScreen`): `home` (Needs attention, overview metrics,
+  System health, AI usage, a compact people list, recent activity without
+  sign-ins, admin actions, system and signing-in details), `person` (counts, AI
+  today and this month, limits, their activity, Pause/Resume), `ai` (cost by
+  provider, feature and person, failed calls, the limits form), `activity`
+  (person / event kind / period / search; sign-ins are their own kind),
+  `audit`, `errors`, `people`. Sub-screens' Back is "‹ Admin"; `adminGo()`
+  moves between them. Activity filters repaint only `#actList`, so the search
+  box keeps focus.
+- **Health is real or it says so** (`systemHealth()` in `server.js`): the
+  database and photo storage are tested on every look (a write, `statfs` free
+  space); Cloudflare's keys are fetched when over an hour old; Claude and
+  OpenAI are never test-called (that costs money), so they show the last real
+  call's outcome; backups are "Not monitored". Never add a green status the
+  server can't check.
+- **Records**: `audit` (limit, cover-price and account changes with from → to,
+  new people, deploys vs restarts from `last_boot`) is never pruned or edited;
+  `server_errors` (5xx, Claude/OpenAI failures, sign-in key failures; one per
+  area and code a minute) is kept 90 days.
+- **Pausing** sets `users.disabled_at` (a column added on start, no data
+  conversion): every request but `GET /api/export` gets 403 `account_disabled`,
+  and the person is left out of people, the feed, search and copies.
+- `/api/admin/*` is 403 `not_admin` for anyone else; that check, not the hidden
+  entrance, is the security. The Recipes tab stays lit.
 
 **Recipe list sort and filter** (`listPrefs`, `sortRecipes`, `keepRecipe`)
 are remembered per phone in `localStorage["bourdain.listPrefs"]`. A saved sort or
@@ -294,7 +318,8 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   data, setting aside and picking back up, Export), `people` (profiles, the
   welcome, People row, Everyone / Just me, read-only recipes, Add to my recipes,
   search across books, the feed), `ai` (jobs, prompts on the server, usage and
-  cost, limits, one at a time, activity, the owner's view), `signin` (Cloudflare
+  cost, limits, one at a time, activity; the admin overview: health, audit log,
+  errors, activity filters, pausing, every screen at phone width), `signin` (Cloudflare
   tokens good and bad, trusted networks, each person's data their own, limits and
   the owner's view for others, photo storage, #14, the Signed out bar), `security`
   (a hostile recipe from someone else, DNS rebinding, cross-site writes, body
@@ -353,8 +378,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v34"`
-in `public/sw.js` → `v35`, `v36`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v35"`
+in `public/sw.js` → `v36`, `v37`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -585,6 +610,7 @@ and filtering of the recipe list, and **Export my data** (a zip of everything yo
 own plus its photos, from the version sheet; `GET /api/export`, written by the
 small `zipStore()` in `server.js` with no dependency).
 
+Everything outstanding (pilot requests, setup, ideas) is in `docs/backlog.md`.
 Ideas not yet built: nutrition estimates, pantry quantities decremented by
 cooking, timer alerts while the phone is locked (would need push
 notifications), restoring the shopping list, and

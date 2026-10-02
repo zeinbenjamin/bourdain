@@ -240,28 +240,81 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .slot .tl-sub{display:block;font-family:var(--sans);font-size:12px;font-weight:400;color:var(--ink-3);margin-top:2px}
 .slot .tl-sub .mstars{font-size:12px}
 .feed .day{grid-template-columns:56px 1fr}
-/* The owner's screen (2.2) */
+/* The owner's control room (2.4): a ledger, not a dashboard. Rules, type and space do the work; red only when something needs you. */
 .verhead{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-.adm-person{border-bottom:1px solid var(--line);padding:14px 0}
-.adm-top{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+.adm-kicker{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin:2px 0 2px}
+.adm-title{margin:0 0 2px;overflow-wrap:anywhere}
+.adm-meta{font-family:var(--sans);font-size:12px;color:var(--ink-3);margin:0 0 12px;overflow-wrap:anywhere}
+.adm-attn{border-top:2px solid var(--flame);border-bottom:1px solid var(--line);padding:8px 0 10px;margin:0 0 14px}
+.adm-attn h3{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--flame);margin:0 0 4px}
+.adm-attn ul{margin:0;padding-left:18px;font-family:var(--sans);font-size:13px;line-height:1.45}
+.adm-ok{font-family:var(--sans);font-size:12px;color:var(--ink-3);margin:0 0 12px}
+.adm-metrics{display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--rule);border-bottom:1px solid var(--line)}
+.adm-metrics.four{grid-template-columns:repeat(4,1fr)}
+.adm-m{padding:10px 4px;text-align:center;min-width:0}
+.adm-m+.adm-m{border-left:1px solid var(--line)}
+.adm-m b{display:block;font-family:var(--serif);font-size:20px;font-weight:700;line-height:1.15;overflow-wrap:anywhere}
+.adm-m span{display:block;font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--ink-3);margin-top:3px}
+@media (max-width:480px){
+  .adm-metrics{grid-template-columns:repeat(3,1fr)}
+  .adm-metrics .adm-m:nth-child(3n+1){border-left:0}
+  .adm-metrics .adm-m:nth-child(n+4){border-top:1px solid var(--line)}
+  .adm-metrics.four{grid-template-columns:repeat(2,1fr)}
+  .adm-metrics.four .adm-m{border-left:1px solid var(--line);border-top:0}
+  .adm-metrics.four .adm-m:nth-child(odd){border-left:0}
+  .adm-metrics.four .adm-m:nth-child(n+3){border-top:1px solid var(--line)}
+}
+.adm-today{font-family:var(--sans);font-size:12px;color:var(--ink-2);margin:8px 0 0}
+.adm-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;border-bottom:1px solid var(--rule);margin:22px 0 0;min-height:44px}
+.adm-head h3{font-family:var(--sans);font-size:13px;letter-spacing:.02em;text-transform:uppercase;font-weight:700;margin:0;padding-bottom:6px}
+.adm-head h3 .n{color:var(--ink-3);font-weight:600;margin-left:4px}
+.adm-link{background:none;border:0;padding:0 0 6px;min-height:44px;font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ink);display:inline-flex;align-items:flex-end}
+.adm-link.wide{width:100%;align-items:center;padding:0;border-bottom:1px solid var(--line)}
+.adm-h{display:grid;grid-template-columns:10px 1fr auto;gap:10px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--line);font-family:var(--sans);font-size:14px}
+.adm-h .dot{width:8px;height:8px;border-radius:50%;background:var(--ink);align-self:center}
+.adm-h.problem .dot,.adm-h.warn .dot{background:var(--flame)}
+.adm-h.unknown .dot,.adm-h.off .dot{background:none;border:1.5px solid var(--ink-3);box-sizing:border-box}
+.adm-h .lbl{min-width:0}
+.adm-h small{display:block;font-size:11px;color:var(--ink-3);margin-top:2px;overflow-wrap:anywhere}
+.adm-h .st{font-weight:600;text-align:right}
+.adm-h.problem .st,.adm-h.warn .st{color:var(--flame)}
+.adm-h.unknown .st,.adm-h.off .st{color:var(--ink-3);font-weight:500}
+.adm-sum{font-family:var(--sans);font-size:14px;margin:10px 0 2px}
+.adm-p{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:10px 0;min-height:44px;color:var(--ink)}
+.adm-p .nm{display:block;font-family:var(--serif);font-size:17px;font-weight:700;overflow-wrap:anywhere}
+.adm-p .ln{display:block;font-family:var(--sans);font-size:13px;color:var(--ink-2);margin-top:2px}
+.adm-p .seen{display:block;font-family:var(--sans);font-size:11px;color:var(--ink-3);margin-top:2px}
+.paused{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--flame)}
+.adm-a{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:10px 0;min-height:44px;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--ink)}
+.adm-a small{display:block;font-weight:400;font-size:12px;color:var(--ink-3);margin-top:2px}
+.adm-h4{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--ink-3);margin:16px 0 0}
+.adm-big{font-family:var(--sans);font-size:14px;margin:4px 0 2px}
+.adm-big b{font-family:var(--serif);font-size:30px}
+.adm-tbl{width:100%;border-collapse:collapse;font-family:var(--sans);font-size:13px}
+.adm-tbl th{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-3);text-align:right;font-weight:700;padding:8px 0 4px 8px}
+.adm-tbl td{text-align:right;padding:8px 0 8px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.adm-tbl th:first-child,.adm-tbl td:first-child{text-align:left;padding-left:0}
+.adm-tbl td:first-child{white-space:normal;overflow-wrap:anywhere}
+.adm-filters{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:4px 0 6px}
+.adm-filters #actQ{grid-column:1/-1}
+.adm-filters .input{min-height:44px}
+.adm-steps{padding-left:20px;margin:0 0 10px;font-family:var(--sans);line-height:1.5}
+.adm-top{display:flex;align-items:center;gap:12px;margin-bottom:4px}
 .adm-who{display:flex;flex-direction:column;min-width:0;font-family:var(--sans);font-size:12px;color:var(--ink-3)}
-.adm-who b{font-family:var(--serif);font-size:17px;color:var(--ink)}
 .adm-who span{overflow-wrap:anywhere}
-.adm-person .meta{font-family:var(--sans);font-size:13px;color:var(--ink-2);margin:2px 0}
-.adm-sub{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--ink-3);margin:10px 0 4px}
-.adm-use{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px}
+.adm-use{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0 4px}
 .adm-use div{border:1px solid var(--line);border-radius:6px;padding:6px 2px;text-align:center;font-family:var(--sans);font-size:10px;color:var(--ink-3)}
 .adm-use b{display:block;font-size:16px;color:var(--ink)}
 .adm-use small{font-size:11px;font-weight:500;color:var(--ink-3)}
 .adm-use .full b{color:var(--flame)}
-.adm-btns{margin-top:8px}
+.adm-btns{margin-top:10px}
 .adm-btns .btn{min-height:44px;padding:0 16px;font-size:13px}
 .adm-row{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-family:var(--sans);font-size:14px}
+.adm-row span:last-child{text-align:right;overflow-wrap:anywhere}
 .adm-note{margin:8px 0}
 .adm-lims{display:grid;grid-template-columns:1fr 1fr;gap:0 12px;margin-top:10px}
 .check{display:flex;align-items:center;gap:10px;min-height:44px;font-family:var(--sans);font-size:14px}
 .check input{width:22px;height:22px;accent-color:var(--flame)}
-.adm-filter{margin:10px 0 4px}
 .adm-act{display:grid;grid-template-columns:92px 1fr;gap:8px;padding:9px 0;border-bottom:1px solid var(--line);font-family:var(--sans);font-size:13px;line-height:1.35}
 .adm-act .t{color:var(--ink-3);font-size:12px}
 .adm-act i{font-style:normal;font-family:var(--serif);font-weight:600;overflow-wrap:anywhere}
@@ -548,7 +601,11 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 <script>
 /* ---------- constants ---------- */
 const AISLES = ["produce","meat & seafood","dairy & eggs","bakery","pantry","spices","frozen","drinks","other"];
-const UNITS = ["","g","kg","ml","l","tsp","tbsp","cup","whole","clove","slice","can","packet","bunch","pinch","to taste"];
+const UNITS = ["","g","kg","ml","l","tsp","tbsp","cup","whole","clove","slice","can","packet","bunch","pinch","drizzle","to taste"];
+/* How a unit reads on screen. Litres are stored as "l" (renaming a stored value
+   would orphan old recipes) but shown as "L", which can't be mistaken for a 1.
+   "whole" is the count unit and reads as nothing: "2 eggs", not "2 whole eggs". */
+const unitLabel=u=>{ u=String(u||""); return u==="l"?"L":u==="whole"?"":u; };
 const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -577,8 +634,9 @@ async function api(path, opts={}){
    and when the server says signed_out, the bar at the top says so and a tap
    reloads the page so Cloudflare can ask. It is never "Offline", and nothing
    waiting is dropped: flush() and the photo queue keep it (keepForLater). */
-const NEEDS_SIGNIN=["signed_out","not_trusted","unknown_host"];
-const keepForLater=e=>Boolean(e&&["signed_out","not_trusted","unknown_host","signin_unavailable","cf_not_set_up"].includes(e.code));
+const NEEDS_SIGNIN=["signed_out","not_trusted","unknown_host","account_disabled"];
+const keepForLater=e=>Boolean(e&&["signed_out","not_trusted","unknown_host","account_disabled","signin_unavailable","cf_not_set_up"].includes(e.code));
+const PAUSED_MSG="Your Bourdain account is paused, so nothing can be opened or saved. Ask Zein if that's a mistake. Changes you made are kept on this phone.";
 // The server says which address it saw, so the owner can check it against TRUSTED_NETS.
 const unknownHostMsg=seen=>`Bourdain doesn't open from ${seen?`“${seen}”`:"this address"} at home. Use the NAS's IP address, or add the name to HOME_HOSTS.`;
 const untrustedMsg=seen=>`Bourdain doesn't recognise this network${seen?` (it sees this device as ${seen})`:""}. Open it from its web address instead.`;
@@ -595,7 +653,7 @@ const signin={
     if(this.out===why&&this.seen===(seen||null)) return;
     this.out=why; this.seen=seen||null;
     const bar=document.getElementById("signinBar");
-    bar.textContent = why==="not_trusted" ? untrustedMsg(this.seen) : why==="unknown_host" ? unknownHostMsg(this.seen) : "Signed out. Tap to sign in again.";
+    bar.textContent = why==="not_trusted" ? untrustedMsg(this.seen) : why==="unknown_host" ? unknownHostMsg(this.seen) : why==="account_disabled" ? PAUSED_MSG : "Signed out. Tap to sign in again.";
     bar.hidden=false; bar.onclick=()=>location.reload();
     store.paint();
   },
@@ -656,6 +714,7 @@ const store = {
         : e&&e.code==="signed_out" ? "You're signed out. Tap the red bar at the top to sign in again. This phone's copy is shown until then."
         : e&&e.code==="not_trusted" ? untrustedMsg(e.seen)+" Showing this phone's copy until then."
         : e&&e.code==="unknown_host" ? unknownHostMsg(e.seen)+" Showing this phone's copy until then."
+        : e&&e.code==="account_disabled" ? PAUSED_MSG
         : e&&e.code==="signin_unavailable" ? "The server can't check your sign-in right now (it can't reach Cloudflare). Showing this phone's copy; try again in a minute."
         : e&&e.status ? `The server is up but couldn't load your recipes (${e.code}). Showing this phone's copy; check the server logs.`
         : "Can't reach the server. Changes are kept on this phone and sync when it's back.");
@@ -784,7 +843,7 @@ const store = {
   paint(){
     const el=document.getElementById("syncSub"); if(!el) return;
     const n=this.outbox.length+photoQueue.pending;
-    el.textContent = signin.out ? "Signed out · " : n ? `${n} change${n===1?"":"s"} not synced · ` : this.loading ? "Loading… · " : (!this.fromServer||!this.online) ? "Offline · " : "";
+    el.textContent = signin.out ? (signin.out==="account_disabled"?"Paused · ":"Signed out · ") : n ? `${n} change${n===1?"":"s"} not synced · ` : this.loading ? "Loading… · " : (!this.fromServer||!this.online) ? "Offline · " : "";
   },
   /* One of the app's AI jobs (import, scan, ideas, write), run by the server:
      the prompts live there and every call counts against this person's limits.
@@ -951,7 +1010,7 @@ function wireIngredients(el,r){
       if ((i.section||"")!==lastSec && i.section){ out+=`<li class="sec">${esc(i.section)}</li>`; }
       lastSec=i.section||"";
       const q=scaleQty(i.quantity,m);
-      out+=`<li><span class="q ${m!==1&&q!=null?"scaled":""}">${esc(fmtQty(q))} ${esc(i.unit&&i.unit!=="whole"?i.unit:"")}</span><span>${esc(i.item||i.raw_text)}${i.prep?`<span class="prep">, ${esc(i.prep)}</span>`:""}${i.optional?` <span class="faint">(optional)</span>`:""}</span></li>`;
+      out+=`<li><span class="q ${m!==1&&q!=null?"scaled":""}">${esc(fmtQty(q))} ${esc(unitLabel(i.unit))}</span><span>${esc(i.item||i.raw_text)}${i.prep?`<span class="prep">, ${esc(i.prep)}</span>`:""}${i.optional?` <span class="faint">(optional)</span>`:""}</span></li>`;
     });
     el.querySelector("#ingList").innerHTML=out;
     const serves=r.servings?Math.round(r.servings*m*100)/100:null;
@@ -1366,7 +1425,7 @@ function renderCook(){
   (r.ingredients||[]).forEach((i,ix)=>{
     if((i.section||"")!==lastSec && i.section) ing+=`<li class="sec">${esc(i.section)}</li>`;
     lastSec=i.section||"";
-    const q=scaleQty(i.quantity,m), amount=[fmtQty(q), i.unit&&i.unit!=="whole"?i.unit:""].filter(Boolean).join(" ");
+    const q=scaleQty(i.quantity,m), amount=[fmtQty(q), unitLabel(i.unit)].filter(Boolean).join(" ");
     ing+=`<li><button class="ck ${c.ing.includes(ix)?"done":""}" data-ing="${ix}"><span class="box"></span><span class="txt">${amount?`<span class="q">${esc(amount)}</span> `:""}${esc(i.item||i.raw_text)}${i.prep?`, ${esc(i.prep)}`:""}${i.optional?` <span class="faint">(optional)</span>`:""}</span></button></li>`;
   });
   el.innerHTML=`
@@ -1475,6 +1534,13 @@ function renderPlan(){
    is stored for it. Each entry carries `who` so a shared feed can add other
    people's cooks later without changing how the page is built. */
 const MONTHS_LONG=["January","February","March","April","May","June","July","August","September","October","November","December"];
+// What a cook made, for the Archives: "8 servings" (the recipe's servings × the batch). A
+// recipe without servings falls back to the batch size, and to nothing at 1×.
+function cookServes(servings,mult){
+  const s=Number(servings), m=Number(mult)>0?Number(mult):1;
+  if(s>0){ const n=Math.round(s*m*100)/100; return `${fmtQty(n)} serving${n===1?"":"s"}`; }
+  return m!==1?`${fmtQty(m)}× batch`:"";
+}
 function timelineEntries(){
   const out=[];
   for(const [id,r] of Object.entries(state.recipes)) for(const c of (r.cooks||[])) if(c&&c.date) out.push({recipeId:id, date:c.date, at:c.at||c.date, mult:c.mult||1, who:"me"});
@@ -1523,9 +1589,9 @@ function renderTimeline(){
   const card=(id,right,sub)=>{ const r=state.recipes[id]; return `<button class="slot" data-open="${esc(id)}">${miniThumb(r)}<span class="t">${title(r)}${sub?`<span class="tl-sub">${sub}</span>`:""}</span>${right||""}</button>`; };
   const entry=e=>{
     if(e.mine){ const r=state.recipes[e.recipeId];
-      const sub=[everyone?`${avatar(meP,"xs")}You`:"", r.rating?stars(r.rating):"", e.mult!==1?`${esc(e.mult)}× batch`:""].filter(Boolean).join(" · ");
+      const sub=[everyone?`${avatar(meP,"xs")}You`:"", r.rating?stars(r.rating):"", esc(cookServes(r.servings,e.mult))].filter(Boolean).join(" · ");
       return card(e.recipeId,"",sub); }
-    const sub=[`${avatar(e.who,"xs")}${esc(e.who.name||"Someone")}`, e.rating?stars(e.rating):"", e.mult!==1?`${esc(e.mult)}× batch`:""].filter(Boolean).join(" · ");
+    const sub=[`${avatar(e.who,"xs")}${esc(e.who.name||"Someone")}`, e.rating?stars(e.rating):"", esc(cookServes(e.servings,e.mult))].filter(Boolean).join(" · ");
     return `<button class="slot" data-owner="${esc(e.owner)}" data-rid="${esc(e.recipeId)}">${miniThumb({title:e.title,cover:e.cover,photos:e.firstPhoto?[e.firstPhoto]:[]})}<span class="t">${esc(e.title||"Untitled")}<span class="tl-sub">${sub}</span></span></button>`;
   };
   // group by month, then by day
@@ -1635,8 +1701,8 @@ async function saveShop(){ const k=iso(state.week); await store.put("shop",k,sta
 
 function renderShop(){
   const sw=shopWeek(); const auto=buildList();
-  const rows=[...auto.map(it=>{ const [q,u]=fromBase(it.qty,it.fam); return {key:it.key,label:`${it.unknown&&!it.qty?"":fmtQty(q)+(u?" "+u:"")}`.trim(),item:it.item,aisle:it.aisle,from:[...it.from].join(", "),optional:it.optional,manual:false}; }),
-    ...sw.manual.map(m=>({key:"m:"+m.id,label:m.qty?`${fmtQty(m.qty)}${m.unit?" "+m.unit:""}`:"",item:m.item,aisle:m.aisle||"other",from:"",manual:true,id:m.id}))];
+  const rows=[...auto.map(it=>{ const [q,u]=fromBase(it.qty,it.fam); return {key:it.key,label:`${it.unknown&&!it.qty?"":fmtQty(q)+(unitLabel(u)?" "+unitLabel(u):"")}`.trim(),item:it.item,aisle:it.aisle,from:[...it.from].join(", "),optional:it.optional,manual:false}; }),
+    ...sw.manual.map(m=>({key:"m:"+m.id,label:m.qty?`${fmtQty(m.qty)}${unitLabel(m.unit)?" "+unitLabel(m.unit):""}`:"",item:m.item,aisle:m.aisle||"other",from:"",manual:true,id:m.id}))];
   const el=document.getElementById("shopList");
   if(!rows.length){ el.innerHTML=`<div class="empty"><h3>Nothing to buy yet</h3>Plan some meals for this week and the list builds itself. You can also add things by hand below.</div>`; return; }
   const groups={}; rows.forEach(r=>{ (groups[r.aisle]=groups[r.aisle]||[]).push(r); });
@@ -1689,7 +1755,7 @@ function renderPantry(){
   const groups={}; items.forEach(i=>{ (groups[i.aisle]=groups[i.aisle]||[]).push(i); });
   const order=[...AISLES,...Object.keys(groups).filter(a=>!AISLES.includes(a))];
   el.innerHTML=order.filter(a=>groups[a]).map(a=>`<div class="aisle"><h3>${esc(a)}</h3>${groups[a].sort((x,y)=>x.item.localeCompare(y.item)).map(i=>`
-    <label class="item"><span class="lbl">${i.qty?`<span class="q">${esc(fmtQty(i.qty))}${i.unit?" "+esc(i.unit):""}</span> `:""}${esc(i.item)}</span>
+    <label class="item"><span class="lbl">${i.qty?`<span class="q">${esc(fmtQty(i.qty))}${unitLabel(i.unit)?" "+esc(unitLabel(i.unit)):""}</span> `:""}${esc(i.item)}</span>
     <button class="x" data-rmp="${i.id}" aria-label="Remove">×</button></label>`).join("")}</div>`).join("");
   el.onclick=async e=>{ const b=e.target.closest("[data-rmp]"); if(!b) return; e.preventDefault(); const id=b.dataset.rmp; delete state.pantry[id]; await store.del("pantry",id); renderPantry(); };
   renderIdeas();
@@ -1749,7 +1815,7 @@ async function scanPantry(){
   sh.innerHTML=`<h3>Found ${fresh.length} item${fresh.length===1?"":"s"}</h3>
     <p class="muted small" style="margin:0 0 6px">Untick anything that's wrong. Items marked "not sure" start unticked.</p>
     <div class="scanlist">${fresh.map((i,ix)=>`<label class="item"><input type="checkbox" data-act="tick" data-ix="${ix}" ${i.sure?"checked":""}>
-      <span class="lbl">${i.qty?`<span class="q">${esc(fmtQty(i.qty))}${i.unit?" "+esc(i.unit):""}</span> `:""}${esc(i.item)}${i.sure?"":` <span class="tag">not sure</span>`}<small>${esc(i.aisle)}</small></span></label>`).join("")}
+      <span class="lbl">${i.qty?`<span class="q">${esc(fmtQty(i.qty))}${unitLabel(i.unit)?" "+esc(unitLabel(i.unit)):""}</span> `:""}${esc(i.item)}${i.sure?"":` <span class="tag">not sure</span>`}<small>${esc(i.aisle)}</small></span></label>`).join("")}
     ${already.length?`<p class="have">Already on your list: ${esc(already.map(i=>i.item).join(", "))}</p>`:""}</div>
     <div class="row" style="margin-top:14px"><button class="btn primary" data-act="add"></button><button class="btn ghost" data-act="cancel">Cancel</button></div>`;
   label();
@@ -1763,7 +1829,7 @@ async function scanPantry(){
 }
 document.getElementById("pantryScan").onclick=scanPantry;
 
-function pantryText(){ return Object.values(state.pantry).map(i=>`${i.qty?fmtQty(i.qty)+(i.unit?" "+i.unit:"")+" ":""}${i.item}`).join(", "); }
+function pantryText(){ return Object.values(state.pantry).map(i=>`${i.qty?fmtQty(i.qty)+(unitLabel(i.unit)?" "+unitLabel(i.unit):"")+" ":""}${i.item}`).join(", "); }
 document.getElementById("pantryAddBtn").onclick=pantryAdd;
 document.getElementById("pantryAdd").addEventListener("keydown",e=>{ if(e.key==="Enter") pantryAdd(); });
 document.getElementById("pantryClear").onclick=()=>{
@@ -1830,6 +1896,7 @@ function aiError(e, what="reading that"){
     signed_out:"You're signed out. Tap the red bar at the top to sign in again.",
     not_trusted:untrustedMsg(e&&e.seen),
     unknown_host:unknownHostMsg(e&&e.seen),
+    account_disabled:PAUSED_MSG,
     cross_site:"That change came from another website, so it wasn't made. Make it in Bourdain itself.",
     signin_unavailable:"The server can't check your sign-in right now (it can't reach Cloudflare). Try again in a minute.",
     cf_not_set_up:"Bourdain can't be opened from this address yet. Use your home address for now.",
@@ -2001,7 +2068,7 @@ function normalise(d,url){
   const n=x=>(x===null||x===undefined||x==="")?null:(isFinite(Number(x))?Number(x):null);
   return { title:String(d.title||"").trim(), description:String(d.description||""), source_url:url||"", source_type:sourceType(url),
     servings:n(d.servings), prep_min:n(d.prep_min), cook_min:n(d.cook_min), notes:String(d.notes||""),
-    ingredients:(Array.isArray(d.ingredients)?d.ingredients:[]).map(i=>({ raw_text:String(i.raw_text||""), quantity:n(i.quantity), unit:UNITS.includes(i.unit)?i.unit:"", item:String(i.item||i.raw_text||"").toLowerCase().trim(), prep:String(i.prep||""), section:String(i.section||""), aisle:AISLES.includes(i.aisle)?i.aisle:"other", optional:!!i.optional })),
+    ingredients:(Array.isArray(d.ingredients)?d.ingredients:[]).map(i=>({ raw_text:String(i.raw_text||""), quantity:n(i.quantity), unit:UNITS.includes(String(i.unit||"").toLowerCase())?String(i.unit).toLowerCase():"", item:String(i.item||i.raw_text||"").toLowerCase().trim(), prep:String(i.prep||""), section:String(i.section||""), aisle:AISLES.includes(i.aisle)?i.aisle:"other", optional:!!i.optional })),
     steps:(Array.isArray(d.steps)?d.steps:[]).map(s=>String(s).trim()).filter(Boolean),
     tags:(Array.isArray(d.tags)?d.tags:[]).map(t=>String(t).toLowerCase().trim()).filter(Boolean).slice(0,6) };
 }
@@ -2128,7 +2195,7 @@ function photosHtml(ids,editable){
 /* review / edit form */
 function renderReview(){
   const d=state.draft; const el=document.getElementById("review");
-  const unitOpts=u=>UNITS.map(x=>`<option value="${x}" ${x===u?"selected":""}>${x||"—"}</option>`).join("");
+  const unitOpts=u=>UNITS.map(x=>`<option value="${x}" ${x===u?"selected":""}>${x==="l"?"L":x||"—"}</option>`).join("");
   const aisleOpts=a=>AISLES.map(x=>`<option ${x===a?"selected":""}>${x}</option>`).join("");
   el.innerHTML=`
     <div class="detail-head"><button class="btn small ghost" id="revBack">‹ ${state.editingId?"Cancel":"Back"}</button>
@@ -2213,19 +2280,28 @@ function renderReview(){
   el.querySelector("#revSave").onclick=save; el.querySelector("#revSave2").onclick=save;
 }
 
-/* ---------- the owner's screen (2.2) ----------
+/* ---------- the owner's control room (2.4) ----------
    Hidden on purpose: a long press on the heading of the version sheet opens it,
-   and only for the admin; the server refuses its data to anyone else. Who's
-   using the app, what they've done, the AI each person used today and this
-   month, and the limits. Costs are estimates; the real bills are in the
-   Anthropic and OpenAI consoles. */
+   and only for the admin; the server refuses its data to anyone else. The first
+   screen answers, in a few seconds: is anything wrong, is Bourdain healthy and
+   used, what is AI costing, who's using it, what happened lately. Detail is one
+   tap down: a person, AI usage and limits, all activity, the audit log, errors.
+   Health shows only what the server can check; the rest says "Not monitored". */
 const ACT_WORDS={ recipe_added:"added", recipe_edited:"edited", recipe_deleted:"deleted", cook_logged:"cooked", recipe_copied:"copied",
   plan_changed:"changed the plan for", pantry_changed:"pantry:", pantry_removed:"took off the pantry:", profile_changed:"set their name to",
-  ai_import:"imported a recipe with AI", ai_scan:"scanned the fridge", ai_ideas:"asked for recipe ideas", ai_write:"had a recipe written", ai_cover:"painted a cover" };
+  ai_import:"imported a recipe with AI", ai_scan:"scanned the fridge", ai_ideas:"asked for recipe ideas", ai_write:"had a recipe written", ai_cover:"painted a cover",
+  signed_in:"signed in via" };
+const AUDIT_WORDS={ limits_changed:"changed everyone's limits:", person_limits_changed:"changed limits for", cover_price_changed:"changed the cover price:",
+  account_paused:"paused", account_resumed:"resumed", person_joined:"signed in for the first time:", deployed:"deployed", restarted:"restarted" };
+const ACT_CATS=[["nosignin","All but sign-ins"],["content","Content"],["ai","AI"],["security","Sign-ins"],["all","Everything"]];
+const KIND_NAMES={ import:"import", scan:"fridge scan", ideas:"recipe ideas", write:"recipe writing", cover:"cover" };
+const ACT_PERIODS=[["today","Today"],["7d","Last 7 days"],["30d","Last 30 days"],["all","All time"]];
 const LIMIT_GROUPS=["import","scan","ideas","cover"];
 const LIMIT_NAMES={ import:"Imports", scan:"Fridge scans", ideas:"Ideas + write", cover:"Covers" };
-const fmtMB=b=>!b?"none":b<1024*1024?"under 1 MB":`${Math.round(b/1024/1024)} MB`;
+const fmtMB=b=>!b?"0 MB":b<10*1024*1024?`${Math.max(0.1,b/1024/1024).toFixed(1)} MB`:b<1024**3?`${Math.round(b/1024/1024)} MB`:`${(b/1024**3).toFixed(1)} GB`;
 const usd=n=>!n?"US$0":n<0.01?"under US$0.01":"US$"+n.toFixed(2);
+const plural=(n,one,many)=>`${n} ${n===1?one:(many||one+"s")}`;
+const pct=(a,b)=>b>0?Math.round(100*a/b):0;
 function whenShort(isoTs){
   if(!isoTs) return "never";
   const d=new Date(isoTs), t=`${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
@@ -2238,14 +2314,47 @@ function longPress(el,ms,fn){
   ["pointerup","pointerleave","pointercancel"].forEach(t=>el.addEventListener(t,stop));
   el.addEventListener("contextmenu",e=>e.preventDefault());
 }
-function openAdmin(){ if(!store.me?.is_admin) return; closeSheet(); state.admin=null; state.adminWho=""; show("admin"); }
+function openAdmin(){
+  if(!store.me?.is_admin) return;
+  closeSheet(); Object.assign(state,{ admin:null, adminScreen:"home", adminPersonId:null, adminActRows:null, adminAct:{who:"",cat:"nosignin",period:"7d",q:""} });
+  show("admin");
+}
 async function loadAdmin(){
   try{
-    const [sum,act]=await Promise.all([ api("/api/admin/summary",{signal:timeout(10000)}),
-      api("/api/admin/activity?limit=100"+(state.adminWho?"&user="+encodeURIComponent(state.adminWho):""),{signal:timeout(10000)}) ]);
-    state.admin={sum,act};
+    const [sum,act]=await Promise.all([ api("/api/admin/summary",{signal:timeout(15000)}), api("/api/admin/activity?limit=5&cat=nosignin",{signal:timeout(10000)}) ]);
+    state.admin={sum,act,at:new Date().toISOString()};
   }catch(e){ state.admin={error:e}; }
   if(state.view==="admin") renderAdmin();
+}
+// Lists a sub-screen needs: "audit", "errors", or "personAct" (one person's latest activity).
+async function loadAdminList(kind){
+  const url = kind==="audit" ? "/api/admin/audit?limit=100" : kind==="errors" ? "/api/admin/errors"
+    : `/api/admin/activity?limit=10&cat=all&user=${encodeURIComponent(state.adminPersonId)}`;
+  state["admin_"+kind]=null;
+  try{ state["admin_"+kind]=await api(url,{signal:timeout(10000)}); }catch(e){ state["admin_"+kind]={error:e}; }
+  if(state.view==="admin") renderAdmin();
+}
+function adminGo(screen, extra={}){
+  Object.assign(state, extra); state.adminScreen=screen;
+  renderAdmin(); document.getElementById("main").scrollTop=0;
+  if(screen==="activity") loadAdminActivity(true);
+  if(screen==="audit") loadAdminList("audit");
+  if(screen==="errors") loadAdminList("errors");
+  if(screen==="person") loadAdminList("personAct");
+}
+const adminFail=e=>e.code==="not_admin"?"Only the owner can see this.":keepForLater(e)?aiError(e):e.status?`The server couldn't load this (${e.code}). Check the server logs.`:"Can't reach the server. Try again when you're back on home Wi-Fi.";
+function actLine(r){
+  let t=r.target||"";
+  if(r.action==="plan_changed"&&/^\d{4}-\d{2}-\d{2}$/.test(t)) t=fmtDate(t);
+  if(r.action.startsWith("ai_")&&t) t=`(didn't work: ${t})`;
+  return `<div class="adm-act"><span class="t">${esc(whenShort(r.at))}</span><span><b>${esc(r.name)}</b> ${esc(ACT_WORDS[r.action]||r.action)}${t?` <i>${esc(t)}</i>`:""}</span></div>`;
+}
+const secHead=(title,go,count)=>`<div class="adm-head"><h3>${esc(title)}${count!=null?` <span class="n">${count}</span>`:""}</h3>${go?`<button class="adm-link" data-go="${go}">View →</button>`:""}</div>`;
+const healthRow=x=>`<div class="adm-h ${esc(x.status)}"><span class="dot" aria-hidden="true"></span><span class="lbl">${esc(x.label)}<small>${esc(x.detail||"")}</small></span><span class="st">${esc(x.text)}</span></div>`;
+function personLine(p){
+  const bits=[plural(p.recipes,"recipe"), plural(p.cooks,"cook"), plural(p.ai.month_calls,"AI call"), usd(p.ai.month_usd)];
+  return `<button class="adm-p" data-person="${esc(p.id)}"><span class="nm">${esc(p.name||"No name yet")}${p.is_admin?" · You":""}${p.paused?` <span class="paused">Paused</span>`:""}</span>
+    <span class="ln">${esc(bits.join(" · "))}</span><span class="seen">Last seen ${esc(whenShort(p.last_seen))}</span></button>`;
 }
 // What the server saw for this request, so the owner can check TRUSTED_NETS on the NAS (docs/multi-user.md).
 function signinHtml(si){
@@ -2259,59 +2368,205 @@ function signinHtml(si){
     <div class="adm-row"><span>Came through Cloudflare</span><span>${you.cloudflare?"Yes":"No"}</span></div>
     <div class="adm-row"><span>Recognised by</span><span>${esc(you.how||"?")}</span></div>`;
 }
-function renderAdmin(){
-  const el=document.getElementById("view-admin"), a=state.admin;
-  const head=`<div class="detail-head"><button class="btn small ghost" id="aBack">‹ Recipes</button>${a&&!a.error?`<button class="btn small" id="aRefresh">Refresh</button>`:""}</div>`;
-  const wire=()=>{ el.querySelector("#aBack").onclick=()=>show("recipes"); const r=el.querySelector("#aRefresh"); if(r) r.onclick=()=>{ state.admin=null; renderAdmin(); }; };
-  if(!a){ el.innerHTML=head+`<div class="empty"><span class="spin"></span>Loading…</div>`; wire(); loadAdmin(); return; }
-  if(a.error){ el.innerHTML=head+`<div class="empty">${a.error.code==="not_admin"?"Only the owner can see this.":keepForLater(a.error)?esc(aiError(a.error)):a.error.status?`The server couldn't load this (${esc(a.error.code)}). Check the server logs.`:"Can't reach the server. Try again when you're back on home Wi-Fi."}</div>`; wire(); return; }
-  const {sum,act}=a, d=sum.defaults, month=MONTHS[+sum.day.slice(5,7)-1];
-  const person=p=>{
-    const exempt=p.is_admin&&p.limits.admin_exempt;
-    const use=LIMIT_GROUPS.map(g=>{ const n=p.ai.today[g]||0, lim=p.limits[g];
-      return `<div class="${!exempt&&n>=lim?"full":""}"><b>${n}${exempt?"":`<small> / ${lim}</small>`}</b>${LIMIT_NAMES[g]}</div>`; }).join("");
-    return `<div class="adm-person" data-pid="${esc(p.id)}">
-      <div class="adm-top">${avatar(p,"md")}<div class="adm-who"><b>${esc(p.name||"No name yet")}${p.is_admin?" · you":""}</b><span>${esc(p.email)}</span><span>Last seen ${esc(whenShort(p.last_seen))}</span></div></div>
-      <div class="meta">${p.recipes} recipe${p.recipes===1?"":"s"} · ${p.cooks} cook${p.cooks===1?"":"s"} · ${p.copies} cop${p.copies===1?"y":"ies"}</div>
-      <div class="adm-sub">AI today${exempt?" · no limits":""}</div><div class="adm-use">${use}</div>
-      <div class="meta">Photos: ${fmtMB(p.storage_bytes)}${exempt?"":` of ${p.limits.storage_mb} MB`}</div>
-      <div class="meta">This month: ${p.ai.month_calls} AI call${p.ai.month_calls===1?"":"s"} · ${usd(p.ai.month_usd)}${exempt?"":` of ${usd(p.limits.monthly_usd)}`}${p.overrides?" · <span class=\"inyours\">own limits</span>":""}</div>
-      <div class="row adm-btns"><button class="btn small" data-lim="${esc(p.id)}">Limits</button><button class="btn small ghost" data-acts="${esc(p.id)}">Activity</button></div>
-    </div>`;
-  };
-  const kinds=sum.month.byKind.length ? sum.month.byKind.map(k=>`<div class="adm-row"><span>${esc(LIMIT_NAMES[k.grp]||k.grp)}</span><span>${k.calls} · ${usd(k.usd)}</span></div>`).join("")
-    : `<p class="muted small">No AI used yet this month.</p>`;
-  const who=sum.people.find(p=>p.id===state.adminWho);
-  const acts=act.length ? act.map(r=>{
-    let t=r.target||""; if(r.action==="plan_changed"&&/^\d{4}-\d{2}-\d{2}$/.test(t)) t=fmtDate(t);
-    if(r.action.startsWith("ai_")&&t) t=`(didn't work: ${t})`;
-    return `<div class="adm-act"><span class="t">${esc(whenShort(r.at))}</span><span><b>${esc(r.name)}</b> ${esc(ACT_WORDS[r.action]||r.action)}${t?` <i>${esc(t)}</i>`:""}</span></div>`; }).join("")
-    : `<p class="muted small">Nothing yet.</p>`;
+function adminHomeHtml({sum,act,at}){
+  const t=sum.totals, m=sum.month, h=sum.health, now=new Date(at), mon=MONTHS[+sum.day.slice(5,7)-1];
+  const metric=(v,l)=>`<div class="adm-m"><b>${esc(v)}</b><span>${esc(l)}</span></div>`;
+  const feats=LIMIT_GROUPS.map(g=>{ const k=m.byKind.find(x=>x.grp===g)||{calls:0,usd:0}; return `<div class="adm-row"><span>${LIMIT_NAMES[g]}</span><span>${plural(k.calls,"call")} · ${usd(k.usd)}</span></div>`; }).join("");
+  const b=sum.ai.budget, shown=sum.people.slice(0,5);
+  return `<div class="adm-kicker">Admin</div><h2 class="adm-title">System overview</h2>
+    <p class="adm-meta">${DAYS[(now.getDay()+6)%7]} ${now.getDate()} ${MONTHS[now.getMonth()]} ${now.getFullYear()} · Refreshed ${whenShort(at).replace("today ","")} · Only you can see this</p>
+    ${sum.attention.length?`<div class="adm-attn" role="status"><h3>Needs attention</h3><ul>${sum.attention.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`:`<p class="adm-ok">Nothing needs attention.</p>`}
+    <div class="adm-metrics">${metric(t.users,"Users")}${metric(t.recipes,"Recipes")}${metric(m.calls,`AI calls · ${mon}`)}${metric(m.usd<0.01?"US$0":"US$"+m.usd.toFixed(2),`AI spend · ${mon}`)}${metric(fmtMB(t.storage_bytes),"Storage")}</div>
+    <p class="adm-today">Today: ${plural(t.recipes_today,"new recipe")} · ${plural(t.active_today,"person","people")} active · ${plural(t.ai_calls_today,"AI call")}</p>
+    ${secHead("System health")}
+    ${["auth","db","ai","images","storage","backups"].filter(k=>h[k]).map(k=>healthRow(h[k])).join("")}
+    ${secHead("AI usage","ai")}
+    <p class="adm-sum">${plural(m.calls,"call")} · ${usd(m.usd)} estimated${b.combined>0?` · ${pct(m.usd,b.combined)}% of ${usd(b.combined)} allowance`:""}</p>
+    ${feats}
+    <p class="muted small adm-note">Estimates from recorded usage; provider invoices may differ.</p>
+    ${secHead("People",null,sum.people.length)}
+    ${shown.map(personLine).join("")}
+    ${sum.people.length>shown.length?`<button class="adm-link wide" data-go="people">All ${sum.people.length} people →</button>`:""}
+    ${secHead("Recent activity","activity")}
+    ${act.length?act.slice(0,5).map(actLine).join(""):`<p class="muted small">Nothing yet.</p>`}
+    ${secHead("Admin")}
+    <div class="adm-actions">
+      <button class="adm-a" data-go="activity">All activity and sign-ins<small>Filter by person, kind of event and date</small></button>
+      <button class="adm-a" data-go="ai">AI usage, limits and prices<small>By feature, provider and person; change the limits</small></button>
+      <button class="adm-a" data-go="audit">Audit log<small>Every change made here, and deploys</small></button>
+      <button class="adm-a" data-go="errors">Errors<small>${sum.system.errors_today?plural(sum.system.errors_today,"error")+" today":"None today"}</small></button>
+      <button class="adm-a" data-admin="invite">Invite someone<small>Done in Cloudflare; see how</small></button>
+      <button class="adm-a" data-admin="export">Export my data<small>A zip of your recipes, plan, pantry and photos</small></button>
+    </div>
+    ${secHead("System")}
+    <div class="adm-row"><span>Version</span><span>v${esc(sum.system.version)} (${esc(sum.system.commit)})</span></div>
+    <div class="adm-row"><span>Running since</span><span>${esc(whenShort(sum.system.started_at))}</span></div>
+    <div class="adm-row"><span>Last error</span><span>${sum.system.last_error?`${esc(whenShort(sum.system.last_error.at))} · ${esc(sum.system.last_error.code)}`:"None recorded"}</span></div>
+    <h4 class="adm-h4">Signing in</h4>${signinHtml(sum.signin)}`;
+}
+function adminPeopleHtml({sum}){
+  return `<div class="adm-kicker">Admin</div><h2 class="adm-title">People</h2>
+    <p class="adm-meta">${plural(sum.people.length,"person","people")} · tap someone for their usage, limits and account</p>${sum.people.map(personLine).join("")}`;
+}
+function adminPersonHtml({sum}){
+  const p=sum.people.find(x=>x.id===state.adminPersonId);
+  if(!p) return `<div class="empty">That person isn't here any more.</div>`;
+  const exempt=p.is_admin&&p.limits.admin_exempt, d=sum.defaults, o=p.overrides||{};
+  const use=LIMIT_GROUPS.map(g=>{ const n=p.ai.today[g]||0, lim=p.limits[g];
+    return `<div class="${!exempt&&n>=lim?"full":""}"><b>${n}${exempt?"":`<small> / ${lim}</small>`}</b>${LIMIT_NAMES[g]}</div>`; }).join("");
+  const feats=LIMIT_GROUPS.map(g=>{ const k=p.ai.month_by_kind.find(x=>x.grp===g)||{calls:0,usd:0}; return `<div class="adm-row"><span>${LIMIT_NAMES[g]}</span><span>${plural(k.calls,"call")} · ${usd(k.usd)}</span></div>`; }).join("");
+  const limRow=(k,label,fmt=x=>x)=>`<div class="adm-row"><span>${label}${o[k]!=null?` <span class="inyours">own</span>`:""}</span><span>${exempt?"no limit":esc(fmt(p.limits[k]))}</span></div>`;
+  const pa=state.admin_personAct;
+  const acts=!pa?`<p class="status"><span class="spin"></span>Loading…</p>`:pa.error?`<p class="muted small">${esc(adminFail(pa.error))}</p>`:pa.length?pa.map(actLine).join(""):`<p class="muted small">Nothing yet.</p>`;
+  return `<div class="adm-kicker">Person</div>
+    <div class="adm-top">${avatar(p,"md")}<div class="adm-who"><h2 class="adm-title">${esc(p.name||"No name yet")}${p.is_admin?" · You":""}</h2><span>${esc(p.email)}</span></div></div>
+    <p class="adm-meta">Joined ${esc(whenShort(p.created_at))} · last seen ${esc(whenShort(p.last_seen))}${p.paused?` · <span class="paused">Paused ${esc(whenShort(p.paused_at))}</span>`:""}</p>
+    <div class="adm-metrics four"><div class="adm-m"><b>${p.recipes}</b><span>Recipes</span></div><div class="adm-m"><b>${p.cooks}</b><span>Cooks</span></div><div class="adm-m"><b>${p.copies}</b><span>Copies</span></div><div class="adm-m"><b>${esc(fmtMB(p.storage_bytes))}</b><span>Photos${exempt?"":` of ${p.limits.storage_mb} MB`}</span></div></div>
+    ${secHead("AI today"+(exempt?" · no limits":""))}<div class="adm-use">${use}</div>
+    ${secHead("AI this month")}
+    <p class="adm-sum">${plural(p.ai.month_calls,"call")} · ${usd(p.ai.month_usd)}${exempt?"":` of ${usd(p.limits.monthly_usd)} allowance (${pct(p.ai.month_usd,p.limits.monthly_usd)}%)`}</p>${feats}
+    ${secHead("Limits")}
+    ${LIMIT_GROUPS.map(g=>limRow(g,LIMIT_NAMES[g]+" a day")).join("")}${limRow("monthly_usd","Monthly allowance",v=>usd(v))}${limRow("storage_mb","Photo storage",v=>v+" MB")}
+    <div class="row adm-btns"><button class="btn small" data-lim="${esc(p.id)}">Change limits</button>${p.overrides?`<button class="btn small ghost" data-admin="reset">Use everyone's</button>`:""}</div>
+    ${secHead("Recent activity")}${acts}
+    <button class="adm-link wide" data-admin="theiract">All their activity →</button>
+    ${p.is_admin?"":`${secHead("Account")}
+      <p class="muted small adm-note">${p.paused?"Paused: they can't open Bourdain (they can still export their data), and their recipes are hidden from everyone else. Nothing has been deleted.":"Pausing stops them opening Bourdain and hides their recipes from everyone else until you resume it. Nothing is deleted. To remove someone for good, take their email off the Cloudflare Access list too."}</p>
+      <button class="btn ${p.paused?"":"danger"} wide" data-admin="${p.paused?"resume":"pause"}">${p.paused?"Resume account":"Pause account"}</button>`}`;
+}
+function adminAiHtml({sum}){
+  const m=sum.month, pr=sum.ai.providers, b=sum.ai.budget, d=sum.defaults, mon=MONTHS_LONG[+sum.day.slice(5,7)-1];
   const num=(k,label,step=1)=>`<div class="field"><label for="lim_${k}">${label}</label><input class="input" id="lim_${k}" type="number" inputmode="decimal" min="0" step="${step}" value="${esc(String(d[k]))}"></div>`;
-  el.innerHTML=`${head}
-    <h2>Owner's view</h2>
-    <p class="muted small">Only you can see this. AI costs are estimates; the real bills are in the Anthropic and OpenAI consoles.</p>
-    <div class="stats"><div class="stat"><b>${sum.month.calls}</b><span>AI calls in ${month}</span></div><div class="stat"><b>${sum.month.usd<0.01?"$0":"$"+sum.month.usd.toFixed(2)}</b><span>Est. ${month}</span></div><div class="stat"><b>${sum.people.length}</b><span>People</span></div></div>
-    <h3 class="tl-head">People</h3>${sum.people.map(person).join("")}
-    <h3 class="tl-head">Signing in</h3>${signinHtml(sum.signin)}
-    <h3 class="tl-head">AI in ${month}</h3>${kinds}
-    <p class="muted small adm-note">Priced at US$${sum.prices.claude[0]} in / US$${sum.prices.claude[1]} out per million tokens (${esc(sum.prices.model)}${sum.prices.known?"":", price not known, so guessed"}) and ${usd(sum.prices.image_usd)} a cover picture.</p>
-    <h3 class="tl-head">Limits for everyone</h3>
-    <p class="muted small adm-note">Per person per day, reset at midnight. The monthly allowance is the estimated spend. Photos is the most each person can upload in all.</p>
+  const feats=LIMIT_GROUPS.map(g=>{ const k=m.byKind.find(x=>x.grp===g)||{calls:0,usd:0}; return `<tr><td>${LIMIT_NAMES[g]}</td><td>${k.calls}</td><td>${usd(k.usd)}</td></tr>`; }).join("");
+  const ppl=sum.people.map(p=>{ const ex=p.is_admin&&p.limits.admin_exempt; return `<tr><td>${esc(p.name||p.email)}</td><td>${p.ai.month_calls}</td><td>${usd(p.ai.month_usd)}</td><td>${ex?"no limit":pct(p.ai.month_usd,p.limits.monthly_usd)+"%"}</td></tr>`; }).join("");
+  const fails=sum.ai.failures;
+  return `<div class="adm-kicker">AI usage</div><h2 class="adm-title">AI cost — ${mon}</h2>
+    <p class="adm-big"><b>${usd(m.usd)}</b> estimated · ${plural(m.calls,"call")}</p>
+    <p class="adm-meta">${b.combined>0?`${usd(b.combined)} combined monthly allowance (${plural(b.people,"person","people")} with limits) · ${pct(m.usd,b.combined)}% used`:"No one has a monthly allowance set"}</p>
+    ${secHead("By provider")}
+    <div class="adm-row"><span>Anthropic (Claude)</span><span>${usd(pr.anthropic)}</span></div>
+    <div class="adm-row"><span>OpenAI (${plural(pr.images,"cover picture")})</span><span>${usd(pr.openai)}</span></div>
+    <p class="muted small adm-note">Estimates from the tokens and pictures each call reported, at the prices below. Provider invoices may differ. The real bills: <a href="https://console.anthropic.com/" target="_blank" rel="noopener">Anthropic console ↗</a> · <a href="https://platform.openai.com/usage" target="_blank" rel="noopener">OpenAI usage ↗</a></p>
+    ${secHead("By feature")}
+    <table class="adm-tbl"><thead><tr><th>Feature</th><th>Calls</th><th>Cost</th></tr></thead><tbody>${feats}</tbody></table>
+    ${secHead("By person")}
+    <table class="adm-tbl"><thead><tr><th>Person</th><th>Calls</th><th>Cost</th><th>Of allowance</th></tr></thead><tbody>${ppl}</tbody></table>
+    ${secHead("Calls that didn't work","errors")}
+    ${fails.length?fails.map(f=>`<div class="adm-act"><span class="t">${esc(whenShort(f.at))}</span><span><b>${esc(f.name)}</b> ${esc(KIND_NAMES[f.kind]||f.kind)} · <i>${esc(f.code)}</i></span></div>`).join(""):`<p class="muted small">None.</p>`}
+    ${secHead("Limits for everyone")}
+    <p class="muted small adm-note">Per person per day, reset at midnight. The monthly allowance is the estimated spend. Photos is the most each person can upload in all. Priced at US$${sum.prices.claude[0]} in / US$${sum.prices.claude[1]} out per million tokens (${esc(sum.prices.model)}${sum.prices.known?"":", price not known, so guessed"}) and ${usd(sum.prices.image_usd)} a cover picture.</p>
     <div class="adm-lims">${LIMIT_GROUPS.map(g=>num(g,LIMIT_NAMES[g])).join("")}${num("monthly_usd","Monthly US$",0.5)}${num("storage_mb","Photos, MB each",50)}
       <div class="field"><label for="lim_image_usd">Cover picture, US$ each</label><input class="input" id="lim_image_usd" type="number" inputmode="decimal" min="0" step="0.01" value="${esc(String(sum.prices.image_usd))}"></div></div>
     <label class="check"><input type="checkbox" id="lim_admin_exempt" ${d.admin_exempt?"checked":""}> No limits for you</label>
     <p class="muted small adm-note">The cover price is a placeholder. Set it from your OpenAI bill.</p>
-    <button class="btn wide" id="limSave">Save limits</button>
-    <h3 class="tl-head">Recent activity</h3>
-    <select class="input adm-filter" id="actWho" aria-label="Whose activity"><option value="">Everyone</option>${sum.people.map(p=>`<option value="${esc(p.id)}" ${p.id===state.adminWho?"selected":""}>${esc(p.name||p.email)}</option>`).join("")}</select>
-    <div class="adm-acts">${acts}</div>
-    ${who||!state.adminWho?"":`<p class="muted small">That person is no longer here.</p>`}`;
-  wire();
-  el.querySelector("#actWho").onchange=e=>{ state.adminWho=e.target.value; loadAdmin(); };
-  el.querySelector("#limSave").onclick=saveDefaultLimits;
-  el.querySelectorAll("[data-lim]").forEach(b=>b.onclick=()=>personLimits(sum.people.find(p=>p.id===b.dataset.lim),d));
-  el.querySelectorAll("[data-acts]").forEach(b=>b.onclick=()=>{ state.adminWho=b.dataset.acts; loadAdmin().then(()=>document.getElementById("actWho")?.scrollIntoView({block:"start"})); });
+    <button class="btn wide" id="limSave">Save limits</button>`;
+}
+function adminActivityHtml({sum}){
+  const f=state.adminAct, opt=(list,v)=>list.map(([k,l])=>`<option value="${esc(k)}" ${k===v?"selected":""}>${esc(l)}</option>`).join("");
+  return `<div class="adm-kicker">Admin</div><h2 class="adm-title">Activity</h2>
+    <p class="adm-meta">What people did, newest first. Sign-ins are kept apart: choose “Sign-ins” to see them.</p>
+    <div class="adm-filters">
+      <select class="input" id="actWho" aria-label="Person"><option value="">Everyone</option>${sum.people.map(p=>`<option value="${esc(p.id)}" ${p.id===f.who?"selected":""}>${esc(p.name||p.email)}</option>`).join("")}</select>
+      <select class="input" id="actCat" aria-label="Kind of event">${opt(ACT_CATS,f.cat)}</select>
+      <select class="input" id="actPeriod" aria-label="Period">${opt(ACT_PERIODS,f.period)}</select>
+      <input class="input" id="actQ" type="search" placeholder="Search recipes or people" value="${esc(f.q)}" autocomplete="off">
+    </div>
+    <div id="actList"></div>`;
+}
+function adminAuditHtml(){
+  const a=state.admin_audit;
+  const rows=!a?`<p class="status"><span class="spin"></span>Loading…</p>`:a.error?`<p class="muted small">${esc(adminFail(a.error))}</p>`:a.length?a.map(r=>
+    `<div class="adm-act"><span class="t">${esc(whenShort(r.at))}</span><span><b>${esc(r.actor||"Bourdain")}</b> ${esc(AUDIT_WORDS[r.action]||r.action)} <i>${esc(r.detail||"")}</i></span></div>`).join(""):`<p class="muted small">Nothing yet.</p>`;
+  return `<div class="adm-kicker">Admin</div><h2 class="adm-title">Audit log</h2>
+    <p class="adm-meta">Changes made in this screen, new people and deploys. Entries can't be edited or removed.</p>${rows}`;
+}
+function adminErrorsHtml(){
+  const e=state.admin_errors;
+  if(!e) return `<div class="adm-kicker">Admin</div><h2 class="adm-title">Errors</h2><p class="status"><span class="spin"></span>Loading…</p>`;
+  if(e.error) return `<div class="adm-kicker">Admin</div><h2 class="adm-title">Errors</h2><p class="muted small">${esc(adminFail(e.error))}</p>`;
+  return `<div class="adm-kicker">Admin</div><h2 class="adm-title">Errors</h2>
+    <p class="adm-meta">The last 50 of each, kept for 90 days. The same error within a minute is recorded once.</p>
+    ${secHead("Server")}${e.server.length?e.server.map(r=>`<div class="adm-act"><span class="t">${esc(whenShort(r.at))}</span><span><b>${esc(r.area)}</b> ${esc(r.code)} <i>${esc(r.message||"")}</i></span></div>`).join(""):`<p class="muted small">None recorded.</p>`}
+    ${secHead("AI calls that didn't work")}${e.ai.length?e.ai.map(r=>`<div class="adm-act"><span class="t">${esc(whenShort(r.at))}</span><span><b>${esc(r.name)}</b> ${esc(KIND_NAMES[r.kind]||r.kind)} · <i>${esc(r.code)}</i></span></div>`).join(""):`<p class="muted small">None recorded.</p>`}`;
+}
+// Activity filters reload only the list, so typing in the search box keeps its place.
+const ACT_PAGE=50;
+async function loadAdminActivity(reset){
+  const f=state.adminAct, seq=state.adminActSeq=(state.adminActSeq||0)+1;
+  if(reset){ state.adminActRows=null; paintActivity(); }
+  const day=n=>{ const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-n); return d.toISOString(); };
+  const since={today:day(0),"7d":day(6),"30d":day(29)}[f.period]||"";
+  const rows=Array.isArray(state.adminActRows)?state.adminActRows:[];
+  const qs=new URLSearchParams({limit:ACT_PAGE, cat:f.cat}); if(f.who) qs.set("user",f.who); if(since) qs.set("since",since); if(f.q) qs.set("q",f.q); if(!reset&&rows.length) qs.set("before",rows[rows.length-1].id);
+  try{ const got=await api("/api/admin/activity?"+qs,{signal:timeout(10000)}); if(seq!==state.adminActSeq) return; state.adminActRows=reset?got:[...rows,...got]; state.adminActMore=got.length===ACT_PAGE; }
+  catch(e){ if(seq!==state.adminActSeq) return; state.adminActRows={error:e}; }
+  paintActivity();
+}
+function paintActivity(){
+  const el=document.getElementById("actList"); if(!el) return;
+  const r=state.adminActRows;
+  el.innerHTML=!r?`<p class="status"><span class="spin"></span>Loading…</p>`:r.error?`<p class="muted small">${esc(adminFail(r.error))}</p>`
+    :r.length?r.map(actLine).join("")+(state.adminActMore?`<button class="adm-link wide" id="actMore">Show more</button>`:""):`<p class="muted small">Nothing matches.</p>`;
+  const more=el.querySelector("#actMore"); if(more) more.onclick=()=>loadAdminActivity(false);
+}
+function renderAdmin(){
+  const el=document.getElementById("view-admin"), a=state.admin, scr=state.adminScreen||"home", sub=scr!=="home";
+  const head=`<div class="detail-head"><button class="btn small ghost" id="aBack">${sub?"‹ Admin":"‹ Recipes"}</button>${!sub&&a&&!a.error?`<button class="btn small" id="aRefresh">Refresh</button>`:""}</div>`;
+  const wire=()=>{
+    el.querySelector("#aBack").onclick=()=>{ if(sub) adminGo(scr==="person"&&state.adminFromPeople?"people":"home",{adminFromPeople:false}); else show("recipes"); };
+    const r=el.querySelector("#aRefresh"); if(r) r.onclick=()=>{ state.admin=null; renderAdmin(); };
+  };
+  if(!a){ el.innerHTML=head+`<div class="empty"><span class="spin"></span>Loading…</div>`; wire(); loadAdmin(); return; }
+  if(a.error){ el.innerHTML=head+`<div class="empty">${esc(adminFail(a.error))}</div>`; wire(); return; }
+  const screens={ home:adminHomeHtml, people:adminPeopleHtml, person:adminPersonHtml, ai:adminAiHtml, activity:adminActivityHtml, audit:adminAuditHtml, errors:adminErrorsHtml };
+  el.innerHTML=head+(screens[scr]||adminHomeHtml)(a); wire();
+  el.onclick=async e=>{
+    const go=e.target.closest("[data-go]"); if(go){ adminGo(go.dataset.go); return; }
+    const pp=e.target.closest("[data-person]"); if(pp){ adminGo("person",{adminPersonId:pp.dataset.person, adminFromPeople:scr==="people"}); return; }
+    const lim=e.target.closest("[data-lim]"); if(lim){ personLimits(a.sum.people.find(p=>p.id===lim.dataset.lim),a.sum.defaults); return; }
+    const act=e.target.closest("[data-admin]"); if(!act) return;
+    const p=a.sum.people.find(x=>x.id===state.adminPersonId);
+    if(act.dataset.admin==="invite") inviteSheet();
+    if(act.dataset.admin==="export") exportData(act);
+    if(act.dataset.admin==="theiract"){ state.adminAct={...state.adminAct, who:state.adminPersonId, cat:"all", period:"all", q:""}; adminGo("activity"); }
+    if(act.dataset.admin==="reset"&&p){ if(await putLimits({user:p.id, overrides:null})){ toast(`${p.name||p.email} is back on everyone's limits`); loadAdmin(); } }
+    if(act.dataset.admin==="pause"&&p) pauseSheet(p,true);
+    if(act.dataset.admin==="resume"&&p) pauseSheet(p,false);
+  };
+  if(scr==="ai") el.querySelector("#limSave").onclick=saveDefaultLimits;
+  if(scr==="activity"){
+    const f=state.adminAct, set=(k,v)=>{ f[k]=v; loadAdminActivity(true); };
+    el.querySelector("#actWho").onchange=e=>set("who",e.target.value);
+    el.querySelector("#actCat").onchange=e=>set("cat",e.target.value);
+    el.querySelector("#actPeriod").onchange=e=>set("period",e.target.value);
+    let tm; el.querySelector("#actQ").oninput=e=>{ clearTimeout(tm); tm=setTimeout(()=>set("q",e.target.value.trim()),300); };
+    paintActivity();
+  }
+}
+// Pausing is reversible and deletes nothing, but it locks someone out, so it asks first.
+function pauseSheet(p,pause){
+  const who=esc(p.name||p.email);
+  const sh=openSheet(pause
+    ? `<h3>Pause ${who}'s account?</h3><p class="muted small" style="margin:0 0 12px">They won't be able to open Bourdain, and their recipes are hidden from everyone else until you resume it. Nothing is deleted.</p>
+       <div class="row"><button class="btn danger" data-act="go">Pause account</button><button class="btn ghost" data-act="close">Cancel</button></div>`
+    : `<h3>Resume ${who}'s account?</h3><p class="muted small" style="margin:0 0 12px">They can open Bourdain again, and their recipes are back for everyone.</p>
+       <div class="row"><button class="btn" data-act="go">Resume account</button><button class="btn ghost" data-act="close">Cancel</button></div>`);
+  sheetActions(sh,{ close:closeSheet, go:async b=>{
+    b.disabled=true;
+    try{ await api("/api/admin/people/"+encodeURIComponent(p.id),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({paused:pause}),signal:timeout(10000)});
+      closeSheet(); toast(pause?`${p.name||p.email}'s account is paused`:`${p.name||p.email}'s account is back`); loadAdmin(); }
+    catch(e){ b.disabled=false; toast(e.status?`The server didn't take that: ${e.message}.`:"Can't reach the server. Try again when you're back on home Wi-Fi."); }
+  } });
+}
+function inviteSheet(){
+  const sh=openSheet(`<h3>Invite someone</h3>
+    <p class="muted small" style="margin:0 0 10px">Who can sign in is decided by Cloudflare, not Bourdain:</p>
+    <ol class="small adm-steps"><li>Open <a href="https://one.dash.cloudflare.com/" target="_blank" rel="noopener">Cloudflare Zero Trust ↗</a> → Access → Applications → Bourdain → Policies.</li>
+      <li>Add their email to the policy that lets people in.</li>
+      <li>Send them the getting-started guide and the address.</li></ol>
+    <p class="muted small">They appear here after their first sign-in, when Bourdain asks their name.</p>
+    <div class="row" style="margin-top:12px"><button class="btn ghost" data-act="close">Close</button></div>`);
+  sheetActions(sh,{ close:closeSheet });
 }
 // Reads limit inputs from a container. Blank ones are left out when blankOk; returns null (and toasts) if one is wrong.
 function readLimits(box,blankOk){
@@ -2376,7 +2631,7 @@ document.getElementById("brand").onclick=openVersion;
 /* One zip of everything this person owns: data.json plus the photos and covers
    their recipes use. A backup to keep, or for someone who asks for their data. */
 async function exportData(btn){
-  const old=btn.textContent; btn.disabled=true; btn.innerHTML=`<span class="spin"></span>Preparing…`;
+  const old=btn.innerHTML; btn.disabled=true; btn.innerHTML=`<span class="spin"></span>Preparing…`;
   try{
     const res=await fetch(API+"/api/export",{redirect:"manual",signal:timeout(120000)});
     if(res.type==="opaqueredirect"||/text\/html/.test(res.headers.get("content-type")||"")) throw signin.error();
@@ -2389,7 +2644,7 @@ async function exportData(btn){
   }catch(e){
     console.warn("export failed",e);
     toast(e.code==="signed_out" ? "You're signed out. Tap the red bar at the top to sign in again, then export." : e.status ? `The server couldn't make the export (${e.code||e.status}). Check the server logs.` : "Couldn't reach the server to make the export. Try again when you're back on home Wi-Fi.");
-  }finally{ btn.disabled=false; btn.textContent=old; }
+  }finally{ btn.disabled=false; btn.innerHTML=old; }
 }
 /* Quietly tell the user when the server has a newer build than the one this phone is running. */
 async function checkForUpdate(){

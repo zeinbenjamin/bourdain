@@ -92,6 +92,20 @@ try {
 
   const acts = (await call("GET", "/api/admin/activity?user=" + samId, OWNER)).j;
   check("signing in is on the activity log", acts.some((a) => a.action === "signed_in" && a.target === "Cloudflare"), JSON.stringify(acts.slice(-3)));
+  const health = (await call("GET", "/api/admin/summary", OWNER)).j.health;
+  check("health: signing in is operational once Cloudflare's keys have loaded", health.auth.status === "ok" && /Cloudflare Access \(bourdain-test\)/.test(health.auth.detail), JSON.stringify(health.auth));
+  check("a new person is in the audit log", (await call("GET", "/api/admin/audit", OWNER)).j.some((a) => a.action === "person_joined" && a.detail === "sam@example.com"));
+
+  // --- pausing someone (owner's view, 2.4)
+  await call("PUT", "/api/me", SAM, { name: "Sam" });
+  r = await call("PUT", "/api/admin/people/" + samId, SAM, { paused: true });
+  check("only the owner can pause someone", r.status === 403 && r.j?.code === "not_admin");
+  r = await call("PUT", "/api/admin/people/" + samId, OWNER, { paused: true });
+  const samState = await call("GET", "/api/state", SAM), samExport = await fetch(s.url + "/api/export", { headers: SAM });
+  check("paused: Sam gets 403 account_disabled, but can still export their data", r.j?.paused === true && samState.status === 403 && samState.j?.code === "account_disabled" && samExport.status === 200, JSON.stringify([r.j, samState]));
+  check("…and is hidden from everyone else (people, search)", !(await call("GET", "/api/people", OWNER)).j.some((p) => p.id === samId) && (await call("GET", "/api/search?q=laksa", OWNER)).j.length === 0);
+  await call("PUT", "/api/admin/people/" + samId, OWNER, { paused: false });
+  check("resumed: Sam is back", (await call("GET", "/api/state", SAM)).status === 200 && (await call("GET", "/api/people", OWNER)).j.some((p) => p.id === samId));
 
   // --- Cloudflare's keys can't be fetched
   await s.stop(); s.setMode({ cfCerts: "down" }); await s.restart();
@@ -178,10 +192,17 @@ try {
   check("import from a private link: says why", /points inside a private network/.test(await page.textContent("#importStatus")), await page.textContent("#importStatus"));
 
   // the owner's view shows how the server sees this phone
-  await page.evaluate(() => openAdmin()); await page.waitForSelector("#view-admin.active h2");
+  await page.evaluate(() => openAdmin()); await page.waitForSelector("#view-admin.active .adm-title");
   const adm = await page.textContent("#view-admin");
   check("the owner's view: Signing in shows the setup and this phone's address", /Cloudflare Access \(team bourdain-test\)/.test(adm) && /Recognised by\s*home network/.test(adm) && /Came through Cloudflare\s*No/.test(adm), adm.slice(adm.indexOf("Signing in"), adm.indexOf("Signing in") + 300));
-  check("…and photo storage per person and in the limits", /Photos: /.test(adm) && await page.isVisible("#lim_storage_mb"));
+  check("…signing in shows as operational in System health", /Signing in[\s\S]*Operational/.test(adm));
+  await page.evaluate(() => adminGo("ai")); await page.waitForSelector("#lim_storage_mb");
+  check("…and photo storage is in the overview and the limits", /Storage/.test(adm) && await page.isVisible("#lim_storage_mb"));
+  // a paused account, on the phone
+  await page.route("**/api/state", (rt) => rt.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ error: "paused", code: "account_disabled" }) }));
+  await page.reload(); await page.waitForFunction(() => !store.loading);
+  check("a paused account says so on the red bar, not Offline", /account is paused/.test(await page.textContent("#signinBar")) && !/Offline/.test(await page.textContent("#syncSub")), await page.textContent("#signinBar"));
+  await page.unroute("**/api/state");
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
 } catch (e) { finish(e); } finally { await b?.browser.close(); await b2?.browser.close(); await s?.cleanup(); }
