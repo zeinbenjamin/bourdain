@@ -81,6 +81,8 @@ try {
   await s.restart({ ANTHROPIC_API_KEY: "" });
   const nokey = await ai("scan", {}, [img]);
   check("no API key: no_api_key, and not counted", nokey.code === "no_api_key" && usage().length === before, JSON.stringify(nokey));
+  const hNoKey = (await get("/api/admin/summary")).health;
+  check("health: no Anthropic key shows AI as not configured, not as working", hNoKey.ai.status === "off" && /Not configured/.test(hNoKey.ai.text), JSON.stringify(hNoKey.ai));
   await s.restart();
 
   // --- the monthly allowance, and one person's own limits
@@ -136,6 +138,44 @@ try {
   const nocol = await fetch(s.url + "/api/nope/x", { method: "PUT", headers: { "content-type": "application/json" }, body: "{}" });
   check("a write to a collection that doesn't exist is still a JSON 404", nocol.status === 404 && (await nocol.json()).code === "bad_collection");
 
+  // --- the control room's data (2.4)
+  let sm = await get("/api/admin/summary");
+  check("summary: totals for users, recipes, AI and storage", sm.totals.users === 1 && typeof sm.totals.recipes === "number" && typeof sm.totals.storage_bytes === "number" && sm.totals.ai_calls_today > 0 && sm.totals.active_today === 1, JSON.stringify(sm.totals));
+  check("health: database and photo storage checked for real", sm.health.db.status === "ok" && /data version 2/.test(sm.health.db.detail) && sm.health.storage.status === "ok" && /free/.test(sm.health.storage.detail), JSON.stringify([sm.health.db, sm.health.storage]));
+  check("health: sign-in off, backups not monitored (never shown as working)", sm.health.auth.status === "off" && sm.health.backups.status === "unknown" && /Not monitored/.test(sm.health.backups.text));
+  check("health: Claude and OpenAI from their last real call", sm.health.ai.status === "ok" && /Last call worked/.test(sm.health.ai.detail) && sm.health.images.status === "ok", JSON.stringify([sm.health.ai, sm.health.images]));
+  s.setMode({ claude: "529" }); await ai("ideas", { have: "eggs" }); s.setMode({});
+  sm = await get("/api/admin/summary");
+  check("…a failed last call shows as a problem, with the code, and needs attention", sm.health.ai.status === "problem" && /overloaded/.test(sm.health.ai.detail) && sm.attention.some((x) => /AI \(Claude\)/.test(x)), JSON.stringify([sm.health.ai, sm.attention]));
+  check("…and errors recorded today are flagged", sm.system.errors_today > 0 && sm.system.last_error?.code === "overloaded" && sm.attention.some((x) => /errors? recorded today/.test(x)), JSON.stringify(sm.system));
+  await ai("ideas", { have: "eggs" });
+  check("…the next call that works puts it back", (await get("/api/admin/summary")).health.ai.status === "ok");
+  check("summary: the month split by provider (Claude tokens, OpenAI pictures)", Math.abs(sm.ai.providers.anthropic + sm.ai.providers.openai - sm.month.usd) < 1e-6 && sm.ai.providers.images >= 1 && sm.ai.providers.openai > 0, JSON.stringify(sm.ai.providers));
+  check("summary: version, start time and AI calls that didn't work", sm.system.version && sm.system.started_at && sm.ai.failures.some((f) => f.code === "overloaded"));
+  const errs = await get("/api/admin/errors");
+  check("errors: server errors and failed AI calls", errs.server.some((e) => e.area === "claude" && e.code === "overloaded") && errs.ai.some((e) => e.kind === "scan" && e.code === "overloaded"), JSON.stringify(errs).slice(0, 300));
+  const actOf = async (qs) => get("/api/admin/activity?limit=200&" + qs);
+  const sec = await actOf("cat=security"), aiActs = await actOf("cat=ai"), content = await actOf("cat=content"), nosign = await actOf("cat=nosignin");
+  check("activity: sign-ins kept apart from everything else", sec.length > 0 && sec.every((x) => x.action === "signed_in") && nosign.every((x) => x.action !== "signed_in") && nosign.length + sec.length === (await actOf("cat=all")).length, JSON.stringify(sec.slice(0, 2)));
+  check("…AI and content filters", aiActs.length > 0 && aiActs.every((x) => x.action.startsWith("ai_")) && content.length > 0 && content.every((x) => !x.action.startsWith("ai_") && x.action !== "signed_in"));
+  const lent = await actOf("q=LENT"), future = await actOf("since=" + new Date(Date.now() + 86_400_000).toISOString()), page1 = await actOf("cat=all&limit=3");
+  const page2 = await get(`/api/admin/activity?cat=all&limit=3&before=${page1[2].id}`);
+  check("…search, period and paging", lent.length === 2 && lent.every((x) => x.target === "lentils") && future.length === 0 && page2.length === 3 && page2[0].id < page1[2].id, JSON.stringify(lent));
+  const aud = await get("/api/admin/audit");
+  check("audit log: limit changes from → to, per person, the cover price, and the deploy", aud.some((r) => r.action === "limits_changed" && /Imports a day \d+ → \d+/.test(r.detail) && r.actor === "Test Owner")
+    && aud.some((r) => r.action === "person_limits_changed" && /back on everyone's limits/.test(r.detail)) && aud.some((r) => r.action === "cover_price_changed" && /US\$0\.05 → US\$0\.04/.test(r.detail))
+    && aud.some((r) => r.action === "deployed" && r.actor === null), JSON.stringify(aud.slice(0, 4)));
+  check("…and a restart with the same build is a restart, not a deploy", aud.filter((r) => r.action === "deployed").length === 1 && aud.some((r) => r.action === "restarted"));
+  // pausing someone
+  { const d = db(); d.prepare("INSERT INTO users (id, email, name, created_at) VALUES ('sam', 'sam@example.com', 'Sam', datetime())").run(); d.close(); }
+  const pause = (id, body) => fetch(`${s.url}/api/admin/people/${id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then(async (r) => ({ status: r.status, ...(await r.json()) }));
+  const p1 = await pause("sam", { paused: true });
+  check("pause: someone is paused, and hidden from everyone else", p1.status === 200 && p1.paused === true && !(await get("/api/people")).some((p) => p.id === "sam"), JSON.stringify(p1));
+  const own = await pause(owner, { paused: true }), badBody = await pause("sam", { paused: "yes" }), ghost = await pause("nobody", { paused: true });
+  check("…the owner can't be paused; bad requests are refused", own.status === 400 && own.code === "owner_account" && badBody.status === 400 && ghost.status === 404);
+  const p2 = await pause("sam", { paused: false });
+  check("…resume brings them back, and both are in the audit log", p2.paused === false && (await get("/api/people")).some((p) => p.id === "sam") && (await get("/api/admin/audit")).filter((r) => /account_(paused|resumed)/.test(r.action) && /Sam/.test(r.detail)).length === 2);
+
   // --- the phone
   b = await openBrowser();
   const { page, errors } = b;
@@ -149,28 +189,51 @@ try {
   await putLimits({ defaults: { import: 20, admin_exempt: true } });
 
   const longPress = async (sel, ms) => { const bx = await page.locator(sel).boundingBox(); await page.mouse.move(bx.x + bx.width / 2, bx.y + bx.height / 2); await page.mouse.down(); await sleep(ms); await page.mouse.up(); };
+  const admText = () => page.textContent("#view-admin");
+  const fitsPhone = async (label) => {
+    const lay = await page.evaluate(() => ({ w: document.documentElement.scrollWidth, small: [...document.querySelectorAll("#view-admin button, #view-admin select, #view-admin input:not([type=checkbox])")].filter((x) => x.offsetParent && x.getBoundingClientRect().height < 44).map((x) => x.textContent.trim().slice(0, 30) || x.id) }));
+    check(`${label}: fits a phone, no sideways scroll, everything tappable is 44px tall`, lay.w <= 390 && lay.small.length === 0, JSON.stringify(lay));
+  };
   await page.click("#brand"); await page.waitForSelector("#sheet.open #verHead");
   await page.click("#verHead"); await sleep(800);
   check("a tap on the version heading does nothing", !(await page.evaluate(() => state.view === "admin")) && await page.isVisible("#sheet.open"));
   check("…and there's no button for it", !(await page.$$eval("#sheet button", (bs) => bs.map((x) => x.textContent).join())).match(/admin|owner/i));
   await longPress("#verHead", 800);
-  await page.waitForSelector("#view-admin.active h2");
-  const adm = await page.textContent("#view-admin");
-  check("a long press opens the owner's screen, with the sheet closed", /Owner's view/.test(adm) && !(await page.isVisible("#sheet.open")));
-  check("…people with email, counts and today's AI", /Test Owner · you/.test(adm) && /owner@example\.com/.test(adm) && /AI today · no limits/.test(adm) && /This month: \d+ AI calls/.test(adm), adm.slice(0, 400));
-  check("…AI by kind with prices, limits and recent activity", /AI in [A-Z][a-z]{2}/.test(adm) && /per million tokens/.test(adm) && /Limits for everyone/.test(adm) && /deleted\s*Dal tadka/.test(adm) && /scanned the fridge\s*\(didn't work: overloaded\)/.test(adm), adm.slice(-600));
+  await page.waitForSelector("#view-admin.active .adm-title");
+  let adm = await admText();
+  check("a long press opens the admin overview, with the sheet closed", /System overview/.test(adm) && /Only you can see this/.test(adm) && !(await page.isVisible("#sheet.open")));
+  check("…sections in order: overview, health, AI usage, people, recent activity, admin, system", (await page.$$eval("#view-admin .adm-head h3", (hs) => hs.map((h) => h.textContent.replace(/\s*\d+$/, "").trim()))).join("|") === "System health|AI usage|People|Recent activity|Admin|System", adm.slice(0, 200));
+  check("…overview metrics: users, recipes, AI calls, AI spend, storage", (await page.$$eval("#view-admin .adm-metrics .adm-m span", (xs) => xs.map((x) => x.textContent))).map((t) => t.replace(/ · .*/, "")).join("|") === "Users|Recipes|AI calls|AI spend|Storage");
+  check("…health rows say what they know: database operational, backups not monitored", /Database[\s\S]*Operational/.test(adm) && /Backups[\s\S]*Not monitored/.test(adm) && (await page.locator("#view-admin .adm-h.ok").count()) >= 2 && (await page.locator("#view-admin .adm-h.unknown, #view-admin .adm-h.off").count()) >= 2);
+  check("…needs attention lists today's errors", /Needs attention/.test(adm) && /recorded today/.test(adm));
+  check("…a compact people list and recent activity without sign-ins", /Test Owner · You/.test(adm) && /\d+ recipes? · \d+ cooks? · \d+ AI calls? · US\$/.test(adm) && /deleted\s*Dal tadka/.test(adm) && !/signed in via/.test(adm));
   check("…the Recipes tab stays lit", await page.evaluate(() => document.querySelector('#tabs button.on')?.dataset.view === "recipes"));
-  const lay = await page.evaluate(() => ({ w: document.documentElement.scrollWidth, btn: Math.min(...[...document.querySelectorAll("#view-admin .adm-btns .btn, #view-admin .detail-head .btn, #limSave")].map((x) => x.getBoundingClientRect().height)) }));
-  check("…fits a phone: no sideways scroll, buttons 44px tall", lay.w <= 390 && lay.btn >= 44, JSON.stringify(lay));
+  await fitsPhone("overview");
 
+  // a person
+  await page.click(`[data-person="${owner}"]`); await page.waitForSelector("#view-admin .adm-top");
+  adm = await admText();
+  check("a person: email, counts, AI today and this month, limits, recent activity", /owner@example\.com/.test(adm) && /AI today · no limits/.test(adm) && /AI this month/.test(adm) && /Imports a day/.test(adm) && (await page.locator("#view-admin .adm-act").count()) > 0, adm.slice(0, 300));
+  check("…back says ‹ Admin, and your own account has no Pause", (await page.textContent("#aBack")).trim() === "‹ Admin" && !(await page.$('[data-admin="pause"]')));
+  await fitsPhone("person");
+  await page.click("#aBack"); await page.waitForSelector("#view-admin .adm-metrics");
+
+  // AI usage and limits
+  await page.click('.adm-head [data-go="ai"]'); await page.waitForSelector("#limSave");
+  adm = await admText();
+  check("AI usage: cost this month, by provider, feature and person, with the estimate caveat and console links", /AI cost — [A-Z][a-z]+/.test(adm) && /Anthropic \(Claude\)/.test(adm) && /OpenAI/.test(adm) && /By feature/i.test(adm) && /By person/i.test(adm) && /Provider invoices may differ/.test(adm) && (await page.locator('#view-admin a[href^="https://console.anthropic.com"]').count()) === 1);
+  check("…calls that didn't work, with plain job names", /Test Owner\s*fridge scan · overloaded/.test(adm), adm.slice(adm.indexOf("didn't work"), adm.indexOf("didn't work") + 120));
+  await fitsPhone("AI usage");
   await page.fill("#lim_import", "2.5"); await page.click("#limSave");
   check("a limit that isn't a whole number is caught on the phone", /whole numbers from 0 to 1000/.test(await page.textContent("#toast")));
   await page.fill("#lim_import", "7"); await page.fill("#lim_image_usd", "0.06"); await page.uncheck("#lim_admin_exempt"); await page.click("#limSave");
   await page.waitForFunction(() => /Limits saved/.test(document.getElementById("toast").textContent));
   let sum = await get("/api/admin/summary");
   check("Save limits saves everyone's limits, the cover price and the exemption", sum.defaults.import === 7 && sum.prices.image_usd === 0.06 && sum.defaults.admin_exempt === false, JSON.stringify(sum.defaults));
-  await page.waitForFunction(() => /1 \/ 7/.test(document.getElementById("view-admin").textContent) || /\/ 7/.test(document.getElementById("view-admin").textContent));
-  check("…and the screen shows usage against the new limits", /\/ 7\s*Imports/.test(await page.textContent("#view-admin")));
+  await page.waitForFunction(() => state.admin && state.admin.sum && state.admin.sum.defaults.import === 7);
+  check("…and stays on the AI screen", await page.isVisible("#limSave"));
+  await page.click("#aBack"); await page.click(`[data-person="${owner}"]`); await page.waitForSelector("#view-admin .adm-use");
+  check("…the person shows usage against the new limits", /\/ 7\s*Imports/.test(await admText()));
 
   await page.click(`[data-lim="${owner}"]`); await page.waitForSelector("#sheet.open #lim_scan");
   check("a person's limits sheet shows everyone's limits in grey", (await page.getAttribute("#sheet #lim_import", "placeholder")) === "7");
@@ -178,13 +241,47 @@ try {
   await page.waitForFunction(() => /Limits saved/.test(document.getElementById("toast").textContent));
   sum = await get("/api/admin/summary");
   check("…saving keeps only what was filled in", JSON.stringify(sum.people[0].overrides) === '{"scan":3}' && sum.people[0].limits.scan === 3 && sum.people[0].limits.import === 7);
-  await page.waitForFunction(() => /own limits/.test(document.getElementById("view-admin").textContent));
-  await page.click(`[data-lim="${owner}"]`); await page.click('#sheet [data-act="reset"]');
+  await page.waitForFunction(() => document.querySelector('#view-admin [data-admin="reset"]'));
+  check("…marked as their own on the person screen", /Fridge scans a day\s*own/.test(await admText()));
+  await page.click('#view-admin [data-admin="reset"]');
   await page.waitForFunction(() => /back on everyone's limits/.test(document.getElementById("toast").textContent));
   check("…and Use everyone's clears them", (await get("/api/admin/summary")).people[0].overrides === null);
 
-  await page.selectOption("#actWho", owner); await page.waitForFunction(() => state.adminWho && state.admin && state.admin.act);
-  check("activity can be narrowed to one person", (await page.$$("#view-admin .adm-act")).length > 0);
+  // pausing someone, from their screen
+  await page.click("#aBack"); await page.waitForSelector('[data-person="sam"]');
+  await page.click('[data-person="sam"]'); await page.waitForSelector('[data-admin="pause"]');
+  await page.click('[data-admin="pause"]'); await page.waitForSelector("#sheet.open");
+  check("Pause asks first, and says nothing is deleted", /Pause Sam's account\?/.test(await page.textContent("#sheet")) && /Nothing is deleted/.test(await page.textContent("#sheet")));
+  await page.click('#sheet [data-act="close"]');
+  check("…Cancel leaves them as they were", !(await get("/api/admin/summary")).people.find((p) => p.id === "sam").paused);
+  await page.click('[data-admin="pause"]'); await page.waitForSelector("#sheet.open"); await page.click('#sheet [data-act="go"]');
+  await page.waitForSelector('[data-admin="resume"]');
+  check("…Pause account pauses them, and their screen says so", (await get("/api/admin/summary")).people.find((p) => p.id === "sam").paused && /Paused/.test(await admText()));
+  await page.click('[data-admin="resume"]'); await page.waitForSelector("#sheet.open"); await page.click('#sheet [data-act="go"]');
+  await page.waitForSelector('[data-admin="pause"]');
+  check("…and Resume account brings them back", !(await get("/api/admin/summary")).people.find((p) => p.id === "sam").paused);
+
+  // all activity, with filters
+  await page.click("#aBack"); await page.click('.adm-head [data-go="activity"]'); await page.waitForSelector("#actList .adm-act");
+  check("activity: the default leaves sign-ins out", !/signed in via/.test(await page.textContent("#actList")));
+  await page.selectOption("#actCat", "security"); await page.waitForFunction(() => Array.isArray(state.adminActRows) && state.adminActRows.every((r) => r.action === "signed_in") && state.adminActRows.length > 0);
+  check("…Sign-ins shows only sign-ins", /signed in via/.test(await page.textContent("#actList")));
+  await page.selectOption("#actCat", "all"); await page.selectOption("#actPeriod", "all"); await page.fill("#actQ", "lentil");
+  await page.waitForFunction(() => Array.isArray(state.adminActRows) && state.adminActRows.length && state.adminActRows.every((r) => r.target === "lentils"));
+  check("…search narrows it, and the box keeps what you typed", (await page.inputValue("#actQ")) === "lentil" && /lentils/.test(await page.textContent("#actList")));
+  await page.selectOption("#actWho", owner); await sleep(400);
+  check("…and by person", await page.evaluate((id) => state.adminActRows.every((r) => r.user === id), owner));
+  await fitsPhone("activity");
+
+  // audit log and errors
+  await page.click("#aBack"); await page.click('.adm-a[data-go="audit"]'); await page.waitForFunction(() => Array.isArray(state.admin_audit));
+  adm = await admText();
+  check("audit log: who changed what, from → to, and deploys", /Test Owner\s*changed everyone's limits:\s*Imports a day 1?\d+ → 7/.test(adm) && /paused\s*Sam/.test(adm) && /Bourdain\s*deployed/.test(adm), adm.slice(0, 400));
+  await page.click("#aBack"); await page.click('.adm-a[data-go="errors"]'); await page.waitForFunction(() => state.admin_errors && state.admin_errors.server);
+  check("errors: server errors and failed AI calls", /claude\s*overloaded/.test(await admText()) && /fridge scan · overloaded/.test(await admText()));
+  await page.click("#aBack"); await page.click('[data-admin="invite"]'); await page.waitForSelector("#sheet.open");
+  check("Invite someone explains it's done in Cloudflare", /Cloudflare Zero Trust/.test(await page.textContent("#sheet")));
+  await page.click('#sheet [data-act="close"]');
   await page.click("#aBack");
   check("‹ Recipes goes back to the list", await page.evaluate(() => state.view === "recipes"));
 

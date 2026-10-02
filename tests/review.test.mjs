@@ -36,6 +36,16 @@ try {
   const copies = Object.values((await s.state()).recipes).filter((r) => r.title === "Double tap stew").length;
   check("only one recipe saved", copies === 1, copies + " copies");
   check("only one on the phone too", (await page.evaluate(() => Object.values(state.recipes).filter((r) => r.title === "Double tap stew").length)) === 1);
+
+  // --- units (2.4): litres read "L", and "drizzle" is a unit
+  await s.put("recipes", "units", { title: "Unit soup", servings: 2, ingredients: [{ raw_text: "1.5 l stock", quantity: 1.5, unit: "l", item: "chicken stock" }, { raw_text: "a drizzle of olive oil", quantity: null, unit: "drizzle", item: "olive oil" }], steps: ["Simmer."], photos: [] });
+  await page.reload(); await page.waitForFunction(() => !store.loading);
+  await page.evaluate(() => { state.detailId = "units"; state.mult = 1; show("detail"); }); await page.waitForSelector("#view-detail #ingList li");
+  const ings = await page.$$eval("#view-detail #ingList li", (xs) => xs.map((x) => x.innerText.replace(/\s+/g, " ").trim()));
+  check("a recipe shows litres as L and a drizzle as a drizzle", ings[0] === "1½ L chicken stock" && ings[1] === "drizzle olive oil", JSON.stringify(ings));
+  await page.click('#view-detail button:has-text("Edit")'); await page.waitForSelector(".ingrow [data-f=unit]");
+  const opts = await page.$eval(".ingrow [data-f=unit]", (sel) => ({ shown: sel.options[sel.selectedIndex].textContent, value: sel.value, all: [...sel.options].map((o) => o.textContent) }));
+  check("the edit form offers L (still stored as l) and drizzle", opts.shown === "L" && opts.value === "l" && opts.all.includes("drizzle") && !opts.all.includes("l"), JSON.stringify(opts));
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
 } catch (e) { finish(e); } finally { await b?.browser.close(); px?.close(); await s?.cleanup(); }

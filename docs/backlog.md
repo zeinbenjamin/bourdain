@@ -10,6 +10,21 @@ the CHANGELOG records what shipped.
 | **YouTube links don't import** ("Doesn't work bro") | 2026-09-30 | The link fetcher has no YouTube handling: it reads the page like any website, and YouTube's page hides the description (it's inside `ytInitialPlayerResponse` as `shortDescription`), or serves a consent or bot check instead. Fix idea: a YouTube route like TikTok's (oEmbed for the title, plus the page's `shortDescription`). Until then, a screen recording works. Ask which video, to test with. |
 | **Photo of a dish → a recipe** ("a recipe Shazam") | 2026-09-30 | Take a photo of a plated dish (e.g. at a restaurant); Claude names the dish and writes a likely recipe, which lands on the review screen as usual. Likely a new AI job (`dish`) sharing the import limit, with the photo as the recipe's first photo. The result is a guess, so the review screen should say so. |
 
+## Requested by Zein
+
+| Item | Notes |
+| --- | --- |
+| **Home cost vs eating out** | Estimate a recipe's cost per serve at Australian supermarket prices and the price of a comparable dish at a casual Australian restaurant, so the Archives can say roughly what each cook saved. Approach: a new AI job (`cost`) run once per recipe (at save, again only when the ingredients change), stored on the recipe as `cost: {home_per_serve, out_per_serve, currency: "AUD", at}`; the Archives multiply by the servings made. A small table of common ingredient prices in `server.js` keeps estimates consistent; Claude prices the rest and the restaurant dish. Shown as "about", never exact. All users assumed to be in Australia. |
+
+## Admin actions not built (from the 2026-10-02 brief)
+
+| Item | Notes |
+| --- | --- |
+| Change permissions | There is one owner by design; nobody else can be an admin. |
+| Reset someone's usage | Would delete cost records; limits can be raised instead. |
+| Review, remove or restore other people's recipes | Moderation; not needed for the pilot. |
+| Invite from the app | Invites are Cloudflare's allow-list; the app explains how. Doing it here would need a Cloudflare API token on the server. |
+
 ## Setup and housekeeping
 
 | Item | Notes |

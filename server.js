@@ -8,8 +8,8 @@ import { lookup as dnsLookup } from "node:dns";
 import http from "node:http";
 import https from "node:https";
 import { crc32 } from "node:zlib";
-import { mkdirSync, existsSync, createReadStream, readFileSync } from "node:fs";
-import { writeFile, readdir, stat, unlink } from "node:fs/promises";
+import { mkdirSync, existsSync, createReadStream, readFileSync, constants as fsConstants } from "node:fs";
+import { writeFile, readdir, stat, unlink, access, statfs } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -193,19 +193,23 @@ if (CF_ON) console.log(`sign-in: Cloudflare Access (${CF_TEAM}); without a token
 else console.log("sign-in: not set up, so every request is the owner and Cloudflare traffic is refused");
 
 // The team's signing keys, cached for an hour and fetched again for a key we haven't seen (at most once a minute).
-const cfKeys = { byKid: new Map(), at: 0, tried: 0 };
+const cfKeys = { byKid: new Map(), at: 0, tried: 0, error: null };
+async function refreshCfKeys() {
+  cfKeys.tried = Date.now();
+  try {
+    const r = await fetch(`${CF_ISSUER}/cdn-cgi/access/certs`, { signal: AbortSignal.timeout(10000) });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const { keys = [] } = await r.json();
+    cfKeys.byKid = new Map(keys.filter((k) => k.kid && k.kty === "RSA").map((k) => [k.kid, createPublicKey({ key: k, format: "jwk" })]));
+    cfKeys.at = Date.now(); cfKeys.error = null;
+  } catch (err) {
+    console.error("couldn't fetch Cloudflare's signing keys:", err.message);
+    cfKeys.error = { at: Date.now(), message: err.message }; recordError("signin", "cf_keys", err.message);
+  }
+}
 async function cfKey(kid) {
   const fresh = Date.now() - cfKeys.at < 3600_000;
-  if (!(fresh && cfKeys.byKid.has(kid)) && Date.now() - cfKeys.tried > 60_000) {
-    cfKeys.tried = Date.now();
-    try {
-      const r = await fetch(`${CF_ISSUER}/cdn-cgi/access/certs`, { signal: AbortSignal.timeout(10000) });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const { keys = [] } = await r.json();
-      cfKeys.byKid = new Map(keys.filter((k) => k.kid && k.kty === "RSA").map((k) => [k.kid, createPublicKey({ key: k, format: "jwk" })]));
-      cfKeys.at = Date.now();
-    } catch (err) { console.error("couldn't fetch Cloudflare's signing keys:", err.message); }
-  }
+  if (!(fresh && cfKeys.byKid.has(kid)) && Date.now() - cfKeys.tried > 60_000) await refreshCfKeys();
   if (!cfKeys.at) throw Object.assign(new Error("no signing keys"), { unavailable: true });
   return cfKeys.byKid.get(kid);
 }
@@ -237,6 +241,7 @@ function signedInUser(email) {
     catch (err) { if (!/UNIQUE/.test(err.message)) throw err; } // two first requests at once
     u = userByEmail(email);
     console.log(`new person signed in: ${email}`);
+    audit(null, "person_joined", email);
   }
   return u;
 }
@@ -295,6 +300,9 @@ app.use("/api", async (req, res, next) => {
   }
   // Always the current row (a name change shows at once), and last seen at most every 5 minutes.
   req.user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id) || req.user;
+  // A paused account (owner's view) can still take its data with it, and nothing else.
+  if (req.user.disabled_at && !req.user.is_admin && !(req.method === "GET" && req.path === "/export"))
+    return res.status(403).json({ error: "this account is paused", code: "account_disabled" });
   req.signin = { how, ip: clientIp(req), cloudflare: cf };
   const seen = lastSeenAt.get(req.user.id) || 0;
   if (Date.now() - seen > 5 * 60_000) {
@@ -324,7 +332,7 @@ app.put("/api/me", (req, res) => {
    docs/multi-user.md). Emails are never sent to anyone but their owner.
    Only people who have chosen a name appear; someone mid-welcome doesn't.     */
 const person = (u, viewer) => ({ id: u.id, name: u.name, photo: u.photo || null, me: u.id === viewer });
-const named = () => db.prepare("SELECT * FROM users WHERE name IS NOT NULL AND name != '' ORDER BY created_at").all();
+const named = () => db.prepare("SELECT * FROM users WHERE name IS NOT NULL AND name != '' AND disabled_at IS NULL ORDER BY created_at").all();
 const recipesOf = (owner) => readAll("recipes", owner);
 app.get("/api/people", (req, res) => {
   res.json(named().map((u) => {
@@ -334,12 +342,12 @@ app.get("/api/people", (req, res) => {
 });
 app.get("/api/people/:id", (req, res) => {
   const u = db.prepare("SELECT * FROM users WHERE id = ?").get(req.params.id);
-  if (!u || !u.name) return res.status(404).json({ error: "no such person", code: "not_found" });
+  if (!u || !u.name || u.disabled_at) return res.status(404).json({ error: "no such person", code: "not_found" });
   res.json({ person: person(u, req.user.id), recipes: recipesOf(u.id) });
 });
 app.get("/api/people/:id/recipes/:rid", (req, res) => {
   const u = db.prepare("SELECT * FROM users WHERE id = ?").get(req.params.id);
-  const row = u && db.prepare("SELECT doc FROM recipes WHERE owner = ? AND id = ?").get(u.id, req.params.rid);
+  const row = u && !u.disabled_at && db.prepare("SELECT doc FROM recipes WHERE owner = ? AND id = ?").get(u.id, req.params.rid);
   let doc = null; try { doc = row && JSON.parse(row.doc); } catch {}
   if (!doc) return res.status(404).json({ error: "that recipe isn't there any more", code: "not_found" });
   res.json({ person: person(u, req.user.id), id: req.params.rid, recipe: doc });
@@ -358,7 +366,7 @@ const copiesOf = (owner) => {
 app.post("/api/copy", (req, res) => {
   const { owner, id } = req.body || {};
   if (owner === req.user.id) return res.status(400).json({ error: "that's already your recipe", code: "own_recipe" });
-  const u = typeof owner === "string" && db.prepare("SELECT * FROM users WHERE id = ?").get(owner);
+  const u = typeof owner === "string" && db.prepare("SELECT * FROM users WHERE id = ? AND disabled_at IS NULL").get(owner);
   const row = u && db.prepare("SELECT doc FROM recipes WHERE owner = ? AND id = ?").get(u.id, String(id));
   let src = null; try { src = row && JSON.parse(row.doc); } catch {}
   if (!src) return res.status(404).json({ error: "that recipe isn't there any more", code: "not_found" });
@@ -399,7 +407,7 @@ const str = (v) => (typeof v === "string" ? v : "");
 const assetId = (v) => (typeof v === "string" && /^[a-f0-9]{32}$/.test(v) ? v : null);
 const ratingOf = (v) => (Number.isInteger(v) && v >= 0 && v <= 3 ? v : null);
 const feedEntry = (who, owner, recipeId, r, c) => ({ who, owner, recipeId, title: str(r.title), cover: assetId(r.cover), firstPhoto: assetId((Array.isArray(r.photos) && r.photos[0]) || null),
-  rating: ratingOf(r.rating), date: c.date, at: str(c.at) || c.date, mult: Number(c.mult) > 0 ? Number(c.mult) : 1 });
+  rating: ratingOf(r.rating), servings: Number(r.servings) > 0 ? Number(r.servings) : null, date: c.date, at: str(c.at) || c.date, mult: Number(c.mult) > 0 ? Number(c.mult) : 1 });
 // The Archives feed: everyone's finished cooks, newest first, paged by `before`.
 app.get("/api/feed", (req, res) => {
   const before = typeof req.query.before === "string" ? req.query.before : null;
@@ -558,7 +566,7 @@ app.post("/api/photos", upload.single("photo"), async (req, res) => {
     db.prepare("INSERT INTO photos (id, owner, bytes, created_at) VALUES (?, ?, ?, ?)").run(id, req.user.id, jpeg.length, new Date().toISOString());
     res.json({ id, url: `/api/photos/${id}` });
   } catch (err) {
-    console.error("photo failed", err);
+    console.error("photo failed", err); recordError("photos", "image_failed", err.message);
     res.status(500).json({ error: "could not process image", code: "image_failed" });
   }
 });
@@ -583,7 +591,10 @@ app.get("/api/photos/:id", (req, res) => {
 class UpstreamError extends Error {
   constructor(status, code, message, detail) { super(message); this.status = status; this.code = code; this.detail = detail; }
 }
-const send = (res, err) => res.status(err.status).json({ error: err.message, code: err.code, ...(err.detail ? { detail: err.detail } : {}) });
+const send = (res, err) => {
+  recordError(IMAGE_CODES(err.code) ? "openai" : "claude", err.code, `${err.message}${err.detail ? ` (${err.detail})` : ""}`);
+  return res.status(err.status).json({ error: err.message, code: err.code, ...(err.detail ? { detail: err.detail } : {}) });
+};
 
 // Aborts when the phone stops waiting (Stop button, dropped connection) or after `ms`.
 function upstreamSignal(res, ms) {
@@ -644,14 +655,14 @@ const AISLES = ["produce", "meat & seafood", "dairy & eggs", "bakery", "pantry",
 const PARSE_PROMPT = `You are the import step of a personal recipe app. Extract exactly ONE recipe from the material below (it may be a social-media caption, text copied from a website, notes, and/or screenshots of a recipe or of a video's caption). Reply with ONLY a JSON object, no prose, in this shape:
 
 {"title": string, "description": string (one sentence, or ""), "servings": number|null, "prep_min": number|null, "cook_min": number|null,
- "ingredients": [{"raw_text": string (the line as written), "quantity": number|null, "unit": one of ["g","kg","ml","l","tsp","tbsp","cup","whole","clove","slice","can","packet","bunch","pinch","to taste",""], "item": string (canonical, lowercase, singular, no brand, e.g. "chicken breast", "soy sauce"), "prep": string (e.g. "diced", or ""), "section": string (sub-heading like "For the sauce", or ""), "aisle": one of ${JSON.stringify(AISLES)}, "optional": boolean}],
+ "ingredients": [{"raw_text": string (the line as written), "quantity": number|null, "unit": one of ["g","kg","ml","l","tsp","tbsp","cup","whole","clove","slice","can","packet","bunch","pinch","drizzle","to taste",""], "item": string (canonical, lowercase, singular, no brand, e.g. "chicken breast", "soy sauce"), "prep": string (e.g. "diced", or ""), "section": string (sub-heading like "For the sauce", or ""), "aisle": one of ${JSON.stringify(AISLES)}, "optional": boolean}],
  "steps": [string, ...] (numbered method as separate imperative steps, in order),
  "tags": [string, ...] (2-5 short lowercase tags: cuisine, protein, style like "weeknight", "meal prep", "high protein"),
  "notes": string (tips, swaps, storage, or "")}
 
 If an image is a grid of video frames (a contact sheet from a screen recording), read the frames in order left-to-right then top-to-bottom, and treat on-screen text, captions and subtitles as the recipe source; ingredients often appear as overlaid text and quantities may be spoken in captions. Combine all frames into one recipe.
 
-Rules: convert vulgar fractions to decimals (½ -> 0.5). Convert ounces to g and fl oz/pints to ml. Use "whole" for countable items (2 eggs -> quantity 2, unit "whole", item "egg"). If a quantity is genuinely missing, use null and unit "". Ignore hashtags, follow-me lines, emoji and comments. If the material contains no recipe at all, reply {"error":"no recipe found"}.
+Rules: convert vulgar fractions to decimals (½ -> 0.5). Convert ounces to g and fl oz/pints to ml. Use "whole" for countable items (2 eggs -> quantity 2, unit "whole", item "egg"). Use "drizzle" for an unmeasured drizzle (e.g. olive oil to finish), with quantity null. If a quantity is genuinely missing, use null and unit "". Ignore hashtags, follow-me lines, emoji and comments. If the material contains no recipe at all, reply {"error":"no recipe found"}.
 
 MATERIAL:
 `;
@@ -690,6 +701,8 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS activity (id INTEGER PRIMARY KEY AUTOINCREMENT, user TEXT NOT NULL, at TEXT NOT NULL, action TEXT NOT NULL, target TEXT);
   CREATE INDEX IF NOT EXISTS activity_at ON activity (at);
   CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, actor TEXT, action TEXT NOT NULL, detail TEXT);
+  CREATE TABLE IF NOT EXISTS server_errors (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, area TEXT NOT NULL, code TEXT NOT NULL, message TEXT);
   CREATE TABLE IF NOT EXISTS photos (id TEXT PRIMARY KEY, owner TEXT NOT NULL, bytes INTEGER NOT NULL, created_at TEXT NOT NULL);
   CREATE INDEX IF NOT EXISTS photos_owner ON photos (owner);
 `);
@@ -786,30 +799,189 @@ function logActivity(user, action, target) {
   db.prepare("INSERT INTO activity (user, at, action, target) VALUES (?, ?, ?, ?)").run(user, new Date().toISOString(), action, t);
 }
 const requireAdmin = (req, res, next) => (req.user.is_admin ? next() : res.status(403).json({ error: "only the owner can see this", code: "not_admin" }));
-app.get("/api/admin/summary", requireAdmin, (req, res) => {
-  const day = localDay(), month = day.slice(0, 7) + "%";
-  const people = db.prepare("SELECT * FROM users ORDER BY is_admin DESC, created_at").all().map((u) => {
-    const rs = Object.values(readAll("recipes", u.id)).filter(Boolean);
-    const today = Object.fromEntries(LIMIT_GROUPS.map((g) => [g, 0]));
-    for (const r of db.prepare("SELECT grp, COUNT(*) AS n FROM ai_usage WHERE user = ? AND day = ? GROUP BY grp").all(u.id, day)) today[r.grp] = r.n;
-    const m = db.prepare("SELECT COUNT(*) AS calls, COALESCE(SUM(est_usd), 0) AS usd FROM ai_usage WHERE user = ? AND day LIKE ?").get(u.id, month);
-    return { id: u.id, email: u.email, name: u.name || null, photo: u.photo || null, is_admin: Boolean(u.is_admin), created_at: u.created_at, last_seen: u.last_seen,
-      recipes: rs.length, cooks: rs.reduce((n, r) => n + (r.cooks || []).filter((c) => c && c.date).length, 0), copies: rs.filter((r) => r.copied_from).length,
-      ai: { today, month_calls: m.calls, month_usd: m.usd }, storage_bytes: storageUsed(u.id), limits: limitsFor(u.id), overrides: getSetting(`limits:${u.id}`) };
-  });
-  const byKind = db.prepare("SELECT grp, COUNT(*) AS calls, COALESCE(SUM(est_usd), 0) AS usd FROM ai_usage WHERE day LIKE ? GROUP BY grp").all(month);
-  res.json({ day, people, month: { calls: byKind.reduce((n, r) => n + r.calls, 0), usd: byKind.reduce((n, r) => n + r.usd, 0), byKind },
-    defaults: { ...DEFAULT_LIMITS, ...(getSetting("limits") || {}) }, prices: prices(),
-    // How this request was recognised, so the owner can check on the NAS what the server sees (docs/multi-user.md).
-    signin: { cloudflare: CF_ON, team: CF_TEAM || null, trusted: TRUSTED.kept, you: req.signin } });
+
+/* ---------------- the owner's control room (2.4) ----------------
+   Health is only what the server can check for itself. The database and photo
+   storage are tested on every look; Cloudflare's signing keys are fetched if
+   they're over an hour old; Claude and OpenAI are not called (a test call costs
+   money), so their status is the result of the last real call, and says so.
+   Anything else (backups) is "Not monitored", never green.                    */
+const STARTED_AT = new Date().toISOString();
+const midnightIso = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.toISOString(); };
+const IMAGE_CODES = (code) => /^image_|^no_image_key$|^bad_image_key$|^no_image_credit$/.test(code || "");
+// Server-side failures worth the owner's attention, kept for 90 days. The same failure
+// within a minute is one row, so an outage doesn't write thousands.
+const errorSeen = new Map();
+function recordError(area, code, message) {
+  const k = `${area}|${code}`;
+  if (Date.now() - (errorSeen.get(k) || 0) < 60_000) return;
+  errorSeen.set(k, Date.now());
+  try { db.prepare("INSERT INTO server_errors (at, area, code, message) VALUES (?, ?, ?, ?)").run(new Date().toISOString(), area, String(code || "error"), clip(message, 300)); }
+  catch (err) { console.error("couldn't record an error", err.message); }
+}
+// Owner and system changes. Nothing ever updates or deletes these rows.
+function audit(actor, action, detail) {
+  db.prepare("INSERT INTO audit (at, actor, action, detail) VALUES (?, ?, ?, ?)").run(new Date().toISOString(), actor || null, action, clip(detail, 500));
+}
+// Disk use of the photos dataset, re-counted at most once a minute.
+let diskUse = { at: 0 };
+async function photoDiskUse() {
+  if (Date.now() - diskUse.at < 60_000) return diskUse;
+  const out = { at: Date.now(), photos: 0, photoBytes: 0, covers: 0, coverBytes: 0 };
+  for (const f of await readdir(PHOTO_DIR)) {
+    const isPhoto = f.endsWith(".jpg"), isCover = f.endsWith(".webp");
+    if (!isPhoto && !isCover) continue;
+    try { const s = await stat(path.join(PHOTO_DIR, f)); if (isPhoto) { out.photos++; out.photoBytes += s.size; } else { out.covers++; out.coverBytes += s.size; } } catch {}
+  }
+  return (diskUse = out);
+}
+const fileSize = async (f) => { try { return (await stat(f)).size; } catch { return 0; } };
+const gb = (b) => (b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(1)} GB` : `${Math.round(b / 1024 ** 2)} MB`);
+const hhmm = (iso) => { const d = new Date(iso); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+const whenText = (iso) => (iso >= midnightIso() ? `today ${hhmm(iso)}` : `${iso.slice(0, 10)} ${hhmm(iso)}`);
+async function systemHealth() {
+  const h = {};
+  // Signing in
+  if (!CF_ON) h.auth = { label: "Signing in", status: "off", text: "Home network only", detail: "Cloudflare sign-in isn't set up" };
+  else {
+    if (Date.now() - cfKeys.at > 3600_000 && Date.now() - cfKeys.tried > 60_000) await refreshCfKeys();
+    h.auth = cfKeys.error && cfKeys.error.at >= cfKeys.at
+      ? { label: "Signing in", status: "problem", text: "Can't reach Cloudflare", detail: `Signing keys didn't load ${whenText(new Date(cfKeys.error.at).toISOString())}: ${cfKeys.error.message}` }
+      : cfKeys.at ? { label: "Signing in", status: "ok", text: "Operational", detail: `Cloudflare Access (${CF_TEAM}) · keys checked ${hhmm(new Date(cfKeys.at).toISOString())}` }
+      : { label: "Signing in", status: "unknown", text: "Unknown", detail: "Cloudflare's keys haven't loaded yet" };
+  }
+  // Database: a real read and write
+  try {
+    db.prepare("SELECT COUNT(*) AS n FROM users").get();
+    db.prepare("UPDATE meta SET value = value WHERE key = 'data_version'").run();
+    const size = (await fileSize(path.join(DATA_DIR, "bourdain.db"))) + (await fileSize(path.join(DATA_DIR, "bourdain.db-wal")));
+    h.db = { label: "Database", status: "ok", text: "Operational", detail: `${gb(size)} · data version ${DATA_VERSION}` };
+  } catch (err) { h.db = { label: "Database", status: "problem", text: "Not writable", detail: `${err.code || ""} ${err.message}`.trim() }; }
+  // Photo storage: writable, and how much room is left
+  try {
+    await access(PHOTO_DIR, fsConstants.W_OK);
+    const fs = await statfs(PHOTO_DIR), free = fs.bavail * fs.bsize;
+    h.storage = free < 1024 ** 3
+      ? { label: "Photo storage", status: "warn", text: "Nearly full", detail: `${gb(free)} free on the dataset` }
+      : { label: "Photo storage", status: "ok", text: "Operational", detail: `${gb(free)} free on the dataset` };
+  } catch (err) { h.storage = { label: "Photo storage", status: "problem", text: "Not writable", detail: err.message }; }
+  // Claude and OpenAI: the last real call (a stop by the person says nothing either way)
+  const recent = db.prepare("SELECT at, kind, outcome FROM ai_usage WHERE outcome != 'stopped' ORDER BY id DESC LIMIT 50").all();
+  const lastClaude = recent.find((r) => r.outcome === "ok" || !IMAGE_CODES(r.outcome));
+  const lastImage = recent.find((r) => r.kind === "cover" && (r.outcome === "ok" || IMAGE_CODES(r.outcome)));
+  const fromLast = (label, keySet, last, none) => !keySet ? { label, status: "off", text: "Not configured", detail: none }
+    : !last ? { label, status: "unknown", text: "Unknown", detail: "No calls yet. Status comes from real calls; nothing is tested separately" }
+    : last.outcome === "ok" ? { label, status: "ok", text: "Operational", detail: `Last call worked, ${whenText(last.at)}` }
+    : { label, status: "problem", text: "Last call failed", detail: `${last.outcome}, ${whenText(last.at)}` };
+  h.ai = fromLast("AI (Claude)", Boolean(API_KEY), lastClaude, "No ANTHROPIC_API_KEY on the server");
+  h.images = fromLast("Cover pictures (OpenAI)", Boolean(OPENAI_KEY), lastImage, "No OPENAI_API_KEY on the server");
+  h.backups = { label: "Backups", status: "unknown", text: "Not monitored", detail: "ZFS snapshots run on TrueNAS; Bourdain can't see them" };
+  return h;
+}
+const monthUse = (where, args) => db.prepare(`SELECT grp, COUNT(*) AS calls, COALESCE(SUM(est_usd), 0) AS usd FROM ai_usage WHERE day LIKE ? ${where} GROUP BY grp`).all(localDay().slice(0, 7) + "%", ...args);
+app.get("/api/admin/summary", requireAdmin, async (req, res, next) => {
+  try {
+    const day = localDay(), month = day.slice(0, 7) + "%", since = midnightIso();
+    const people = db.prepare("SELECT * FROM users ORDER BY is_admin DESC, created_at").all().map((u) => {
+      const rs = Object.values(readAll("recipes", u.id)).filter(Boolean);
+      const today = Object.fromEntries(LIMIT_GROUPS.map((g) => [g, 0]));
+      for (const r of db.prepare("SELECT grp, COUNT(*) AS n FROM ai_usage WHERE user = ? AND day = ? GROUP BY grp").all(u.id, day)) today[r.grp] = r.n;
+      const byKind = monthUse("AND user = ?", [u.id]);
+      return { id: u.id, email: u.email, name: u.name || null, photo: u.photo || null, is_admin: Boolean(u.is_admin), paused: Boolean(u.disabled_at), paused_at: u.disabled_at || null,
+        created_at: u.created_at, last_seen: u.last_seen,
+        recipes: rs.length, cooks: rs.reduce((n, r) => n + (Array.isArray(r.cooks) ? r.cooks : []).filter((c) => c && c.date).length, 0), copies: rs.filter((r) => r.copied_from).length,
+        ai: { today, month_calls: byKind.reduce((n, r) => n + r.calls, 0), month_usd: byKind.reduce((n, r) => n + r.usd, 0), month_by_kind: byKind },
+        storage_bytes: storageUsed(u.id), limits: limitsFor(u.id), overrides: getSetting(`limits:${u.id}`) };
+    });
+    const byKind = monthUse("", []);
+    // Split the month's estimate by provider: Claude from its tokens, OpenAI the rest (the pictures).
+    let anthropic = 0, images = 0;
+    for (const r of db.prepare("SELECT model, SUM(input_tokens) AS i, SUM(output_tokens) AS o, SUM(images) AS im FROM ai_usage WHERE day LIKE ? GROUP BY model").all(month)) {
+      const [pin, pout] = CLAUDE_PRICES[r.model] || [3, 15];
+      anthropic += (r.i * pin + r.o * pout) / 1e6; images += r.im;
+    }
+    const total = byKind.reduce((n, r) => n + r.usd, 0);
+    const limited = people.filter((p) => !p.paused && !(p.is_admin && p.limits.admin_exempt));
+    const budget = { combined: limited.reduce((n, p) => n + p.limits.monthly_usd, 0), people: limited.length };
+    const failures = db.prepare(`SELECT a.at, a.kind, a.outcome, u.name, u.email FROM ai_usage a LEFT JOIN users u ON u.id = a.user
+                                 WHERE a.outcome NOT IN ('ok', 'stopped') ORDER BY a.id DESC LIMIT 10`).all().map((r) => ({ at: r.at, kind: r.kind, code: r.outcome, name: r.name || r.email || "?" }));
+    const disk = await photoDiskUse();
+    const totals = {
+      users: people.length, recipes: db.prepare("SELECT COUNT(*) AS n FROM recipes").get().n,
+      storage_bytes: disk.photoBytes + disk.coverBytes, photos: disk.photos, covers: disk.covers,
+      recipes_today: db.prepare("SELECT COUNT(*) AS n FROM activity WHERE action IN ('recipe_added', 'recipe_copied') AND at >= ?").get(since).n,
+      active_today: people.filter((p) => p.last_seen && p.last_seen >= since).length,
+      ai_calls_today: db.prepare("SELECT COUNT(*) AS n FROM ai_usage WHERE day = ?").get(day).n,
+    };
+    const health = await systemHealth();
+    const lastError = db.prepare("SELECT at, area, code, message FROM server_errors ORDER BY id DESC LIMIT 1").get() || null;
+    const errorsToday = db.prepare("SELECT COUNT(*) AS n FROM server_errors WHERE at >= ?").get(since).n;
+    // What needs the owner: anything broken, anyone near a limit, errors today.
+    const attention = [];
+    for (const x of Object.values(health)) if (x.status === "problem" || x.status === "warn") attention.push(`${x.label}: ${x.text.toLowerCase()} (${x.detail})`);
+    for (const p of limited) {
+      if (p.limits.monthly_usd > 0 && p.ai.month_usd >= 0.8 * p.limits.monthly_usd) attention.push(`${p.name || p.email} has used ${Math.round((100 * p.ai.month_usd) / p.limits.monthly_usd)}% of this month's AI allowance`);
+      if (p.limits.storage_mb > 0 && p.storage_bytes >= 0.9 * p.limits.storage_mb * 1024 * 1024) attention.push(`${p.name || p.email} has used ${Math.round((100 * p.storage_bytes) / (p.limits.storage_mb * 1024 * 1024))}% of their photo storage`);
+    }
+    if (errorsToday) attention.push(`${errorsToday} error${errorsToday === 1 ? "" : "s"} recorded today`);
+    res.json({ day, people, totals, health, attention,
+      month: { calls: byKind.reduce((n, r) => n + r.calls, 0), usd: total, byKind },
+      ai: { providers: { anthropic: Math.min(anthropic, total), openai: Math.max(0, total - anthropic), images }, budget, failures },
+      system: { version: VERSION, commit: COMMIT, data_version: DATA_VERSION, started_at: STARTED_AT, last_error: lastError, errors_today: errorsToday },
+      defaults: { ...DEFAULT_LIMITS, ...(getSetting("limits") || {}) }, prices: prices(),
+      // How this request was recognised, so the owner can check on the NAS what the server sees (docs/multi-user.md).
+      signin: { cloudflare: CF_ON, team: CF_TEAM || null, trusted: TRUSTED.kept, you: req.signin } });
+  } catch (err) { next(err); }
 });
+/* Activity, filtered: user, cat (nosignin | content | ai | security | all), since (an
+   ISO time), q (words in the recipe/item or the person's name), before (an id, for
+   the next page). Sign-ins are kept apart so they don't drown out what people did. */
+const likeArg = (q) => `%${String(q).toLowerCase().replace(/[\\%_]/g, (c) => "\\" + c)}%`;
 app.get("/api/admin/activity", requireAdmin, (req, res) => {
   const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 100));
-  const rows = req.query.user
-    ? db.prepare("SELECT a.*, u.name, u.email FROM activity a LEFT JOIN users u ON u.id = a.user WHERE a.user = ? ORDER BY a.id DESC LIMIT ?").all(String(req.query.user), limit)
-    : db.prepare("SELECT a.*, u.name, u.email FROM activity a LEFT JOIN users u ON u.id = a.user ORDER BY a.id DESC LIMIT ?").all(limit);
-  res.json(rows.map((r) => ({ user: r.user, name: r.name || r.email || "?", at: r.at, action: r.action, target: r.target })));
+  const where = [], args = [];
+  if (req.query.user) { where.push("a.user = ?"); args.push(String(req.query.user)); }
+  const cat = String(req.query.cat || "all");
+  if (cat === "security") where.push("a.action = 'signed_in'");
+  else if (cat === "ai") where.push("a.action LIKE 'ai\\_%' ESCAPE '\\'");
+  else if (cat === "content") where.push("a.action != 'signed_in' AND a.action NOT LIKE 'ai\\_%' ESCAPE '\\'");
+  else if (cat === "nosignin") where.push("a.action != 'signed_in'");
+  if (req.query.since) { where.push("a.at >= ?"); args.push(String(req.query.since)); }
+  if (req.query.before) { where.push("a.id < ?"); args.push(Number(req.query.before) || 0); }
+  if (req.query.q) { where.push("(LOWER(COALESCE(a.target, '')) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(u.name, '')) LIKE ? ESCAPE '\\')"); args.push(likeArg(req.query.q), likeArg(req.query.q)); }
+  const rows = db.prepare(`SELECT a.*, u.name, u.email FROM activity a LEFT JOIN users u ON u.id = a.user ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY a.id DESC LIMIT ?`).all(...args, limit);
+  res.json(rows.map((r) => ({ id: r.id, user: r.user, name: r.name || r.email || "?", at: r.at, action: r.action, target: r.target })));
 });
+app.get("/api/admin/audit", requireAdmin, (req, res) => {
+  const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 100));
+  const rows = db.prepare(`SELECT a.*, u.name, u.email FROM audit a LEFT JOIN users u ON u.id = a.actor ${req.query.before ? "WHERE a.id < ?" : ""} ORDER BY a.id DESC LIMIT ?`)
+    .all(...(req.query.before ? [Number(req.query.before) || 0] : []), limit);
+  res.json(rows.map((r) => ({ id: r.id, at: r.at, actor: r.actor ? r.name || r.email || "?" : null, action: r.action, detail: r.detail })));
+});
+app.get("/api/admin/errors", requireAdmin, (_req, res) => {
+  const server = db.prepare("SELECT at, area, code, message FROM server_errors ORDER BY id DESC LIMIT 50").all();
+  const ai = db.prepare(`SELECT a.at, a.kind, a.outcome, u.name, u.email FROM ai_usage a LEFT JOIN users u ON u.id = a.user
+                         WHERE a.outcome NOT IN ('ok', 'stopped') ORDER BY a.id DESC LIMIT 50`).all().map((r) => ({ at: r.at, kind: r.kind, code: r.outcome, name: r.name || r.email || "?" }));
+  res.json({ server, ai });
+});
+// Pause or resume someone. A paused person can't use Bourdain (they can still export
+// their data), and is hidden from everyone else; nothing is deleted.
+app.put("/api/admin/people/:id", requireAdmin, (req, res) => {
+  const u = db.prepare("SELECT * FROM users WHERE id = ?").get(req.params.id);
+  if (!u) return res.status(404).json({ error: "no such person", code: "not_found" });
+  if (typeof req.body?.paused !== "boolean") return res.status(400).json({ error: "send {paused: true|false}", code: "bad_request" });
+  if (u.is_admin) return res.status(400).json({ error: "the owner's account can't be paused", code: "owner_account" });
+  const was = Boolean(u.disabled_at);
+  if (was !== req.body.paused) {
+    db.prepare("UPDATE users SET disabled_at = ? WHERE id = ?").run(req.body.paused ? new Date().toISOString() : null, u.id);
+    audit(req.user.id, req.body.paused ? "account_paused" : "account_resumed", `${u.name || "(no name yet)"} · ${u.email}`);
+  }
+  const now = db.prepare("SELECT disabled_at FROM users WHERE id = ?").get(u.id);
+  res.json({ id: u.id, paused: Boolean(now.disabled_at), paused_at: now.disabled_at || null });
+});
+const LIMIT_LABELS = { import: "Imports a day", scan: "Fridge scans a day", ideas: "Ideas + write a day", cover: "Covers a day", monthly_usd: "Monthly allowance (US$)", storage_mb: "Photo storage (MB)", admin_exempt: "No limits for the owner" };
+const limitChanges = (from, to) => Object.entries(to).filter(([k, v]) => from[k] !== v)
+  .map(([k, v]) => `${LIMIT_LABELS[k] || k} ${typeof v === "boolean" ? (from[k] ? "on" : "off") : from[k]} → ${typeof v === "boolean" ? (v ? "on" : "off") : v}`).join("; ");
 // Limits: the defaults for everyone, one person's overrides (null clears them), and the image price estimate.
 app.put("/api/admin/limits", requireAdmin, (req, res) => {
   const b = req.body || {};
@@ -832,9 +1004,18 @@ app.put("/api/admin/limits", requireAdmin, (req, res) => {
     if (b.user !== undefined) overrides = b.overrides == null || !Object.keys(b.overrides).length ? null : clean(b.overrides, false);
     if (b.image_usd !== undefined && (typeof b.image_usd !== "number" || !(b.image_usd >= 0) || b.image_usd > 10)) throw new Error("image_usd must be 0 to 10");
   } catch (err) { return res.status(400).json({ error: err.message, code: "bad_limits" }); }
+  const was = { defaults: { ...DEFAULT_LIMITS, ...(getSetting("limits") || {}) }, overrides: b.user !== undefined ? getSetting(`limits:${b.user}`) : null, image_usd: prices().image_usd };
   if (defaults) setSetting("limits", { ...(getSetting("limits") || {}), ...defaults });
   if (b.user !== undefined) setSetting(`limits:${b.user}`, overrides);
   if (b.image_usd !== undefined) setSetting("image_usd", Math.round(b.image_usd * 10000) / 10000);
+  // The audit log says what changed, from what to what.
+  if (defaults) { const d = limitChanges(was.defaults, defaults); if (d) audit(req.user.id, "limits_changed", d); }
+  if (b.user !== undefined) {
+    const u = db.prepare("SELECT name, email FROM users WHERE id = ?").get(String(b.user)), who = u.name || u.email;
+    if (overrides === null && was.overrides) audit(req.user.id, "person_limits_changed", `${who}: back on everyone's limits`);
+    else if (overrides) { const d = limitChanges({ ...was.defaults, ...(was.overrides || {}) }, overrides); if (d || !was.overrides) audit(req.user.id, "person_limits_changed", `${who}: ${d || "own limits"}`); }
+  }
+  if (b.image_usd !== undefined && prices().image_usd !== was.image_usd) audit(req.user.id, "cover_price_changed", `US$${was.image_usd} → US$${prices().image_usd}`);
   res.json({ defaults: { ...DEFAULT_LIMITS, ...(getSetting("limits") || {}) }, prices: prices(), ...(b.user !== undefined ? { user: b.user, limits: limitsFor(String(b.user)), overrides: getSetting(`limits:${b.user}`) } : {}) });
 });
 
@@ -972,6 +1153,7 @@ async function sweepCovers() {
 function pruneLogs() {
   const cut = (days) => new Date(Date.now() - days * 86_400_000).toISOString();
   const a = db.prepare("DELETE FROM activity WHERE at < ?").run(cut(183)).changes, u = db.prepare("DELETE FROM ai_usage WHERE at < ?").run(cut(400)).changes;
+  db.prepare("DELETE FROM server_errors WHERE at < ?").run(cut(90)); // the audit log is never pruned
   if (a || u) console.log(`pruned ${a} old activity row${a === 1 ? "" : "s"} and ${u} old AI usage row${u === 1 ? "" : "s"}`);
 }
 const runSweep = () => { try { pruneLogs(); } catch (err) { console.error("log prune failed", err); } return sweepCovers().catch((err) => console.error("cover sweep failed", err)); };
@@ -1189,12 +1371,21 @@ app.use((err, req, res, _next) => {
   const [status, code, error] = describe(err);
   // A 4xx is the request's fault, so the message is enough; a 5xx gets the full stack.
   console.error(`${req.method} ${req.path} failed (${code}):`, status >= 500 ? err : err.message);
+  if (status >= 500) recordError("server", code, `${req.method} ${req.path}: ${err.message}`);
   if (res.headersSent) return res.destroy();
   res.status(status).json({ error, code });
 });
 
-process.on("unhandledRejection", (err) => console.error("unhandled rejection", err));
+process.on("unhandledRejection", (err) => { console.error("unhandled rejection", err); recordError("server", "unhandled", String(err && err.message || err)); });
 
+// Added in 2.4 for pausing an account: a new column, so no data conversion.
+if (!columns("users").includes("disabled_at")) db.exec("ALTER TABLE users ADD COLUMN disabled_at TEXT");
+{ // a new version or build since the last start is a deploy; otherwise a restart
+  const last = getSetting("last_boot");
+  if (!last || last.version !== VERSION || last.commit !== COMMIT) audit(null, "deployed", `v${VERSION} (${COMMIT})${last ? `, was v${last.version} (${last.commit})` : ""}`);
+  else audit(null, "restarted", `v${VERSION} (${COMMIT})`);
+  setSetting("last_boot", { version: VERSION, commit: COMMIT, at: STARTED_AT });
+}
 runSweep();
 setInterval(runSweep, 86_400_000).unref();
 
