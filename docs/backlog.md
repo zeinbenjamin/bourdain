@@ -14,7 +14,7 @@ the CHANGELOG records what shipped.
 
 | Item | Notes |
 | --- | --- |
-| **Home cost vs eating out** | Estimate a recipe's cost per serve at Australian supermarket prices and the price of a comparable dish at a casual Australian restaurant, so the Archives can say roughly what each cook saved. Approach: a new AI job (`cost`) run once per recipe (at save, again only when the ingredients change), stored on the recipe as `cost: {home_per_serve, out_per_serve, currency: "AUD", at}`; the Archives multiply by the servings made. A small table of common ingredient prices in `server.js` keeps estimates consistent; Claude prices the rest and the restaurant dish. Shown as "about", never exact. All users assumed to be in Australia. |
+| **Home cost vs eating out** | Estimate each recipe's cost per serve to make (Australian supermarket prices) against eating out, so the Archives can say roughly what each cook saved. Decided 2026-10-02: compare against the **average of casual and mid-range** prices, and **leftovers count fully** (all servings made). Plan, open questions and example figures: `docs/cost-comparison.md`. |
 
 ## Admin actions not built (from the 2026-10-02 brief)
 
