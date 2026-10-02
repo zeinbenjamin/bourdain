@@ -45,7 +45,7 @@ globalThis.fetch = async (url, opts = {}) => {
     if (/You estimate food costs/.test(prompt)) { // 2.5
       console.log("MOCK_COST " + JSON.stringify(prompt.slice(prompt.indexOf("RECIPE:"), prompt.indexOf("RECIPE:") + 60)));
       if (m.cost === "junk") return json(200, { content: [{ type: "text", text: '{"course":"main","home_total":"cheap"}' }], stop_reason: "end_turn", usage });
-      return json(200, { content: [{ type: "text", text: JSON.stringify({ course: "main", comparable: "Beef rendang with rice", home_total: 42, casual_per_serve: 22, mid_per_serve: 34, basis: "Mostly the beef." }) }], stop_reason: "end_turn", usage });
+      return json(200, { content: [{ type: "text", text: JSON.stringify({ course: "main", comparable: "Beef rendang with rice", home_total: 42, casual_per_serve: 22, basis: "Mostly the beef." }) }], stop_reason: "end_turn", usage });
     }
     if (/photo of a finished dish/.test(prompt)) { // 2.5
       console.log("MOCK_DISH images=" + body.messages[0].content.filter((c) => c.type === "image").length);

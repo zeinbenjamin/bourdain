@@ -9,7 +9,7 @@ everything is in AUD.
 
 | Question | Decision |
 | --- | --- |
-| What eating out is compared against | **The average of a casual and a mid-range price.** Casual means a casual eatery or takeaway counter; mid-range means a sit-down restaurant. Both are estimated, and the comparison uses their mean. |
+| What eating out is compared against | **A casual price** (a casual eatery or takeaway counter). Changed in 2.5.2 from the average of casual and mid-range; mid-range is no longer estimated or shown. |
 | Leftovers and big batches | **Count fully.** Saved per cook = (eating-out price − home cost) per serve × the servings made (the recipe's servings × the batch). A 2× batch of a 6-serve recipe counts 12 servings. |
 
 ## Defaults applied (2026-10-02)
@@ -21,7 +21,6 @@ Zein accepted the suggested defaults:
 | Delivery prices (Uber Eats runs ~25–35% higher) | Leave out; compare against eating in or picking up. |
 | Weekend and card surcharges | Leave out. |
 | City | Sydney/Melbourne prices for everyone (regional runs ~10–15% lower). |
-| Showing casual and mid-range separately as well as the average | The average, with both on the recipe page. |
 
 ## Approach
 
@@ -36,21 +35,26 @@ Zein accepted the suggested defaults:
   in the pantry. A small table of common staples in `server.js` (chicken thigh,
   rice, eggs, olive oil…) keeps the same ingredient at the same price across
   recipes, and Claude prices the rest.
-- **Eating-out price per serve** is estimated for a comparable dish, casual and
-  mid-range, at the right course: starters and snacks (ceviche, crudo, devilled
+- **Eating-out price per serve** is estimated for a comparable dish at a
+  casual place, at the right course: starters and snacks (ceviche, crudo, devilled
   eggs) are priced against entrée or snack plates, not mains.
 - **Stored on the recipe** (adding a field is safe, no migration):
-  `cost: {home_per_serve, casual_per_serve, mid_per_serve, out_per_serve, course, currency: "AUD", hash, at}`,
-  where `out_per_serve` is the average. `hash` (servings and ingredients) says when it needs
+  `cost: {home_per_serve, casual_per_serve, out_per_serve, course, currency: "AUD", hash, at}`,
+  where `out_per_serve` is the casual price. Estimates made by 2.5.0–2.5.1 also
+  carry `mid_per_serve` and an averaged `out_per_serve`; the app reads their
+  `casual_per_serve` instead, so they don't need estimating again. `hash` (servings and ingredients) says when it needs
   re-estimating. A copy made with Add to my recipes keeps the estimate until its
   ingredients change.
 - **Shown** as estimates ("about"), never exact: per cook in the Archives
-  ("8 servings · about $168 saved"), a total for the month and year in the
-  Archives, and "About $7 a serve to make · about $28 eating out" with casual
-  and mid-range on the recipe page. Live supermarket prices aren't used: Coles and
+  ("8 servings · about $120 saved"), a total for the month and year in the
+  Archives, and "About $7 a serve to make · about $22 eating out" on the recipe
+  page. Live supermarket prices aren't used: Coles and
   Woolworths have no public API, and scraping them breaks their terms.
 
 ## Example figures
+
+From before 2.5.2, when the comparison was the average; it now uses the Casual
+column.
 
 Estimated on 2026-10-02 from typical versions of eight of Zein's recipes (their
 titles and servings, not their actual ingredient lists), at approximate

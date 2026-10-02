@@ -1,7 +1,7 @@
 // Home cost vs eating out (2.5, docs/cost-comparison.md): one AI estimate per
 // recipe, worked out on the server, kept on the recipe, redone only when the
 // ingredients change; the recipe page and the Archives show what cooking saved,
-// against the average of casual and mid-range prices, every serving counted.
+// against casual eating-out prices (2.5.2; mid-range is gone), every serving counted.
 import path from "node:path";
 import Database from "better-sqlite3";
 import { suite, startServer, openBrowser, openApp, sleep } from "./lib.mjs";
@@ -19,7 +19,7 @@ try {
   // --- the estimate, on the server
   s.clearLog();
   const est = await s.post("/api/ai", { kind: "cost", material });
-  check("an estimate in AUD: home cost per serve, casual and mid-range, and their average", est.json?.currency === "AUD" && est.json.home_total === 42 && est.json.home_per_serve === 7 && est.json.casual_per_serve === 22 && est.json.mid_per_serve === 34 && est.json.out_per_serve === 28 && est.json.course === "main", JSON.stringify(est.json));
+  check("an estimate in AUD: home cost per serve against a casual place, no mid-range", est.json?.currency === "AUD" && est.json.home_total === 42 && est.json.home_per_serve === 7 && est.json.casual_per_serve === 22 && !("mid_per_serve" in est.json) && est.json.out_per_serve === 22 && est.json.course === "main", JSON.stringify(est.json));
   check("…the prompt has the recipe", /MOCK_COST "RECIPE: Beef rendang/.test(s.log()));
   const u = rows("SELECT * FROM ai_usage WHERE kind = 'cost'");
   check("…counted as its own kind and limit, and kept out of the activity log", u.length === 1 && u[0].grp === "cost" && !(await get("/api/admin/activity?limit=200")).some((a) => a.action === "ai_cost"), JSON.stringify(u));
@@ -56,20 +56,26 @@ try {
   await page.waitForFunction(() => state.recipes.rendang?.cost && state.recipes.x?.cost?.hash, null, { timeout: 15000 });
   await sleep(600);
   const saved = (await s.state()).recipes.rendang.cost;
-  check("recipes without an estimate get one in the background, saved to the recipe", saved && saved.out_per_serve === 28 && saved.home_per_serve === 7 && saved.hash, JSON.stringify(saved));
+  check("recipes without an estimate get one in the background, saved to the recipe", saved && saved.out_per_serve === 22 && saved.home_per_serve === 7 && saved.hash, JSON.stringify(saved));
   check("…quietly: no 'Saved' toast", !/Saved/.test(await page.textContent("#toast")));
   check("…a recipe whose estimate was there but out of date (no hash) is redone too", (await s.state()).recipes.x.cost.hash);
   const calls = (s.log().match(/MOCK_COST/g) || []).length;
   await page.evaluate(() => { state.detailId = "rendang"; state.mult = 1; show("detail"); }); await page.waitForSelector("#view-detail .costline");
   const line = await page.textContent("#view-detail .costline");
-  check("the recipe page: about $7 a serve to make, about $28 eating out, with casual and mid-range", /About \$7 a serve to make · about \$28 eating out/.test(line) && /casual \$22, mid-range \$34/.test(line) && /Australian prices/.test(line), line);
+  check("the recipe page: about $7 a serve to make, about $22 eating out at a casual place", /About \$7 a serve to make · about \$22 eating out/.test(line) && /at a casual place/.test(line) && !/mid-range/i.test(line) && /Australian prices/.test(line), line);
+
+  // --- an estimate made by 2.5.0 (average of casual and mid-range) shows the casual price
+  await page.evaluate(() => { state.recipes.old = { title: "Old dal", servings: 2, ingredients: [{ item: "lentils" }], cost: { home_per_serve: 3, casual_per_serve: 18, mid_per_serve: 30, out_per_serve: 24, hash: costs.hash({ servings: 2, ingredients: [{ item: "lentils" }] }) } }; state.detailId = "old"; show("detail"); });
+  const oldLine = await page.textContent("#view-detail .costline");
+  check("an older estimate shows its casual price, not the old average", /about \$18 eating out/.test(oldLine) && !/mid-range/i.test(oldLine) && await page.evaluate(() => cookSaved(state.recipes.old.cost, 2, 1)) === 30, oldLine);
+  await page.evaluate(() => { delete state.recipes.old; });
 
   // --- Archives
   await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector(".feed .slot");
   const subs = await page.$$eval('.feed [data-open="rendang"]', (xs) => xs.map((x) => x.textContent.replace(/\s+/g, " ")));
-  check("Archives: each cook says what it saved, every serving counted (6 × $21, 12 × $21)", subs.some((t) => /6 servings · about \$126 saved/.test(t)) && subs.some((t) => /12 servings · about \$252 saved/.test(t)), JSON.stringify(subs));
+  check("Archives: each cook says what it saved, every serving counted (6 × $15, 12 × $15)", subs.some((t) => /6 servings · about \$90 saved/.test(t)) && subs.some((t) => /12 servings · about \$180 saved/.test(t)), JSON.stringify(subs));
   const sv = await page.textContent("#view-timeline .savings");
-  check("…and a total for this month and this year", /saved you about \$378 this month and \$378 this year/.test(sv), sv);
+  check("…and a total for this month and this year", /saved you about \$270 this month and \$270 this year/.test(sv), sv);
 
   // --- re-estimates only when it matters
   await page.evaluate(() => { const r = state.recipes.rendang; r.title = "Beef rendang (Mum's)"; return store.put("recipes", "rendang", r); }); await sleep(800);
