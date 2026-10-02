@@ -46,6 +46,19 @@ try {
   await page.click('#view-detail button:has-text("Edit")'); await page.waitForSelector(".ingrow [data-f=unit]");
   const opts = await page.$eval(".ingrow [data-f=unit]", (sel) => ({ shown: sel.options[sel.selectedIndex].textContent, value: sel.value, all: [...sel.options].map((o) => o.textContent) }));
   check("the edit form offers L (still stored as l) and drizzle", opts.shown === "L" && opts.value === "l" && opts.all.includes("drizzle") && !opts.all.includes("l"), JSON.stringify(opts));
+
+  // --- ingredients are saved lowercase (2.5.1)
+  await page.goto(px.url); await page.waitForFunction(() => !store.loading);
+  await addRecipe(page, "manual");
+  check("ingredient boxes don't capitalise as you type", await page.$eval(".ingrow [data-f=item]", (i) => i.getAttribute("autocapitalize") === "none") && await page.$eval(".ingrow [data-f=prep]", (i) => i.getAttribute("autocapitalize") === "none"));
+  await page.fill("#fTitle", "Shouty Salad"); await page.locator(".ingrow [data-f=item]").first().fill("Baby SPINACH"); await page.locator(".ingrow [data-f=prep]").first().fill("Washed");
+  await page.click("#revSave"); await page.waitForSelector("#view-detail h2");
+  const shouty = Object.values((await s.state()).recipes).find((r) => r.title === "Shouty Salad");
+  check("typed in capitals, saved lowercase", shouty?.ingredients[0].item === "baby spinach" && shouty.ingredients[0].prep === "washed", JSON.stringify(shouty?.ingredients));
+  check("…and shown lowercase", /baby spinach/.test(await page.textContent("#view-detail #ingList")) && !/SPINACH/.test(await page.textContent("#view-detail #ingList")));
+  await page.evaluate(() => store.put("recipes", "imp", { title: "From elsewhere", ingredients: [{ raw_text: "2 Large EGGS", item: "Large EGGS", prep: "Beaten", quantity: 2 }, { item: 5 }, null] }));
+  const imp = (await s.state()).recipes.imp;
+  check("any recipe write lowercases names and prep, keeps the line as written", imp.ingredients[0].item === "large eggs" && imp.ingredients[0].prep === "beaten" && imp.ingredients[0].raw_text === "2 Large EGGS" && imp.ingredients[1].item === 5, JSON.stringify(imp.ingredients));
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
 } catch (e) { finish(e); } finally { await b?.browser.close(); px?.close(); await s?.cleanup(); }

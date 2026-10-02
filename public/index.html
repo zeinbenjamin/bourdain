@@ -844,6 +844,7 @@ const store = {
     return op;
   },
   async write(col,id,doc,verb){
+    if(col==="recipes"&&doc) lowerIngredients(doc);
     const op=this.enqueue(col,id,doc);
     if(col==="recipes"&&doc) setTimeout(()=>costs.want(id),0);
     const sending=this.flush();
@@ -904,6 +905,17 @@ function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg
 function webUrl(u){ return /^https?:\/\//i.test(String(u||"").trim()) ? String(u).trim() : ""; }
 function hostOf(u){ try{ return new URL(u).hostname.replace(/^www\./,""); }catch(e){ return ""; } }
 function sourceType(u){ const h=hostOf(u); if(/instagram/.test(h))return "instagram"; if(/tiktok/.test(h))return "tiktok"; if(/youtu/.test(h))return "youtube"; if(h)return "web"; return "manual"; }
+
+// Ingredient names and prep are stored lowercase whatever was typed (2.5.1): "Chicken Thigh"
+// would otherwise miss "chicken thigh" in the pantry and the shopping list. Changes the doc in
+// place, so the screen shows what was saved. raw_text keeps the line as written.
+function lowerIngredients(r){
+  if(Array.isArray(r.ingredients)) for(const i of r.ingredients) if(i&&typeof i==="object"){
+    if(typeof i.item==="string") i.item=i.item.toLowerCase();
+    if(typeof i.prep==="string") i.prep=i.prep.toLowerCase();
+  }
+  return r;
+}
 
 /* ---------- navigation ---------- */
 function show(view){
@@ -1107,8 +1119,11 @@ const people={
    list become an image, since the value comes from other people's profiles. */
 const VEG=["tomato","carrot","onion","garlic","broccoli","eggplant","capsicum","mushroom","potato","lemon","avocado","corn","chilli","ginger","basil","spring-onion"];
 const vegOf=photo=>{ const m=/^veg:([a-z-]+)$/.exec(String(photo||"")); return m&&VEG.includes(m[1])?m[1]:null; };
+// Someone without a picture gets one of the vegetables (2.5.1), picked from their id so it's the
+// same one on every phone and every visit. Nothing is stored; choosing a picture replaces it.
+const defaultVeg=id=>id?VEG[parseInt(hashStr("veg:"+id),36)%VEG.length]:null;
 function avatar(p,size="sm"){
-  const initial=esc(((p&&p.name)||"?").trim()[0]||"?").toUpperCase(), veg=vegOf(p&&p.photo);
+  const initial=esc(((p&&p.name)||"?").trim()[0]||"?").toUpperCase(), veg=vegOf(p&&p.photo)||(p&&!p.photo?defaultVeg(p.id):null);
   if(veg) return `<span class="av ${size} veg"><img src="/avatars/${veg}.webp" alt=""></span>`;
   const src=p&&p.photo?photoUrl(p.photo):"";
   return src ? `<span class="av ${size}"><img src="${src}" alt=""></span>` : `<span class="av ${size}" aria-hidden="true">${initial}</span>`;
@@ -1235,7 +1250,7 @@ let welcomeShown=false;
 function suggestName(email){ const w=String(email||"").split("@")[0].split(/[._+-]/)[0]; return w?w[0].toUpperCase()+w.slice(1):""; }
 function profileSheet(first){
   const me=store.me; if(!me) { toast("Can't reach the server to change your profile. Try again when you're back online."); return; }
-  const draft={name:me.name||(first?suggestName(me.email):""), photo:me.photo||null};
+  const draft={id:me.id, name:me.name||(first?suggestName(me.email):""), photo:me.photo||null};
   const sh=openSheet(`<h3>${first?"Welcome to Bourdain":"Your profile"}</h3>
     ${first?`<p class="muted small">What should we call you? Your name and photo appear next to your recipes and cooks when other people look.</p>`:""}
     <div class="profile-edit"><span id="pfAv">${avatar(draft,"lg")}</span>
@@ -2114,7 +2129,7 @@ function normalise(d,url){
   const n=x=>(x===null||x===undefined||x==="")?null:(isFinite(Number(x))?Number(x):null);
   return { title:String(d.title||"").trim(), description:String(d.description||""), source_url:url||"", source_type:sourceType(url),
     servings:n(d.servings), prep_min:n(d.prep_min), cook_min:n(d.cook_min), notes:String(d.notes||""),
-    ingredients:(Array.isArray(d.ingredients)?d.ingredients:[]).map(i=>({ raw_text:String(i.raw_text||""), quantity:n(i.quantity), unit:UNITS.includes(String(i.unit||"").toLowerCase())?String(i.unit).toLowerCase():"", item:String(i.item||i.raw_text||"").toLowerCase().trim(), prep:String(i.prep||""), section:String(i.section||""), aisle:AISLES.includes(i.aisle)?i.aisle:"other", optional:!!i.optional })),
+    ingredients:(Array.isArray(d.ingredients)?d.ingredients:[]).map(i=>({ raw_text:String(i.raw_text||""), quantity:n(i.quantity), unit:UNITS.includes(String(i.unit||"").toLowerCase())?String(i.unit).toLowerCase():"", item:String(i.item||i.raw_text||"").toLowerCase().trim(), prep:String(i.prep||"").toLowerCase(), section:String(i.section||""), aisle:AISLES.includes(i.aisle)?i.aisle:"other", optional:!!i.optional })),
     steps:(Array.isArray(d.steps)?d.steps:[]).map(s=>String(s).trim()).filter(Boolean),
     tags:(Array.isArray(d.tags)?d.tags:[]).map(t=>String(t).toLowerCase().trim()).filter(Boolean).slice(0,6) };
 }
@@ -2357,10 +2372,10 @@ function renderReview(){
         <span class="h" aria-label="Drag to reorder">⋮⋮</span>
         <input class="input" data-f="quantity" type="number" step="any" placeholder="qty" value="${i.quantity??""}">
         <select class="input" data-f="unit">${unitOpts(i.unit)}</select>
-        <input class="input" data-f="item" placeholder="ingredient" value="${esc(i.item)}">
+        <input class="input" data-f="item" autocapitalize="none" placeholder="ingredient" value="${esc(i.item)}">
         <button class="x" data-rm="${ix}" aria-label="Remove">×</button>
         <select class="input aisle-sel" data-f="aisle">${aisleOpts(i.aisle)}</select>
-        <input class="input" data-f="prep" placeholder="prep, e.g. diced" value="${esc(i.prep||"")}" style="grid-column:4/6">
+        <input class="input" data-f="prep" autocapitalize="none" placeholder="prep, e.g. diced" value="${esc(i.prep||"")}" style="grid-column:4/6">
       </div>`).join("")}</div>
     <button class="btn small" id="addIng">+ Ingredient</button>
     <p class="hint" style="margin-top:6px">Drag the ⋮⋮ handle to change the order.</p>
@@ -2371,7 +2386,7 @@ function renderReview(){
     <div class="actions"><button class="btn primary" id="revSave2">${state.editingId?"Save changes":"Save recipe"}</button></div>`;
   const collect=()=>{
     const rows=[...el.querySelectorAll(".ingrow")].map(r=>{ const g=f=>r.querySelector(`[data-f=${f}]`).value; const q=g("quantity"); const o=d.ingredients[+r.dataset.ix]||{};
-      return {raw_text:o.raw_text||"",quantity:q===""?null:Number(q),unit:g("unit"),item:g("item").trim().toLowerCase(),prep:g("prep").trim(),section:o.section||"",aisle:g("aisle"),optional:!!o.optional}; }).filter(i=>i.item);
+      return {raw_text:o.raw_text||"",quantity:q===""?null:Number(q),unit:g("unit"),item:g("item").trim().toLowerCase(),prep:g("prep").trim().toLowerCase(),section:o.section||"",aisle:g("aisle"),optional:!!o.optional}; }).filter(i=>i.item);
     const num=id=>{ const v=el.querySelector(id).value; return v===""?null:Number(v); };
     return {...d, title:el.querySelector("#fTitle").value.trim(), description:el.querySelector("#fDesc").value.trim(), servings:num("#fServ"), prep_min:num("#fPrep"), cook_min:num("#fCook"),
       source_url:el.querySelector("#fUrl").value.trim(), source_type:(el.querySelector("#fUrl").value.trim()===(d.source_url||"")) ? d.source_type : sourceType(el.querySelector("#fUrl").value.trim()),

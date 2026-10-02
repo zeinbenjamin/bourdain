@@ -6,6 +6,10 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.5.1 — 2026-10-02
+- Anyone without a profile picture now gets one of the vegetables instead of their initial. It's always the same one for the same person, and picking your own picture replaces it.
+- Ingredient names and prep notes are always saved in lowercase, even if you type them in capitals, and the keyboard no longer capitalises them as you type.
+
 ## 2.5.0 — 2026-10-02
 - Sixteen vegetable pictures to choose from for your profile, if you'd rather not use a photo.
 - Each recipe now shows roughly what it costs a serve to make at Australian supermarket prices, against eating out (the average of a casual place and a mid-range restaurant, both shown). Bourdain works this out by itself, and again only when the ingredients change.

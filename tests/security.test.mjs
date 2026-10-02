@@ -53,7 +53,7 @@ try {
   const src = await page.$eval("#view-theirs .source a", (a) => a.getAttribute("href")).catch(() => "none");
   check("Sam's recipe opens with the title as text, and nothing runs", /<img src=x/.test(await page.textContent("#view-theirs h2")) && (await pwned()) === 0 && (await handlers()).length === 0, JSON.stringify(await handlers()));
   check("…a javascript: source link is not a link", src === "" || src === null, String(src));
-  check("…a bad photo or cover id makes no image request", await page.evaluate(() => [...document.querySelectorAll("#view-theirs img")].every((i) => !i.getAttribute("src") || /^\/api\/(photos|covers)\/[a-f0-9]{32}$|^blob:/.test(i.getAttribute("src")))));
+  check("…a bad photo or cover id makes no image request", await page.evaluate(() => [...document.querySelectorAll("#view-theirs img")].every((i) => !i.getAttribute("src") || /^\/api\/(photos|covers)\/[a-f0-9]{32}$|^\/avatars\/[a-z-]+\.webp$|^blob:/.test(i.getAttribute("src")))));
   await page.hover("#view-theirs .source").catch(() => {}); await page.hover("#view-theirs .cstars, #view-theirs .fromline").catch(() => {});
   await page.click('#view-theirs button:has-text("Add to my recipes")'); await page.waitForSelector("#view-detail h2"); await sleep(400);
   check("…and a copy of it in your own book is just as harmless", (await pwned()) === 0 && (await handlers()).length === 0, JSON.stringify(await handlers()));
