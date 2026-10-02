@@ -183,6 +183,22 @@ try {
   await page.click('#sheet [data-act="nophoto"]'); await page.fill("#pfName", "Zein B"); await page.click('#sheet [data-act="save"]'); await sleep(300);
   check("…remove the photo and rename", (await api("/api/me")).j.name === "Zein B" && (await api("/api/me")).j.photo === null);
 
+  // --- vegetable pictures (2.5)
+  await page.click("#brand"); await page.click('#sheet [data-act="profile"]'); await page.waitForSelector("#sheet.open .vegpick");
+  check("the profile sheet offers 16 vegetable pictures, each easy to tap", (await page.locator("#sheet .vegpick").count()) === 16 && (await page.$$eval("#sheet .vegpick", (bs) => bs.every((b) => b.getBoundingClientRect().height >= 44))));
+  await page.click('#sheet .vegpick[data-v="tomato"]');
+  check("…picking one shows it straight away, marked as chosen", (await page.getAttribute("#pfAv .av img", "src")) === "/avatars/tomato.webp" && (await page.locator('#sheet .vegpick.on[data-v="tomato"]').count()) === 1);
+  await page.click('#sheet [data-act="save"]'); await sleep(300);
+  check("…and saves as veg:tomato", (await api("/api/me")).j.photo === "veg:tomato");
+  const pic = await fetch(s.url + "/avatars/tomato.webp");
+  check("…served as a small WebP", pic.ok && pic.headers.get("content-type") === "image/webp" && (await pic.arrayBuffer()).byteLength < 40000);
+  const badVeg = [await put("/api/me", { name: "Zein B", photo: "veg:dragonfruit" }), await put("/api/me", { name: "Zein B", photo: "veg:../../etc" }), await put("/api/me", { name: "Zein B", photo: "tomato" })];
+  check("…only the 16 pictures are accepted", badVeg.every((r) => r.j?.code === "bad_photo"), JSON.stringify(badVeg.map((r) => r.status)));
+  await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector(".people .person");
+  check("…and it's what others see in the People row", (await page.getAttribute(".people .person:first-child .av img", "src")) === "/avatars/tomato.webp");
+  await page.evaluate(() => { const fake = { name: "X", photo: 'veg:tomato" onerror="window.__p=1' }; document.body.insertAdjacentHTML("beforeend", avatar(fake)); });
+  check("…and a made-up picture name never becomes an image", !(await page.evaluate(() => [...document.querySelectorAll("img")].some((i) => /onerror|veg:/.test(i.getAttribute("src") || "")))));
+
   // --- layout
   await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector(".people .person");
   const sz = await page.evaluate(() => ({ person: [...document.querySelectorAll(".people .person")].map((x) => Math.round(x.getBoundingClientRect().height)), seg: Math.round(document.querySelector(".seg").getBoundingClientRect().height), over: document.documentElement.scrollWidth - innerWidth }));

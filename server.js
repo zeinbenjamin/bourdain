@@ -314,14 +314,17 @@ app.use("/api", async (req, res, next) => {
   next();
 });
 
-const me = (u) => ({ id: u.id, email: u.email, name: u.name || null, photo: u.photo || null, is_admin: Boolean(u.is_admin) });
+// The vegetable pictures in public/avatars (2.5), chosen as "veg:<name>".
+const VEG_AVATARS = ["tomato", "carrot", "onion", "garlic", "broccoli", "eggplant", "capsicum", "mushroom", "potato", "lemon", "avocado", "corn", "chilli", "ginger", "basil", "spring-onion"];
+const me = (u) => ({ id: u.id, email: u.email, name: u.name || null, photo: u.photo || null, is_admin: Boolean(u.is_admin), ai: Boolean(API_KEY) });
 app.get("/api/me", (req, res) => res.json(me(db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id))));
 // Name and photo. The photo is an id from /api/photos, like a recipe photo.
 app.put("/api/me", (req, res) => {
   const name = typeof req.body?.name === "string" ? req.body.name.trim().replace(/\s+/g, " ") : "";
   if (!name || name.length > 40) return res.status(400).json({ error: "a name is 1 to 40 characters", code: "bad_name" });
   const photo = req.body?.photo ?? null;
-  if (photo !== null && !/^[a-f0-9]{32}$/.test(photo)) return res.status(400).json({ error: "photo must be an uploaded photo id or null", code: "bad_photo" });
+  if (photo !== null && !/^[a-f0-9]{32}$/.test(photo) && !(typeof photo === "string" && VEG_AVATARS.includes(photo.replace(/^veg:/, "")) && photo.startsWith("veg:")))
+    return res.status(400).json({ error: "photo must be an uploaded photo id, a picture like veg:tomato, or null", code: "bad_photo" });
   db.prepare("UPDATE users SET name = ?, photo = ? WHERE id = ?").run(name, photo, req.user.id);
   logActivity(req.user.id, "profile_changed", name);
   res.json(me(db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id)));
@@ -407,7 +410,8 @@ const str = (v) => (typeof v === "string" ? v : "");
 const assetId = (v) => (typeof v === "string" && /^[a-f0-9]{32}$/.test(v) ? v : null);
 const ratingOf = (v) => (Number.isInteger(v) && v >= 0 && v <= 3 ? v : null);
 const feedEntry = (who, owner, recipeId, r, c) => ({ who, owner, recipeId, title: str(r.title), cover: assetId(r.cover), firstPhoto: assetId((Array.isArray(r.photos) && r.photos[0]) || null),
-  rating: ratingOf(r.rating), servings: Number(r.servings) > 0 ? Number(r.servings) : null, date: c.date, at: str(c.at) || c.date, mult: Number(c.mult) > 0 ? Number(c.mult) : 1 });
+  rating: ratingOf(r.rating), servings: Number(r.servings) > 0 ? Number(r.servings) : null,
+  cost: r.cost && money(r.cost.home_per_serve) !== null && money(r.cost.out_per_serve) !== null ? { home_per_serve: money(r.cost.home_per_serve), out_per_serve: money(r.cost.out_per_serve) } : null, date: c.date, at: str(c.at) || c.date, mult: Number(c.mult) > 0 ? Number(c.mult) : 1 });
 // The Archives feed: everyone's finished cooks, newest first, paged by `before`.
 app.get("/api/feed", (req, res) => {
   const before = typeof req.query.before === "string" ? req.query.before : null;
@@ -506,7 +510,8 @@ app.put("/api/:col(recipes|plan|pantry|shop)/:id", sameDataVersion, (req, res) =
     const prev = db.prepare("SELECT doc FROM recipes WHERE owner = ? AND id = ?").get(req.user.id, id);
     let was = null; try { was = prev && JSON.parse(prev.doc); } catch {}
     const cooked = ((doc.cooks || []).length) > (((was && was.cooks) || []).length);
-    logActivity(req.user.id, !prev ? "recipe_added" : cooked ? "cook_logged" : "recipe_edited", doc.title || "Untitled");
+    const sameApart = (a, b) => { const strip = ({ cost, updated_at, ...rest } = {}) => JSON.stringify(rest); return strip(a) === strip(b); };
+    if (!(was && sameApart(was, doc))) logActivity(req.user.id, !prev ? "recipe_added" : cooked ? "cook_logged" : "recipe_edited", doc.title || "Untitled"); // a new cost estimate isn't an edit
   } else if (col === "plan") logActivity(req.user.id, "plan_changed", id);
   else if (col === "pantry") logActivity(req.user.id, "pantry_changed", doc.item || id);
   db.prepare(`INSERT INTO ${col} (owner, id, doc, updated_at) VALUES (?, ?, ?, ?)
@@ -691,7 +696,48 @@ Reply with ONLY a JSON array of 3 objects: {"title": string, "why": string (one 
     return PARSE_PROMPT + `Write the full recipe for "${clip(m.title, 200)}" for 2 people, using these ingredients I already have where sensible: ${clip(m.have, 4000)}. Assume salt, pepper, oil and water are on hand.${missing.length ? ` It may also use: ${missing.join(", ")}.` : ""}`;
   } },
 };
-const LIMIT_GROUPS = ["import", "scan", "ideas", "cover"];
+// 2.5: guess a recipe from a photo of a dish, with how sure it is.
+const RECIPE_SHAPE = PARSE_PROMPT.slice(PARSE_PROMPT.indexOf("{\"title\""), PARSE_PROMPT.indexOf("\n\nIf an image"));
+const DISH_PROMPT = `You are looking at a photo of a finished dish (at a restaurant, a friend's place, or home). Work out what the dish most likely is, then write a recipe that would recreate it at home for 2 people, with realistic quantities. Reply with ONLY a JSON object, no prose: the recipe in this shape
+
+${RECIPE_SHAPE}
+
+plus one more key, "guess": {"dish": string (its usual name), "cuisine": string, "confidence": integer 0-100 (how sure you are what the dish is and what's in it: high only when it's clearly recognisable; low when the photo is unclear, the dish is unusual, or key components are hidden), "alternatives": [string] (up to 3 other dishes it could be), "basis": string (one sentence on what you can see that led to the guess)}.
+
+Put "Guessed from a photo" in "notes", with anything you couldn't see and assumed. Rules: as for any recipe, "whole" for countable items, "drizzle" for an unmeasured drizzle, quantities as decimals. If there's no food in the photo, reply {"error":"no dish"}.`;
+/* 2.5: home cost vs eating out (docs/cost-comparison.md). Reference prices keep
+   the same ingredient at the same price across recipes; they're approximate
+   2025-26 Coles/Woolworths prices, not quoted ones. */
+const STAPLE_PRICES = "chicken thigh fillet $14/kg; chicken breast $13/kg; whole chicken $6/kg; beef mince $13/kg; beef chuck or gravy beef $22/kg; beef rump $28/kg; thin-sliced beef $30/kg; pork belly $20/kg; pork mince $12/kg; salmon fillet $40/kg; raw prawns $35/kg; sashimi-grade fish $65/kg; eggs $0.65 each; milk $1.80/L; cream $11/L; butter $13/kg; cheddar $14/kg; parmesan $45/kg; jasmine rice $3/kg; short-grain rice $5/kg; dried pasta $4/kg; plain flour $1.50/kg; sugar $2/kg; onions $3/kg; garlic $20/kg; ginger $25/kg; potatoes $3/kg; carrots $2.50/kg; tomatoes $7/kg; capsicum $9/kg; napa cabbage $4 each; mushrooms $14/kg; spring onions $3/bunch; coriander $3/bunch; lemon or lime $0.80 each; avocado $2 each; tinned tomatoes $1.20/can; coconut milk $1.80/can; tofu $10/kg; olive oil $20/L; vegetable oil $5/L; soy sauce $8/L";
+const COST_PROMPT = (m) => `You estimate food costs for a recipe app used in Australia. All prices in Australian dollars including GST, at typical 2025-26 Sydney/Melbourne prices.
+1. Home cost: what the ingredients this recipe uses cost at Coles or Woolworths at regular prices (not specials). Count only the amount used: 2 tbsp of soy sauce costs cents, not a bottle. Count staples (oil, salt, spices) at their small used cost. Where there's no quantity, assume a typical amount for the recipe. Use these reference prices where they apply: ${STAPLE_PRICES}.
+2. Eating out: what one serve of this dish, or the closest comparable dish, costs eaten in at (a) a casual eatery or takeaway counter and (b) a mid-range sit-down restaurant in Australia. No delivery, no weekend or card surcharges. Price it at its course: a starter, snack or side against entrée or snack plates, a dessert against desserts, not against mains.
+Reply with ONLY a JSON object: {"course": "main"|"starter"|"snack"|"side"|"dessert"|"drink", "comparable": string (the dish as a menu would call it), "home_total": number (the whole recipe as written), "casual_per_serve": number, "mid_per_serve": number, "basis": string (one short sentence on what drives the cost)}
+
+RECIPE: ${clip(m.title, 200)}
+Serves: ${Number(m.servings) > 0 ? Number(m.servings) : "not given (assume 2)"}
+Ingredients:
+${(Array.isArray(m.ingredients) ? m.ingredients : []).slice(0, 60).map((i) => "- " + clip(i, 120)).join("\n")}`;
+const money = (v) => { const n = Number(v); return n >= 0 && n < 5000 ? Math.round(n * 100) / 100 : null; };
+const COURSES = ["main", "starter", "snack", "side", "dessert", "drink"];
+AI_JOBS.dish = { group: "import", images: 3, prompt: () => DISH_PROMPT,
+  finish: (j) => {
+    if (j && j.error) return j;
+    const g = j && j.guess && typeof j.guess === "object" ? j.guess : {};
+    const confidence = Math.max(0, Math.min(100, Math.round(Number(g.confidence)))) || 0;
+    return { ...j, guess: { dish: clip(g.dish || j.title, 120), cuisine: clip(g.cuisine, 60), confidence,
+      alternatives: (Array.isArray(g.alternatives) ? g.alternatives : []).slice(0, 3).map((a) => clip(a, 80)).filter(Boolean), basis: clip(g.basis, 300) } };
+  } };
+AI_JOBS.cost = { group: "cost", images: 0, maxTokens: 600, prompt: COST_PROMPT,
+  finish: (j, m) => {
+    const serves = Number(m.servings) > 0 ? Number(m.servings) : 2;
+    const home = money(j && j.home_total), casual = money(j && j.casual_per_serve), mid = money(j && j.mid_per_serve);
+    if (home === null || casual === null || mid === null) throw new UpstreamError(422, "invalid_json", "the cost estimate wasn't a set of prices");
+    return { currency: "AUD", course: COURSES.includes(j.course) ? j.course : "main", comparable: clip(j.comparable, 120), basis: clip(j.basis, 300), serves,
+      home_total: home, home_per_serve: Math.round((home / serves) * 100) / 100, casual_per_serve: casual, mid_per_serve: mid,
+      out_per_serve: Math.round(((casual + mid) / 2) * 100) / 100 }; // decided 2026-10-02: the average of casual and mid-range
+  } };
+const LIMIT_GROUPS = ["import", "scan", "ideas", "cover", "cost"];
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS ai_usage (id INTEGER PRIMARY KEY AUTOINCREMENT, user TEXT NOT NULL, at TEXT NOT NULL, day TEXT NOT NULL,
@@ -710,7 +756,7 @@ const getSetting = (k) => { const r = db.prepare("SELECT value FROM settings WHE
 const setSetting = (k, v) => v == null ? db.prepare("DELETE FROM settings WHERE key = ?").run(k)
   : db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(k, JSON.stringify(v));
 // Per person per day (local midnight: set TZ on the container), plus an estimated monthly budget.
-const DEFAULT_LIMITS = { import: 20, scan: 10, ideas: 15, cover: 5, monthly_usd: 5, storage_mb: 500, admin_exempt: true };
+const DEFAULT_LIMITS = { import: 20, scan: 10, ideas: 15, cover: 5, cost: 40, monthly_usd: 5, storage_mb: 500, admin_exempt: true };
 const limitsFor = (userId) => ({ ...DEFAULT_LIMITS, ...(getSetting("limits") || {}), ...(userId ? getSetting(`limits:${userId}`) || {} : {}) });
 /* Estimated cost. Claude per million tokens, from Anthropic's price list
    (claude-sonnet-4-6: $3 in, $15 out). The image price is a placeholder, not a
@@ -726,7 +772,7 @@ const aiInFlight = new Set();
 function aiBlock(user, group) {
   const lim = limitsFor(user.id);
   if (user.is_admin && lim.admin_exempt) return null;
-  if (aiInFlight.has(user.id)) return { status: 429, body: { error: "still working on your last one", code: "ai_busy" } };
+  if (group !== "cost" && aiInFlight.has(user.id)) return { status: 429, body: { error: "still working on your last one", code: "ai_busy" } }; // cost estimates run in the background, alongside
   const used = db.prepare("SELECT COUNT(*) AS n FROM ai_usage WHERE user = ? AND day = ? AND grp = ?").get(user.id, localDay(), group).n;
   if (used >= lim[group]) return { status: 429, body: { error: `daily limit reached (${lim[group]})`, code: "ai_limit", kind: group, limit: lim[group] } };
   const spent = db.prepare("SELECT COALESCE(SUM(est_usd), 0) AS s FROM ai_usage WHERE user = ? AND day LIKE ?").get(user.id, localDay().slice(0, 7) + "%").s;
@@ -739,19 +785,20 @@ function aiBlock(user, group) {
 async function runAi(req, res, kind, group, up, job) {
   const blocked = aiBlock(req.user, group);
   if (blocked) { res.status(blocked.status).json(blocked.body); return { blocked: true }; }
-  aiInFlight.add(req.user.id);
+  const solo = group !== "cost";
+  if (solo) aiInFlight.add(req.user.id);
   up.meter = { reached: false, input: 0, output: 0, images: 0 };
   let outcome = "ok";
   try { return { value: await job() }; }
   catch (err) { outcome = err instanceof UpstreamError ? err.code : up.clientGone() ? "stopped" : "error"; throw err; }
   finally {
-    aiInFlight.delete(req.user.id);
+    if (solo) aiInFlight.delete(req.user.id);
     const m = up.meter;
     if (m.reached) {
       const p = prices(), usd = (m.input * p.claude[0] + m.output * p.claude[1]) / 1e6 + m.images * p.image_usd;
       db.prepare(`INSERT INTO ai_usage (user, at, day, kind, grp, model, input_tokens, output_tokens, images, est_usd, outcome)
                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(req.user.id, new Date().toISOString(), localDay(), kind, group, MODEL, m.input, m.output, m.images, Math.round(usd * 1e6) / 1e6, outcome);
-      logActivity(req.user.id, "ai_" + kind, outcome === "ok" ? "" : outcome);
+      if (kind !== "cost") logActivity(req.user.id, "ai_" + kind, outcome === "ok" ? "" : outcome); // background estimates would drown the log
     }
   }
 }
@@ -773,10 +820,10 @@ app.post("/api/ai", async (req, res) => {
   const up = upstreamSignal(res, 120_000);
   try {
     const r = await runAi(req, res, kind, job.group, up, async () => {
-      const text = await callClaude({ content, up });
+      const text = await callClaude({ content, up, ...(job.maxTokens ? { maxTokens: job.maxTokens } : {}) });
       const json = parseJsonReply(text);
       if (json === undefined) throw Object.assign(new UpstreamError(422, "invalid_json", "model did not return JSON"), { raw: text.slice(0, 500) });
-      return json;
+      return job.finish ? job.finish(json, material && typeof material === "object" ? material : {}) : json;
     });
     if (r.blocked) return;
     res.json({ json: r.value });
@@ -979,7 +1026,7 @@ app.put("/api/admin/people/:id", requireAdmin, (req, res) => {
   const now = db.prepare("SELECT disabled_at FROM users WHERE id = ?").get(u.id);
   res.json({ id: u.id, paused: Boolean(now.disabled_at), paused_at: now.disabled_at || null });
 });
-const LIMIT_LABELS = { import: "Imports a day", scan: "Fridge scans a day", ideas: "Ideas + write a day", cover: "Covers a day", monthly_usd: "Monthly allowance (US$)", storage_mb: "Photo storage (MB)", admin_exempt: "No limits for the owner" };
+const LIMIT_LABELS = { import: "Imports a day", scan: "Fridge scans a day", ideas: "Ideas + write a day", cover: "Covers a day", cost: "Cost estimates a day", monthly_usd: "Monthly allowance (US$)", storage_mb: "Photo storage (MB)", admin_exempt: "No limits for the owner" };
 const limitChanges = (from, to) => Object.entries(to).filter(([k, v]) => from[k] !== v)
   .map(([k, v]) => `${LIMIT_LABELS[k] || k} ${typeof v === "boolean" ? (from[k] ? "on" : "off") : from[k]} → ${typeof v === "boolean" ? (v ? "on" : "off") : v}`).join("; ");
 // Limits: the defaults for everyone, one person's overrides (null clears them), and the image price estimate.
@@ -1283,10 +1330,49 @@ async function publicGet(url, signal) {
   throw new Error("too many redirects");
 }
 
+/* YouTube (2.5). The watch page is mostly script: the description, where recipes
+   usually are, sits inside it as JSON ("shortDescription"). oEmbed gives the
+   title and channel. Only youtube.com is fetched, built from the video id, so
+   this path can't be pointed anywhere else. Audio isn't transcribed: a recipe
+   that's only spoken needs a screen recording, as with Instagram.        */
+function youtubeId(link) {
+  try {
+    const u = new URL(link), h = u.hostname.toLowerCase().replace(/^(www\.|m\.|music\.)/, "");
+    let id = null;
+    if (h === "youtu.be") id = u.pathname.slice(1).split("/")[0];
+    else if (h === "youtube.com" || h === "youtube-nocookie.com") id = u.searchParams.get("v") || (u.pathname.match(/^\/(?:shorts|embed|live|v)\/([\w-]+)/) || [])[1];
+    return /^[\w-]{11}$/.test(id || "") ? id : null;
+  } catch { return null; }
+}
+const decodeEntities = (t) => t.replace(/&amp;/g, "&").replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+async function youtubeText(id) {
+  const watch = `https://www.youtube.com/watch?v=${id}`, parts = [];
+  try {
+    const r = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(watch)}`, { signal: AbortSignal.timeout(10000) });
+    if (r.ok) { const j = await r.json(); parts.push([j.title, j.author_name && `by ${j.author_name}`].filter(Boolean).join("\n")); }
+  } catch (err) { console.warn("youtube oembed failed", id, err.message); }
+  try {
+    const r = await fetch(`${watch}&hl=en`, { signal: AbortSignal.timeout(15000), headers: {
+      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+      "accept-language": "en-AU,en;q=0.9", cookie: "CONSENT=YES+cb; SOCS=CAI" } }); // skip the cookie-consent page
+    const html = r.ok ? await r.text() : "";
+    const m = html.match(/"shortDescription":"((?:[^"\\]|\\.)*)"/);
+    let desc = ""; if (m) { try { desc = JSON.parse(`"${m[1]}"`); } catch {} }
+    if (!desc) desc = decodeEntities(html.match(/<meta[^>]+(?:name|property)=["'](?:og:)?description["'][^>]+content=["']([^"']*)/i)?.[1] || "");
+    if (desc) parts.push(desc);
+  } catch (err) { console.warn("youtube page failed", id, err.message); }
+  return parts.filter(Boolean).join("\n\n").slice(0, 20000);
+}
 app.post("/api/fetch", async (req, res) => {
   const { url } = req.body || {};
   if (!/^https?:\/\//i.test(url || "")) return res.status(400).json({ error: "bad url", code: "bad_url" });
   try { new URL(url); } catch { return res.status(400).json({ error: "bad url", code: "bad_url" }); }
+  const yt = youtubeId(url);
+  if (yt) {
+    const text = await youtubeText(yt);
+    if (!text) return res.status(502).json({ error: "nothing came back from YouTube", code: "fetch_failed" });
+    return res.json({ text, recipeJson: null, source: "youtube" });
+  }
 
   const targets = [url];
   // TikTok's public oEmbed endpoint returns the caption, which the page itself hides.
@@ -1322,7 +1408,7 @@ app.post("/api/fetch", async (req, res) => {
       parts.push([ogDesc, stripTags(body).slice(0, 20000)].filter(Boolean).join("\n\n"));
     } catch (err) {
       if (err instanceof BlockedAddress) {
-        console.warn();
+        console.warn(`refused to fetch ${target}: ${err.message}`);
         if (target === url) return res.status(400).json({ error: "that link points inside a private network", code: "blocked_address" });
         continue;
       }

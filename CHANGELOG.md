@@ -6,6 +6,13 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.5.0 — 2026-10-02
+- Sixteen vegetable pictures to choose from for your profile, if you'd rather not use a photo.
+- Each recipe now shows roughly what it costs a serve to make at Australian supermarket prices, against eating out (the average of a casual place and a mid-range restaurant, both shown). Bourdain works this out by itself, and again only when the ingredients change.
+- The Archives show about how much each cook saved against eating out, every serving counted, with a total for the month and the year.
+- YouTube links now import: Bourdain reads the video's title and description. If the recipe is only spoken in the video, screen-record it instead.
+- New: Guess from a photo of a dish, under the Recipes "+". Bourdain names the dish, says how sure it is (High, Medium or Low, with a percentage) and what else it might be, and writes a likely recipe for you to check before saving.
+
 ## 2.4.0 — 2026-10-02
 - Litres now show as a capital L (1½ L stock), so they can't be mistaken for a 1.
 - New ingredient unit: drizzle, for things like olive oil to finish.
