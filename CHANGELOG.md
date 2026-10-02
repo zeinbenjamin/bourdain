@@ -6,6 +6,9 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.5.3 — 2026-10-02
+- The import page shows where a link can come from, with an icon each, under the link box: recipe sites, Instagram, TikTok and YouTube.
+
 ## 2.5.2 — 2026-10-02
 - Two more vegetable pictures to choose from: spinach and red onion. People without a picture may see a different vegetable once, as their default is picked again from the bigger set.
 - Eating out is now compared against casual prices only (a casual eatery or takeaway counter). Mid-range restaurant prices are gone, so savings in the Archives are smaller and more realistic. Recipes already estimated switch to their casual price without being estimated again.

@@ -180,6 +180,12 @@ try {
   const tx = await xBox("#thumbs [data-rmi]");
   check("import: screenshot × is a 44px tap area too", tx.length === 1 && tx[0].w >= 44 && tx[0].h >= 44, JSON.stringify(tx));
   await page.evaluate(() => { state.images = []; renderThumbs(); });
+  const src = await page.evaluate(() => { const link = document.querySelector("#srcUrl").getBoundingClientRect(), ul = document.querySelector(".srcicons");
+    return { names: [...ul.querySelectorAll("li")].map((l) => l.textContent.trim()), icons: [...ul.querySelectorAll("li svg")].map((g) => Math.round(g.getBoundingClientRect().width)),
+      gap: Math.round(ul.getBoundingClientRect().top - link.bottom), right: Math.round(ul.getBoundingClientRect().right), vw: document.documentElement.clientWidth,
+      rows: new Set([...ul.querySelectorAll("li")].map((l) => Math.round(l.getBoundingClientRect().top))).size, over: document.documentElement.scrollWidth - document.documentElement.clientWidth }; });
+  check("import: under the link box, where links can come from, with an icon each", src.names.join() === "Recipe sites,Instagram,TikTok,YouTube" && src.icons.every((w) => w === 20) && src.gap >= 2 && src.gap <= 12, JSON.stringify(src));
+  check("…on one line at phone width, no sideways scroll", src.rows === 1 && src.right <= src.vw && src.over <= 0, JSON.stringify(src));
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
 } catch (e) { finish(e); } finally { await b?.browser.close(); await s?.cleanup(); }

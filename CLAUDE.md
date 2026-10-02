@@ -387,8 +387,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v38"`
-in `public/sw.js` → `v39`, `v40`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v39"`
+in `public/sw.js` → `v40`, `v41`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -555,6 +555,10 @@ Four routes in, most to least reliable:
    comparing downscaled pixel diffs, and tiles survivors into contact sheets
    (6 per sheet, 4 sheets max). Audio is not transcribed; the model reads
    on-screen text and caption overlays.
+
+The import form lists these under the link box (`.srcicons`, 2.5.3: recipe
+sites, Instagram, TikTok, YouTube, as plain ink line icons); add a route there
+when one is added here.
 
 Instagram links work when the recipe is written in the caption or comments. When
 it is only said or shown in the video, screenshots or a recording are the way
