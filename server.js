@@ -315,7 +315,7 @@ app.use("/api", async (req, res, next) => {
 });
 
 // The vegetable pictures in public/avatars (2.5), chosen as "veg:<name>".
-const VEG_AVATARS = ["tomato", "carrot", "onion", "garlic", "broccoli", "eggplant", "capsicum", "mushroom", "potato", "lemon", "avocado", "corn", "chilli", "ginger", "basil", "spring-onion"];
+const VEG_AVATARS = ["tomato", "carrot", "onion", "garlic", "broccoli", "eggplant", "capsicum", "mushroom", "potato", "lemon", "avocado", "corn", "chilli", "ginger", "basil", "spring-onion", "spinach", "red-onion"];
 const me = (u) => ({ id: u.id, email: u.email, name: u.name || null, photo: u.photo || null, is_admin: Boolean(u.is_admin), ai: Boolean(API_KEY) });
 app.get("/api/me", (req, res) => res.json(me(db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id))));
 // Name and photo. The photo is an id from /api/photos, like a recipe photo.
@@ -411,7 +411,7 @@ const assetId = (v) => (typeof v === "string" && /^[a-f0-9]{32}$/.test(v) ? v : 
 const ratingOf = (v) => (Number.isInteger(v) && v >= 0 && v <= 3 ? v : null);
 const feedEntry = (who, owner, recipeId, r, c) => ({ who, owner, recipeId, title: str(r.title), cover: assetId(r.cover), firstPhoto: assetId((Array.isArray(r.photos) && r.photos[0]) || null),
   rating: ratingOf(r.rating), servings: Number(r.servings) > 0 ? Number(r.servings) : null,
-  cost: r.cost && money(r.cost.home_per_serve) !== null && money(r.cost.out_per_serve) !== null ? { home_per_serve: money(r.cost.home_per_serve), out_per_serve: money(r.cost.out_per_serve) } : null, date: c.date, at: str(c.at) || c.date, mult: Number(c.mult) > 0 ? Number(c.mult) : 1 });
+  cost: r.cost && money(r.cost.home_per_serve) !== null && money(r.cost.casual_per_serve ?? r.cost.out_per_serve) !== null ? { home_per_serve: money(r.cost.home_per_serve), out_per_serve: money(r.cost.casual_per_serve ?? r.cost.out_per_serve) } : null, date: c.date, at: str(c.at) || c.date, mult: Number(c.mult) > 0 ? Number(c.mult) : 1 });
 // The Archives feed: everyone's finished cooks, newest first, paged by `before`.
 app.get("/api/feed", (req, res) => {
   const before = typeof req.query.before === "string" ? req.query.before : null;
@@ -711,8 +711,8 @@ Put "Guessed from a photo" in "notes", with anything you couldn't see and assume
 const STAPLE_PRICES = "chicken thigh fillet $14/kg; chicken breast $13/kg; whole chicken $6/kg; beef mince $13/kg; beef chuck or gravy beef $22/kg; beef rump $28/kg; thin-sliced beef $30/kg; pork belly $20/kg; pork mince $12/kg; salmon fillet $40/kg; raw prawns $35/kg; sashimi-grade fish $65/kg; eggs $0.65 each; milk $1.80/L; cream $11/L; butter $13/kg; cheddar $14/kg; parmesan $45/kg; jasmine rice $3/kg; short-grain rice $5/kg; dried pasta $4/kg; plain flour $1.50/kg; sugar $2/kg; onions $3/kg; garlic $20/kg; ginger $25/kg; potatoes $3/kg; carrots $2.50/kg; tomatoes $7/kg; capsicum $9/kg; napa cabbage $4 each; mushrooms $14/kg; spring onions $3/bunch; coriander $3/bunch; lemon or lime $0.80 each; avocado $2 each; tinned tomatoes $1.20/can; coconut milk $1.80/can; tofu $10/kg; olive oil $20/L; vegetable oil $5/L; soy sauce $8/L";
 const COST_PROMPT = (m) => `You estimate food costs for a recipe app used in Australia. All prices in Australian dollars including GST, at typical 2025-26 Sydney/Melbourne prices.
 1. Home cost: what the ingredients this recipe uses cost at Coles or Woolworths at regular prices (not specials). Count only the amount used: 2 tbsp of soy sauce costs cents, not a bottle. Count staples (oil, salt, spices) at their small used cost. Where there's no quantity, assume a typical amount for the recipe. Use these reference prices where they apply: ${STAPLE_PRICES}.
-2. Eating out: what one serve of this dish, or the closest comparable dish, costs eaten in at (a) a casual eatery or takeaway counter and (b) a mid-range sit-down restaurant in Australia. No delivery, no weekend or card surcharges. Price it at its course: a starter, snack or side against entrée or snack plates, a dessert against desserts, not against mains.
-Reply with ONLY a JSON object: {"course": "main"|"starter"|"snack"|"side"|"dessert"|"drink", "comparable": string (the dish as a menu would call it), "home_total": number (the whole recipe as written), "casual_per_serve": number, "mid_per_serve": number, "basis": string (one short sentence on what drives the cost)}
+2. Eating out: what one serve of this dish, or the closest comparable dish, costs eaten in at a casual eatery or takeaway counter in Australia. No delivery, no weekend or card surcharges. Price it at its course: a starter, snack or side against entrée or snack plates, a dessert against desserts, not against mains.
+Reply with ONLY a JSON object: {"course": "main"|"starter"|"snack"|"side"|"dessert"|"drink", "comparable": string (the dish as a menu would call it), "home_total": number (the whole recipe as written), "casual_per_serve": number, "basis": string (one short sentence on what drives the cost)}
 
 RECIPE: ${clip(m.title, 200)}
 Serves: ${Number(m.servings) > 0 ? Number(m.servings) : "not given (assume 2)"}
@@ -731,11 +731,11 @@ AI_JOBS.dish = { group: "import", images: 3, prompt: () => DISH_PROMPT,
 AI_JOBS.cost = { group: "cost", images: 0, maxTokens: 600, prompt: COST_PROMPT,
   finish: (j, m) => {
     const serves = Number(m.servings) > 0 ? Number(m.servings) : 2;
-    const home = money(j && j.home_total), casual = money(j && j.casual_per_serve), mid = money(j && j.mid_per_serve);
-    if (home === null || casual === null || mid === null) throw new UpstreamError(422, "invalid_json", "the cost estimate wasn't a set of prices");
+    const home = money(j && j.home_total), casual = money(j && j.casual_per_serve);
+    if (home === null || casual === null) throw new UpstreamError(422, "invalid_json", "the cost estimate wasn't a set of prices");
     return { currency: "AUD", course: COURSES.includes(j.course) ? j.course : "main", comparable: clip(j.comparable, 120), basis: clip(j.basis, 300), serves,
-      home_total: home, home_per_serve: Math.round((home / serves) * 100) / 100, casual_per_serve: casual, mid_per_serve: mid,
-      out_per_serve: Math.round(((casual + mid) / 2) * 100) / 100 }; // decided 2026-10-02: the average of casual and mid-range
+      home_total: home, home_per_serve: Math.round((home / serves) * 100) / 100, casual_per_serve: casual,
+      out_per_serve: casual }; // 2.5.2: casual prices only (it was the average of casual and mid-range)
   } };
 const LIMIT_GROUPS = ["import", "scan", "ideas", "cover", "cost"];
 

@@ -29,7 +29,7 @@ Four collections, each stored as JSON blobs keyed by **(owner, id)**: `recipes`,
 owns it. The server sets `owner` from who's asking (`req.user`), never from the
 phone, and every read and write is scoped to it. Alongside them:
 - `users (id, email, name, photo, is_admin, created_at, last_seen)`. `photo` is
-  an uploaded photo id or, since 2.5, `veg:<name>` for one of the 16 vegetable
+  an uploaded photo id or, since 2.5, `veg:<name>` for one of the 18 vegetable
   pictures in `public/avatars/` (`VEG_AVATARS` in `server.js`, `VEG` in
   `index.html`; `avatar()` draws them). Since 2.5.1 someone with no `photo`
   is drawn with `defaultVeg(id)`, a vegetable picked from a hash of their id, so
@@ -52,7 +52,7 @@ A recipe:
   rating: 0|1|2|3,                  // optional Michelin-style stars; 0 = rated "no stars", missing = not rated
   cooks: [{date, at, mult}],        // one per finished cook: local ISO date, timestamp, batch multiplier
   copied_from: {owner, id, name, title}, // set on a copy made with Add to my recipes (2.1); the credit line
-  cost: {home_per_serve, casual_per_serve, mid_per_serve, out_per_serve, course, currency, hash, at}, // 2.5, see Cost
+  cost: {home_per_serve, casual_per_serve, out_per_serve, course, currency, hash, at}, // 2.5, see Cost
   guess: {dish, cuisine, confidence, alternatives, basis}, // 2.5, set by Guess from a photo
   tags: [string],
   ingredients: [{
@@ -387,8 +387,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v37"`
-in `public/sw.js` → `v38`, `v39`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v38"`
+in `public/sw.js` → `v39`, `v40`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -658,9 +658,11 @@ the client must finish syncing before it switches format.
 Home cost vs eating out (2.5; decisions and figures in `docs/cost-comparison.md`).
 The `cost` job takes a recipe's title, servings and ingredient lines and returns,
 in AUD, the home cost (Coles/Woolworths, only what's used; `STAPLE_PRICES` keeps
-common items consistent) and a casual and a mid-range price per serve for a
-comparable dish at the right course. The server computes `home_per_serve` and
-`out_per_serve` (the average). On the phone, `costs` estimates in the background,
+common items consistent) and a casual eatery's price per serve for a
+comparable dish at the right course. The server computes `home_per_serve`;
+`out_per_serve` is the casual price (2.5.2). Estimates from 2.5.0–2.5.1 also
+have `mid_per_serve`, and their `out_per_serve` is the old average, so the
+phone and `feedEntry` read `casual_per_serve` first (`outOf()`). On the phone, `costs` estimates in the background,
 one at a time, any recipe whose `cost.hash` (title-free hash of servings and
 ingredients) is missing or stale, and saves it with `store.enqueue` (no toast).
 It runs only when `store.me.ai` (the server has a Claude key). Saved per cook =

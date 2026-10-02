@@ -189,20 +189,22 @@ try {
     same: avatar({ id: "abc", name: "A" }) === avatar({ id: "abc", name: "B" }).replace(/B/g, "A"),
     spread: new Set(Array.from({ length: 40 }, (_, i) => defaultVeg("u" + i))).size, noId: avatar({ name: "Ann" }) }));
   check("no picture: a vegetable instead of the initial, the same one every time", dflt.mine === dflt.want && dflt.same, JSON.stringify(dflt));
-  check("…spread across the 16, so people don't all get the same one", dflt.spread >= 8, String(dflt.spread));
+  check("…spread across the 18, so people don't all get the same one", dflt.spread >= 8, String(dflt.spread));
   check("…nothing is stored for it", (await api("/api/me")).j.photo === null && /^<span class="av sm" aria-hidden="true">A<\/span>$/.test(dflt.noId));
 
   // --- vegetable pictures (2.5)
   await page.click("#brand"); await page.click('#sheet [data-act="profile"]'); await page.waitForSelector("#sheet.open .vegpick");
-  check("the profile sheet offers 16 vegetable pictures, each easy to tap", (await page.locator("#sheet .vegpick").count()) === 16 && (await page.$$eval("#sheet .vegpick", (bs) => bs.every((b) => b.getBoundingClientRect().height >= 44))));
+  check("the profile sheet offers 18 vegetable pictures, each easy to tap", (await page.locator("#sheet .vegpick").count()) === 18 && (await page.$$eval("#sheet .vegpick", (bs) => bs.every((b) => b.getBoundingClientRect().height >= 44))));
   await page.click('#sheet .vegpick[data-v="tomato"]');
   check("…picking one shows it straight away, marked as chosen", (await page.getAttribute("#pfAv .av img", "src")) === "/avatars/tomato.webp" && (await page.locator('#sheet .vegpick.on[data-v="tomato"]').count()) === 1);
   await page.click('#sheet [data-act="save"]'); await sleep(300);
   check("…and saves as veg:tomato", (await api("/api/me")).j.photo === "veg:tomato");
   const pic = await fetch(s.url + "/avatars/tomato.webp");
+  check("…including spinach and red onion (2.5.2)", (await Promise.all(["spinach", "red-onion"].map(async (v) => { const r = await fetch(s.url + `/avatars/${v}.webp`); return r.ok && r.headers.get("content-type") === "image/webp"; }))).every(Boolean) && (await put("/api/me", { name: "Zein B", photo: "veg:red-onion" })).j?.photo === "veg:red-onion");
+  await put("/api/me", { name: "Zein B", photo: "veg:tomato" });
   check("…served as a small WebP", pic.ok && pic.headers.get("content-type") === "image/webp" && (await pic.arrayBuffer()).byteLength < 40000);
   const badVeg = [await put("/api/me", { name: "Zein B", photo: "veg:dragonfruit" }), await put("/api/me", { name: "Zein B", photo: "veg:../../etc" }), await put("/api/me", { name: "Zein B", photo: "tomato" })];
-  check("…only the 16 pictures are accepted", badVeg.every((r) => r.j?.code === "bad_photo"), JSON.stringify(badVeg.map((r) => r.status)));
+  check("…only the 18 pictures are accepted", badVeg.every((r) => r.j?.code === "bad_photo"), JSON.stringify(badVeg.map((r) => r.status)));
   await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector(".people .person");
   check("…and it's what others see in the People row", (await page.getAttribute(".people .person:first-child .av img", "src")) === "/avatars/tomato.webp");
   await page.evaluate(() => { const fake = { name: "X", photo: 'veg:tomato" onerror="window.__p=1' }; document.body.insertAdjacentHTML("beforeend", avatar(fake)); });

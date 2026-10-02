@@ -1117,7 +1117,7 @@ const people={
 /* Profile pictures (2.5): an uploaded photo, one of the vegetable icons in
    /avatars ("veg:tomato"), or the person's initial on grey. Only names on this
    list become an image, since the value comes from other people's profiles. */
-const VEG=["tomato","carrot","onion","garlic","broccoli","eggplant","capsicum","mushroom","potato","lemon","avocado","corn","chilli","ginger","basil","spring-onion"];
+const VEG=["tomato","carrot","onion","garlic","broccoli","eggplant","capsicum","mushroom","potato","lemon","avocado","corn","chilli","ginger","basil","spring-onion","spinach","red-onion"];
 const vegOf=photo=>{ const m=/^veg:([a-z-]+)$/.exec(String(photo||"")); return m&&VEG.includes(m[1])?m[1]:null; };
 // Someone without a picture gets one of the vegetables (2.5.1), picked from their id so it's the
 // same one on every phone and every visit. Nothing is stored; choosing a picture replaces it.
@@ -2256,19 +2256,22 @@ function photosHtml(ids,editable){
 /* ---------- cost: home vs eating out (2.5) ----------
    See docs/cost-comparison.md. Each recipe gets one estimate, an AI job on the
    server: what it costs to make at Australian supermarket prices, and one serve
-   eaten out, casual and mid-range. The comparison uses their average. It's kept
+   eaten out at a casual place (2.5.2; it was the average with mid-range). It's kept
    on the recipe as `cost`, with a hash of what it was worked out from, and is
    redone only when the ingredients or servings change. Estimates run in the
    background, one at a time, and only when the server has a Claude key.
    Every serving made counts, leftovers included. */
 const aud=n=>{ n=Number(n)||0; return n>=10?"$"+Math.round(n):"$"+n.toFixed(2).replace(/\.00$/,""); };
 function hashStr(s){ let h=5381; for(let i=0;i<s.length;i++) h=((h<<5)+h+s.charCodeAt(i))|0; return (h>>>0).toString(36); }
-const costOk=c=>Boolean(c&&Number(c.home_per_serve)>=0&&Number(c.out_per_serve)>=0);
+// The eating-out price is the casual one. Estimates from 2.5.0/2.5.1 also kept a mid-range price and
+// stored their average as out_per_serve, so their casual price is read first.
+const outOf=c=>Number(c&&c.casual_per_serve!=null?c.casual_per_serve:c&&c.out_per_serve);
+const costOk=c=>Boolean(c&&Number(c.home_per_serve)>=0&&outOf(c)>=0);
 // What one cook saved: (eating out − home) per serve × every serving made.
 function cookSaved(cost,servings,mult){
   if(!costOk(cost)) return null;
   const serves=(Number(servings)>0?Number(servings):Number(cost.serves)||2)*(Number(mult)>0?Number(mult):1);
-  return Math.max(0,(Number(cost.out_per_serve)-Number(cost.home_per_serve))*serves);
+  return Math.max(0,(outOf(cost)-Number(cost.home_per_serve))*serves);
 }
 const costs={
   queue:[], busy:false, failed:{}, off:false,
@@ -2302,8 +2305,8 @@ const costs={
 };
 function costHtml(r){
   const c=r&&r.cost; if(!costOk(c)) return "";
-  return `<div class="costline"><span>About <b>${esc(aud(c.home_per_serve))}</b> a serve to make · about <b>${esc(aud(c.out_per_serve))}</b> eating out</span>
-    <small>Estimated${c.comparable?` against ${esc(c.comparable)}`:""}: casual ${esc(aud(c.casual_per_serve))}, mid-range ${esc(aud(c.mid_per_serve))} a serve, at Australian prices.</small></div>`;
+  return `<div class="costline"><span>About <b>${esc(aud(c.home_per_serve))}</b> a serve to make · about <b>${esc(aud(outOf(c)))}</b> eating out</span>
+    <small>Estimated${c.comparable?` against ${esc(c.comparable)}`:""} at a casual place, at Australian prices.</small></div>`;
 }
 
 /* ---------- guess a recipe from a photo of a dish (2.5) ----------
