@@ -90,7 +90,7 @@ try {
   const img = await sharp({ create: { width: 300, height: 300, channels: 3, background: "#7a5c9e" } }).jpeg().toBuffer();
   const [fc] = await Promise.all([page.waitForEvent("filechooser"), page.click('#sheet [data-act="photo"]')]);
   await fc.setFiles({ name: "me.jpg", mimeType: "image/jpeg", buffer: img });
-  await page.waitForSelector("#pfAv .av img");
+  await page.waitForSelector('#pfAv .av img:not([src^="/avatars/"])');
   await page.click('#sheet [data-act="save"]'); await sleep(400);
   const meSaved = (await api("/api/me")).j;
   check("Save: name and photo stored, 'Welcome, Zein.'", meSaved.name === "Zein" && /^[a-f0-9]{32}$/.test(meSaved.photo || "") && /Welcome, Zein\./.test(await page.textContent("#toast")), JSON.stringify(meSaved));
@@ -182,6 +182,15 @@ try {
   check("Edit profile: your name and photo", (await page.inputValue("#pfName")) === "Zein" && Boolean(await page.$("#pfAv .av img")) && /Your profile/.test(await page.textContent("#sheet h3")));
   await page.click('#sheet [data-act="nophoto"]'); await page.fill("#pfName", "Zein B"); await page.click('#sheet [data-act="save"]'); await sleep(300);
   check("…remove the photo and rename", (await api("/api/me")).j.name === "Zein B" && (await api("/api/me")).j.photo === null);
+
+  // --- a default vegetable for anyone without a picture (2.5.1)
+  await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector(".people .person");
+  const dflt = await page.evaluate(() => ({ mine: document.querySelector(".people .person:first-child .av img")?.getAttribute("src"), want: "/avatars/" + defaultVeg(store.me.id) + ".webp",
+    same: avatar({ id: "abc", name: "A" }) === avatar({ id: "abc", name: "B" }).replace(/B/g, "A"),
+    spread: new Set(Array.from({ length: 40 }, (_, i) => defaultVeg("u" + i))).size, noId: avatar({ name: "Ann" }) }));
+  check("no picture: a vegetable instead of the initial, the same one every time", dflt.mine === dflt.want && dflt.same, JSON.stringify(dflt));
+  check("…spread across the 16, so people don't all get the same one", dflt.spread >= 8, String(dflt.spread));
+  check("…nothing is stored for it", (await api("/api/me")).j.photo === null && /^<span class="av sm" aria-hidden="true">A<\/span>$/.test(dflt.noId));
 
   // --- vegetable pictures (2.5)
   await page.click("#brand"); await page.click('#sheet [data-act="profile"]'); await page.waitForSelector("#sheet.open .vegpick");
