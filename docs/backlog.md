@@ -2,6 +2,7 @@
 
 What's outstanding, newest first within each group. Remove a row once it's done;
 the CHANGELOG records what shipped.
+Priorities follow `docs/strategy.md`: reliability first, then the core loop.
 
 ## From pilot users
 

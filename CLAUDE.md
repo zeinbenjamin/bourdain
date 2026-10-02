@@ -630,6 +630,8 @@ own plus its photos, from the version sheet; `GET /api/export`, written by the
 small `zipStore()` in `server.js` with no dependency).
 
 Everything outstanding (pilot requests, setup, ideas) is in `docs/backlog.md`.
+The long-term plan (the pilot, what to watch, and the decision at its end) is
+in `docs/strategy.md`; weigh new feature requests against it.
 Ideas not yet built: nutrition estimates, pantry quantities decremented by
 cooking, timer alerts while the phone is locked (would need push
 notifications), restoring the shopping list, and
