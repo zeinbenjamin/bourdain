@@ -227,6 +227,15 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .vegpick{height:48px;border:1px solid var(--line);border-radius:50%;background:var(--paper);padding:5px;aspect-ratio:1;justify-self:center}
 .vegpick img{width:100%;height:100%;object-fit:contain;display:block}
 .vegpick.on{border:2px solid var(--flame)}
+.pf-mbti,.mbti-rand{min-height:44px}
+.pf-mbti{margin:0 0 12px}
+.mbti{margin:0 0 14px}
+.mbti-g{margin:0 0 8px}
+.mbti-h{display:block;font-family:var(--sans);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);margin:0 0 4px}
+.mbti-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.mbtype{min-height:44px;border:1px solid var(--line);border-radius:22px;background:var(--paper);font-family:var(--sans);font-size:13px;font-weight:600;letter-spacing:.04em;color:var(--ink)}
+.mbtype.on{border:2px solid var(--flame)}
+.mbti-say{font-family:var(--sans);font-size:14px;margin:10px 0 4px;min-height:1.4em}
 .av.xs{width:18px;height:18px;font-size:10px;margin-right:5px;border:0}
 .av.sm{width:32px;height:32px;font-size:15px}
 .av.md{width:44px;height:44px;font-size:19px}
@@ -1253,6 +1262,15 @@ function wirePersonHead(){
    sheet and your own profile after that. */
 let welcomeShown=false;
 function suggestName(email){ const w=String(email||"").split("@")[0].split(/[._+-]/)[0]; return w?w[0].toUpperCase()+w.slice(1):""; }
+// 2.5.6: a playful way to pick a vegetable. Picking a type only chooses the picture;
+// the type itself is never sent or stored.
+const MBTI=[
+  ["Analysts",[["INTJ","red-onion","a red onion","Layered, complex, understated."],["INTP","mushroom","a mushroom","Curious and unconventional."],["ENTJ","carrot","a carrot","Direct, practical, purposeful."],["ENTP","eggplant","an eggplant","Unconventional and adaptable."]]],
+  ["Diplomats",[["INFJ","basil","basil","Thoughtful, subtle, distinctive."],["INFP","avocado","an avocado","Individual, soft, a little quirky."],["ENFJ","corn","corn","Warm, inclusive, all about people."],["ENFP","lemon","a lemon","Bright, energetic, expressive."]]],
+  ["Sentinels",[["ISTJ","potato","a potato","Dependable and practical."],["ISFJ","garlic","garlic","Supportive and essential."],["ESTJ","broccoli","broccoli","Structured, practical, no-nonsense."],["ESFJ","tomato","a tomato","Familiar, welcoming, social."]]],
+  ["Explorers",[["ISTP","ginger","ginger","Unusual, practical, quietly strong."],["ISFP","spinach","spinach","Natural, creative, understated."],["ESTP","chilli","a chilli","Bold, energetic, adventurous."],["ESFP","capsicum","a capsicum","Colourful, expressive, fun."]]],
+];
+const MBTI_BY=Object.fromEntries(MBTI.flatMap(([,ts])=>ts.map(t=>[t[0],t])));
 function profileSheet(first){
   const me=store.me; if(!me) { toast("Can't reach the server to change your profile. Try again when you're back online."); return; }
   const draft={id:me.id, name:me.name||(first?suggestName(me.email):""), photo:me.photo||null};
@@ -1262,6 +1280,13 @@ function profileSheet(first){
       <div class="row"><button class="btn small" data-act="photo" id="pfPhoto">${draft.photo&&!vegOf(draft.photo)?"Change photo":"Add photo"}</button>${draft.photo?`<button class="btn small ghost" data-act="nophoto">Remove</button>`:""}</div></div>
     <p class="muted small pf-or">Or pick one:</p>
     <div class="vegs" role="group" aria-label="Pick a picture">${VEG.map(v=>`<button class="vegpick${draft.photo==="veg:"+v?" on":""}" data-act="veg" data-v="${v}" aria-label="${v.replace("-"," ")}"><img src="/avatars/${v}.webp" alt=""></button>`).join("")}</div>
+    <button class="btn small ghost pf-mbti" data-act="mbti" aria-expanded="false" aria-controls="pfMbti">Find yours by personality type</button>
+    <div class="mbti" id="pfMbti" hidden>
+      ${MBTI.map(([g,ts])=>`<div class="mbti-g"><span class="mbti-h">${g}</span><div class="mbti-row">${ts.map(t=>`<button class="mbtype" data-act="type" data-t="${t[0]}">${t[0]}</button>`).join("")}</div></div>`).join("")}
+      <button class="btn small ghost mbti-rand" data-act="surprise">Don't know? Surprise me</button>
+      <p class="mbti-say" id="pfSay" aria-live="polite"></p>
+      <p class="muted small">Just for fun. Only the picture is saved, not your type.</p>
+    </div>
     <div class="field"><label for="pfName">Name</label><input class="input" id="pfName" maxlength="40" autocomplete="nickname" value="${esc(draft.name)}"></div>
     <div class="row"><button class="btn primary" data-act="save">Save</button><button class="btn ghost" data-act="later">${first?"Later":"Cancel"}</button></div>`);
   const paint=()=>{ draft.name=sh.querySelector("#pfName").value; sh.querySelector("#pfAv").innerHTML=avatar(draft,"lg");
@@ -1271,6 +1296,13 @@ function profileSheet(first){
     later:closeSheet,
     nophoto:b=>{ draft.photo=null; paint(); b.remove(); sh.querySelector("#pfPhoto").textContent="Add photo"; },
     veg:b=>{ draft.photo="veg:"+b.dataset.v; paint(); sh.querySelector("#pfPhoto").textContent="Add photo"; },
+    mbti:b=>{ const box=sh.querySelector("#pfMbti"); box.hidden=!box.hidden; b.setAttribute("aria-expanded",String(!box.hidden)); },
+    type:b=>{ const t=MBTI_BY[b.dataset.t]; if(!t) return; draft.photo="veg:"+t[1]; paint(); sh.querySelector("#pfPhoto").textContent="Add photo";
+      sh.querySelectorAll(".mbtype").forEach(x=>x.classList.toggle("on",x===b));
+      sh.querySelector("#pfSay").innerHTML=`<b>You're ${esc(t[2])}.</b> ${esc(t[3])}`; },
+    surprise:()=>{ const pool=VEG.filter(v=>draft.photo!=="veg:"+v), v=pool[Math.floor(Math.random()*pool.length)];
+      draft.photo="veg:"+v; paint(); sh.querySelector("#pfPhoto").textContent="Add photo"; sh.querySelectorAll(".mbtype").forEach(x=>x.classList.remove("on"));
+      sh.querySelector("#pfSay").innerHTML=`<b>You're ${esc(/^[aeiou]/.test(v)?"an ":"a ")}${esc(v.replace("-"," "))}.</b> Picked at random.`; },
     photo:async b=>{
       const files=await pickPhotos(); if(!files.length) return;
       b.disabled=true; b.innerHTML=`<span class="spin"></span>Uploading…`;

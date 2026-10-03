@@ -199,6 +199,30 @@ try {
   check("…picking one shows it straight away, marked as chosen", (await page.getAttribute("#pfAv .av img", "src")) === "/avatars/tomato.webp" && (await page.locator('#sheet .vegpick.on[data-v="tomato"]').count()) === 1);
   await page.click('#sheet [data-act="save"]'); await sleep(300);
   check("…and saves as veg:tomato", (await api("/api/me")).j.photo === "veg:tomato");
+
+  // --- find yours by personality type (2.5.6): only the picture is saved
+  await page.click("#brand"); await page.click('#sheet [data-act="profile"]'); await page.waitForSelector("#sheet.open .vegpick");
+  check("the personality picker starts folded away", await page.isHidden("#pfMbti"));
+  await page.click('#sheet [data-act="mbti"]');
+  const mb = await page.evaluate(() => ({ types: [...document.querySelectorAll("#sheet .mbtype")].map((b) => b.textContent), groups: [...document.querySelectorAll("#sheet .mbti-h")].map((g) => g.textContent),
+    small: [...document.querySelectorAll('#sheet .mbtype, #sheet [data-act="surprise"], #sheet [data-act="mbti"]')].filter((b) => b.getBoundingClientRect().height < 44).length,
+    over: document.documentElement.scrollWidth - document.documentElement.clientWidth }));
+  check("…opens to the 16 types in their four groups, each easy to tap", mb.types.length === 16 && mb.groups.join() === "Analysts,Diplomats,Sentinels,Explorers" && mb.small === 0 && mb.over <= 0, JSON.stringify(mb));
+  await page.click('#sheet .mbtype[data-t="INFJ"]');
+  check("…INFJ is basil, shown straight away with a line about it", (await page.getAttribute("#pfAv .av img", "src")) === "/avatars/basil.webp" && (await page.locator('#sheet .vegpick.on[data-v="basil"]').count()) === 1
+    && /You're basil\. Thoughtful, subtle, distinctive\./.test(await page.textContent("#pfSay")));
+  await page.click('#sheet .mbtype[data-t="ESFP"]');
+  check("…ESFP is the capsicum", (await page.getAttribute("#pfAv .av img", "src")) === "/avatars/capsicum.webp" && /You're a capsicum\./.test(await page.textContent("#pfSay")));
+  await page.click('#sheet [data-act="surprise"]');
+  const rand = await page.getAttribute("#pfAv .av img", "src");
+  check("…Surprise me picks a different vegetable at random", /^\/avatars\/[a-z-]+\.webp$/.test(rand) && rand !== "/avatars/capsicum.webp" && /Picked at random/.test(await page.textContent("#pfSay")), rand);
+  await page.click('#sheet .mbtype[data-t="INTJ"]');
+  const putBody = page.waitForRequest((r) => r.url().endsWith("/api/me") && r.method() === "PUT");
+  await page.click('#sheet [data-act="save"]');
+  const sent = JSON.parse((await putBody).postData() || "{}"); await sleep(300);
+  check("…saving keeps the picture (red onion), and the type is never sent", (await api("/api/me")).j.photo === "veg:red-onion" && JSON.stringify(Object.keys(sent).sort()) === '["name","photo"]' && !/INTJ/.test(JSON.stringify(sent)), JSON.stringify(sent));
+  await put("/api/me", { name: "Zein B", photo: "veg:tomato" });
+  await page.reload(); await page.waitForFunction(() => !store.loading);
   const pic = await fetch(s.url + "/avatars/tomato.webp");
   check("…including spinach and red onion (2.5.2)", (await Promise.all(["spinach", "red-onion"].map(async (v) => { const r = await fetch(s.url + `/avatars/${v}.webp`); return r.ok && r.headers.get("content-type") === "image/webp"; }))).every(Boolean) && (await put("/api/me", { name: "Zein B", photo: "veg:red-onion" })).j?.photo === "veg:red-onion");
   await put("/api/me", { name: "Zein B", photo: "veg:tomato" });
