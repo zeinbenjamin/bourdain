@@ -143,6 +143,16 @@ try {
   }
   check("public addresses and sites are not refused as private (Instagram, TikTok, plain IPv4 and IPv6)", passed.length === 0, passed.join("; "));
   check("…and no public address was logged as private", !/refused to fetch (http:\/\/157|http:\/\/8\.8|http:\/\/\[2a03|https:\/\/www\.(instagram|tiktok))/.test(s.log()), (s.log().match(/refused to fetch.*/g) || []).join(" | "));
+  // 2.5.5: who fetched which kind of link is in the activity log, by site only
+  await call("POST", "/api/fetch", SAM, { url: "http://192.168.1.1/secret-path?token=abc" });
+  await call("POST", "/api/fetch", SAM, { url: "https://www.tiktok.com/t/ZPLeaQbpv/" });
+  const links = (await call("GET", "/api/admin/activity?cat=links&limit=50", OWNER)).j || [];
+  const samLinks = links.filter((r) => r.user && r.action === "link_fetched" && /sam/i.test(r.name));
+  check("a link fetch is in the activity log: who, which site, and how it went", samLinks.some((r) => r.target === "192.168.1.1 · refused as private") && samLinks.some((r) => /^tiktok\.com · /.test(r.target)), JSON.stringify(links.slice(0, 4)));
+  check("…the site only, never the rest of the link", !links.some((r) => /secret-path|token|ZPLeaQbpv/.test(r.target)));
+  const others = [...((await call("GET", "/api/admin/activity?cat=nosignin&limit=200", OWNER)).j || []), ...((await call("GET", "/api/admin/activity?cat=content&limit=200", OWNER)).j || [])];
+  check("…under its own filter, kept out of the rest of the activity", others.length > 0 && !others.some((r) => r.action === "link_fetched"));
+  check("…and the server log says who asked", /refused to fetch http:\/\/192\.168\.1\.1\/secret-path\?token=abc for sam@example\.com/.test(s.log()));
 
   // --- the phone: a new person sees the welcome
   b2 = await openBrowser();

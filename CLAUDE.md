@@ -248,7 +248,9 @@ people (see **Other people** below).
   `/api/cover` goes through `runAi` too, as kind `cover`.
 - **Activity** (`logActivity`): one row per thing someone did, by title or date,
   never the contents: recipes added, edited, cooked, deleted, copied; plan and
-  pantry changes; profile; every AI job. A repeat within a minute is folded.
+  pantry changes; profile; every AI job; every link fetch (2.5.5, `link_fetched`,
+  the site and the outcome only, never the full link; its own `links` filter, and
+  left out of `nosignin` and `content`). A repeat within a minute is folded.
   The daily sweep prunes activity after 183 days and `ai_usage` after 400.
 - **Photo storage** (2.3): uploads are recorded in `photos (id, owner, bytes)`,
   and each person's total is capped by `storage_mb` (default 500) in the same
@@ -387,8 +389,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v39"`
-in `public/sw.js` → `v40`, `v41`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v40"`
+in `public/sw.js` → `v41`, `v42`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after

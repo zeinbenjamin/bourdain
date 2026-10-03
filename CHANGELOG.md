@@ -6,6 +6,9 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.5.5 — 2026-10-03
+- The admin activity list now shows who fetched a link, from which site and how it went (for example "Sam fetched a link from tiktok.com · read"). Only the site is kept, never the full link. Fetches have their own "Link fetches" filter, so they don't crowd out everything else.
+
 ## 2.5.4 — 2026-10-03
 - Fixed: Fetch & read refused every website, Instagram and TikTok link with "That link points inside a private network" since 2.3.0. Links work again; YouTube links weren't affected.
 

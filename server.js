@@ -994,7 +994,7 @@ app.get("/api/admin/summary", requireAdmin, async (req, res, next) => {
       signin: { cloudflare: CF_ON, team: CF_TEAM || null, trusted: TRUSTED.kept, you: req.signin } });
   } catch (err) { next(err); }
 });
-/* Activity, filtered: user, cat (nosignin | content | ai | security | all), since (an
+/* Activity, filtered: user, cat (nosignin | content | ai | links | security | all), since (an
    ISO time), q (words in the recipe/item or the person's name), before (an id, for
    the next page). Sign-ins are kept apart so they don't drown out what people did. */
 const likeArg = (q) => `%${String(q).toLowerCase().replace(/[\\%_]/g, (c) => "\\" + c)}%`;
@@ -1005,8 +1005,9 @@ app.get("/api/admin/activity", requireAdmin, (req, res) => {
   const cat = String(req.query.cat || "all");
   if (cat === "security") where.push("a.action = 'signed_in'");
   else if (cat === "ai") where.push("a.action LIKE 'ai\\_%' ESCAPE '\\'");
-  else if (cat === "content") where.push("a.action != 'signed_in' AND a.action NOT LIKE 'ai\\_%' ESCAPE '\\'");
-  else if (cat === "nosignin") where.push("a.action != 'signed_in'");
+  else if (cat === "content") where.push("a.action NOT IN ('signed_in', 'link_fetched') AND a.action NOT LIKE 'ai\\_%' ESCAPE '\\'");
+  else if (cat === "links") where.push("a.action = 'link_fetched'");
+  else if (cat === "nosignin") where.push("a.action NOT IN ('signed_in', 'link_fetched')"); // fetches have their own filter, so they don't crowd the rest
   if (req.query.since) { where.push("a.at >= ?"); args.push(String(req.query.since)); }
   if (req.query.before) { where.push("a.id < ?"); args.push(Number(req.query.before) || 0); }
   if (req.query.q) { where.push("(LOWER(COALESCE(a.target, '')) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(u.name, '')) LIKE ? ESCAPE '\\')"); args.push(likeArg(req.query.q), likeArg(req.query.q)); }
@@ -1381,9 +1382,15 @@ app.post("/api/fetch", async (req, res) => {
   const { url } = req.body || {};
   if (!/^https?:\/\//i.test(url || "")) return res.status(400).json({ error: "bad url", code: "bad_url" });
   try { new URL(url); } catch { return res.status(400).json({ error: "bad url", code: "bad_url" }); }
+  // 2.5.5: every fetch goes in the activity log by site only, never the full link, so the
+  // owner can see who fetched what kind of link and whether it worked.
+  const site = new URL(url).hostname.toLowerCase().replace(/^(www|m|vm|vt)\./, "");
+  const who = req.user.email || req.user.id;
+  const logged = (outcome) => logActivity(req.user.id, "link_fetched", `${site} · ${outcome}`);
   const yt = youtubeId(url);
   if (yt) {
     const text = await youtubeText(yt);
+    logged(text ? "read" : "nothing came back");
     if (!text) return res.status(502).json({ error: "nothing came back from YouTube", code: "fetch_failed" });
     return res.json({ text, recipeJson: null, source: "youtube" });
   }
@@ -1422,15 +1429,16 @@ app.post("/api/fetch", async (req, res) => {
       parts.push([ogDesc, stripTags(body).slice(0, 20000)].filter(Boolean).join("\n\n"));
     } catch (err) {
       if (err instanceof BlockedAddress) {
-        console.warn(`refused to fetch ${target}: ${err.message}`);
-        if (target === url) return res.status(400).json({ error: "that link points inside a private network", code: "blocked_address" });
+        console.warn(`refused to fetch ${target} for ${who}: ${err.message}`);
+        if (target === url) { logged("refused as private"); return res.status(400).json({ error: "that link points inside a private network", code: "blocked_address" }); }
         continue;
       }
-      console.warn("fetch failed", target, err.message);
+      console.warn("fetch failed", target, "for", who, err.message);
     }
   }
 
   const text = parts.join("\n\n---\n\n").trim();
+  logged(text || recipeJson ? (recipeJson ? "read, with the recipe" : "read") : "nothing came back");
   if (!text && !recipeJson) return res.status(502).json({ error: "nothing came back", code: "fetch_failed" });
   res.json({ text, recipeJson });
 });
