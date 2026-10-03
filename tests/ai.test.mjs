@@ -266,6 +266,9 @@ try {
   check("activity: the default leaves sign-ins out", !/signed in via/.test(await page.textContent("#actList")));
   await page.selectOption("#actCat", "security"); await page.waitForFunction(() => Array.isArray(state.adminActRows) && state.adminActRows.every((r) => r.action === "signed_in") && state.adminActRows.length > 0);
   check("…Sign-ins shows only sign-ins", /signed in via/.test(await page.textContent("#actList")));
+  await s.post("/api/fetch", { url: "http://10.0.0.1/x" });
+  await page.selectOption("#actCat", "links"); await page.waitForFunction(() => Array.isArray(state.adminActRows) && state.adminActRows.length > 0 && state.adminActRows.every((r) => r.action === "link_fetched"));
+  check("…Link fetches (2.5.5) shows who fetched which site and how it went", /fetched a link from 10\.0\.0\.1 · refused as private/.test(await page.textContent("#actList")), await page.textContent("#actList"));
   await page.selectOption("#actCat", "all"); await page.selectOption("#actPeriod", "all"); await page.fill("#actQ", "lentil");
   await page.waitForFunction(() => Array.isArray(state.adminActRows) && state.adminActRows.length && state.adminActRows.every((r) => r.target === "lentils"));
   check("…search narrows it, and the box keeps what you typed", (await page.inputValue("#actQ")) === "lentil" && /lentils/.test(await page.textContent("#actList")));

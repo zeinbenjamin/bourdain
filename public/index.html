@@ -2448,10 +2448,10 @@ function renderReview(){
 const ACT_WORDS={ recipe_added:"added", recipe_edited:"edited", recipe_deleted:"deleted", cook_logged:"cooked", recipe_copied:"copied",
   plan_changed:"changed the plan for", pantry_changed:"pantry:", pantry_removed:"took off the pantry:", profile_changed:"set their name to",
   ai_import:"imported a recipe with AI", ai_scan:"scanned the fridge", ai_ideas:"asked for recipe ideas", ai_write:"had a recipe written", ai_cover:"painted a cover", ai_dish:"guessed a recipe from a photo",
-  signed_in:"signed in via" };
+  signed_in:"signed in via", link_fetched:"fetched a link from" };
 const AUDIT_WORDS={ limits_changed:"changed everyone's limits:", person_limits_changed:"changed limits for", cover_price_changed:"changed the cover price:",
   account_paused:"paused", account_resumed:"resumed", person_joined:"signed in for the first time:", deployed:"deployed", restarted:"restarted" };
-const ACT_CATS=[["nosignin","All but sign-ins"],["content","Content"],["ai","AI"],["security","Sign-ins"],["all","Everything"]];
+const ACT_CATS=[["nosignin","All but sign-ins and links"],["content","Content"],["ai","AI"],["links","Link fetches"],["security","Sign-ins"],["all","Everything"]];
 const KIND_NAMES={ import:"import", scan:"fridge scan", ideas:"recipe ideas", write:"recipe writing", cover:"cover", dish:"dish guess", cost:"cost estimate" };
 const ACT_PERIODS=[["today","Today"],["7d","Last 7 days"],["30d","Last 30 days"],["all","All time"]];
 const LIMIT_GROUPS=["import","scan","ideas","cover","cost"];
