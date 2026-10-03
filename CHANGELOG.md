@@ -6,6 +6,9 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.5.4 — 2026-10-03
+- Fixed: Fetch & read refused every website, Instagram and TikTok link with "That link points inside a private network" since 2.3.0. Links work again; YouTube links weren't affected.
+
 ## 2.5.3 — 2026-10-02
 - The import page shows where a link can come from, with an icon each, under the link box: recipe sites, Instagram, TikTok and YouTube.
 

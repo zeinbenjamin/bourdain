@@ -720,3 +720,9 @@ is fixed.
 
 - None open. (#14, `/api/fetch` reaching LAN addresses, was fixed in 2.3.0:
   `publicGet` checks every resolved address at connect time and every redirect.)
+- Fixed in 2.5.4: from 2.3.0 the private list held `::ffff:0:0/96`, and Node's
+  `BlockList` counts every IPv4 address as inside it, so every link was
+  `blocked_address`. `plainIp()` now turns IPv4-in-IPv6 (`::ffff:1.2.3.4`,
+  `::ffff:102:304`) into IPv4 before checking, `blockList()` refuses such a range,
+  and the `signin` suite checks that public sites get through, not just that
+  private ones are stopped.
