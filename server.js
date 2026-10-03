@@ -177,11 +177,25 @@ const CF_ON = Boolean(CF_TEAM && CF_AUD);
 if (Boolean(CF_TEAM) !== Boolean(CF_AUD)) console.error("Only one of CF_ACCESS_TEAM and CF_ACCESS_AUD is set, so Cloudflare sign-in is off. Set both.");
 const CF_ISSUER = `https://${CF_TEAM}.cloudflareaccess.com`;
 const ipType = (ip) => (isIP(ip) === 6 ? "ipv6" : "ipv4");
-const plainIp = (ip) => String(ip || "").replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/, ""); // an IPv4 address arriving over IPv6
+// An IPv4 address written as IPv6 (::ffff:1.2.3.4, or ::ffff:102:304) becomes plain IPv4, so it is
+// checked against the IPv4 ranges. The range ::ffff:0:0/96 itself must never be in a list: Node's
+// BlockList counts every IPv4 address as inside it, which blocked every website from 2.3.0 to 2.5.3.
+const plainIp = (ip) => {
+  ip = String(ip || "");
+  const dotted = /^(?:0{0,4}:){0,5}:?ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  if (dotted) return dotted[1];
+  if (isIP(ip) !== 6) return ip;
+  let host; try { host = new URL(`http://[${ip}]/`).hostname; } catch { return ip; } // the shortest form, e.g. [::ffff:7f00:1]
+  const hex = /^\[::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})\]$/.exec(host);
+  if (!hex) return ip;
+  const [hi, lo] = [parseInt(hex[1], 16), parseInt(hex[2], 16)];
+  return [hi >> 8, hi & 255, lo >> 8, lo & 255].join(".");
+};
 function blockList(cidrs, label) {
   const list = new BlockList(), kept = [];
   for (const c of cidrs) {
     const [addr, bits] = c.split("/"), type = isIP(addr);
+    if (type === 6 && /^::ffff:/i.test(new URL(`http://[${addr}]/`).hostname.slice(1)) && Number(bits) <= 96) { console.error(`${label}: ignoring "${c}": it would match every IPv4 address; write IPv4 ranges as IPv4`); continue; }
     const n = bits === undefined ? (type === 6 ? 128 : 32) : Number(bits);
     if (!type || !Number.isInteger(n) || n < 0 || n > (type === 6 ? 128 : 32)) { console.error(`${label}: ignoring "${c}", which isn't an address or a range like 192.168.1.0/24`); continue; }
     list.addSubnet(addr, n, type === 6 ? "ipv6" : "ipv4"); kept.push(`${addr}/${n}`);
@@ -1289,7 +1303,7 @@ function schemaToRecipe(r) {
 const PRIVATE_NETS = blockList([
   "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.0.0.0/24", "192.0.2.0/24",
   "192.168.0.0/16", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4",
-  "::/128", "::1/128", "::ffff:0:0/96", "64:ff9b::/96", "100::/64", "2001::/32", "2001:db8::/32", "2002::/16", "fc00::/7", "fe80::/10", "ff00::/8",
+  "::/128", "::1/128", "64:ff9b::/96", "100::/64", "2001::/32", "2001:db8::/32", "2002::/16", "fc00::/7", "fe80::/10", "ff00::/8", // never ::ffff:0:0/96: see plainIp
 ], "PRIVATE_NETS");
 class BlockedAddress extends Error {}
 function publicLookup(host, opts, cb) {

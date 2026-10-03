@@ -114,10 +114,11 @@ try {
   s.setMode({});
 
   // --- the home network
-  await s.restart({ TRUSTED_NETS: "127.0.0.1/32, ::1, not-a-network" });
+  await s.restart({ TRUSTED_NETS: "127.0.0.1/32, ::1, not-a-network, ::ffff:0:0/96" });
   r = await call("GET", "/api/me");
   check("TRUSTED_NETS: no token from the home network is the owner", r.status === 200 && r.j.is_admin === true, JSON.stringify(r));
   check("…a bad entry is ignored with a log line", /ignoring "not-a-network"/.test(s.log()));
+  check("…and so is an IPv6 range that would take in every IPv4 address", /ignoring "::ffff:0:0\/96": it would match every IPv4 address/.test(s.log()));
   check("…but through Cloudflare it still needs a token, whatever the address", (await call("GET", "/api/me", viaCf(undefined))).j?.code === "signed_out");
   check("…and a token still wins from home", (await call("GET", "/api/me", SAM)).j?.email === "sam@example.com");
   r = await call("GET", "/api/admin/summary");
@@ -133,6 +134,15 @@ try {
   check("links to private, loopback, link-local and cloud-metadata addresses are refused (400 blocked_address)", blocked.length === 0, blocked.join("; "));
   check("…and nothing was fetched from them", !/"GET \/api\/state/.test(s.log()) && !/fetch failed/.test(s.log()));
   check("a link that isn't http(s) is refused", (await call("POST", "/api/fetch", {}, { url: "file:///etc/passwd" })).j?.code === "bad_url");
+  // 2.5.4: ::ffff:0:0/96 in the list made Node's BlockList refuse every IPv4 address, so every
+  // website was "private" from 2.3.0 on. Public addresses and names must get as far as fetching.
+  const passed = [];
+  for (const u of ["http://157.240.8.174/", "http://8.8.8.8/", "http://[2a03:2880:f275:1e9:face:b00c:0:4420]/", "https://www.instagram.com/reel/Dd-9fPHSUb_/", "https://www.tiktok.com/t/ZPLeaQbpv/"]) {
+    const x = await call("POST", "/api/fetch", {}, { url: u });
+    if (x.j?.code === "blocked_address") passed.push(u);
+  }
+  check("public addresses and sites are not refused as private (Instagram, TikTok, plain IPv4 and IPv6)", passed.length === 0, passed.join("; "));
+  check("…and no public address was logged as private", !/refused to fetch (http:\/\/157|http:\/\/8\.8|http:\/\/\[2a03|https:\/\/www\.(instagram|tiktok))/.test(s.log()), (s.log().match(/refused to fetch.*/g) || []).join(" | "));
 
   // --- the phone: a new person sees the welcome
   b2 = await openBrowser();
