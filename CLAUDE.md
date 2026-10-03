@@ -33,7 +33,9 @@ phone, and every read and write is scoped to it. Alongside them:
   pictures in `public/avatars/` (`VEG_AVATARS` in `server.js`, `VEG` in
   `index.html`; `avatar()` draws them). Since 2.5.1 someone with no `photo`
   is drawn with `defaultVeg(id)`, a vegetable picked from a hash of their id, so
-  it's stable everywhere; nothing is stored. The owner
+  it's stable everywhere; nothing is stored. Since 2.5.6 the profile sheet's
+  "Find yours by personality type" (`MBTI` in `index.html`) maps an MBTI type to a
+  vegetable; it only sets `photo`, and the type is never sent or stored. The owner
   is the `is_admin` user, created from `OWNER_EMAIL`. `name` is null until the
   person picks one in the welcome sheet; only named people are shown to others,
   and emails never are.
@@ -389,8 +391,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v40"`
-in `public/sw.js` → `v41`, `v42`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v41"`
+in `public/sw.js` → `v42`, `v43`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
