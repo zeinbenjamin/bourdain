@@ -224,7 +224,7 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .guessnote.low b{color:var(--flame)}
 .guessline.low{color:var(--flame)}
 .vegs{display:grid;grid-template-columns:repeat(auto-fill,minmax(48px,1fr));gap:4px;margin:0 0 14px}
-.vegpick{height:48px;border:1px solid var(--line);border-radius:50%;background:var(--paper);padding:5px;aspect-ratio:1;justify-self:center}
+.vegpick{height:48px;border:1px solid var(--line);border-radius:50%;background:var(--paper);padding:5px;aspect-ratio:1;justify-self:center;overflow:hidden} /* 2.5.7: clip the picture to the circle, or its white square corners cover the ring */
 .vegpick img{width:100%;height:100%;object-fit:contain;display:block}
 .vegpick.on{border:2px solid var(--flame)}
 .pf-mbti,.mbti-rand{min-height:44px}

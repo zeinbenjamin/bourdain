@@ -6,6 +6,9 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.5.7 — 2026-10-03
+- Fixed: in the profile's vegetable picker, the pictures cut into their round outlines (and the red ring around the one you've chosen). The circles are whole now.
+
 ## 2.5.6 — 2026-10-03
 - Your profile has a new, optional way to pick your vegetable: tap "Find yours by personality type" and choose your MBTI type (INFJ is basil, ESTP a chilli, and so on), or "Surprise me" for a random one. Only the picture is saved, never your type.
 

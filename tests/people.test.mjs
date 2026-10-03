@@ -207,6 +207,24 @@ try {
   const mb = await page.evaluate(() => ({ types: [...document.querySelectorAll("#sheet .mbtype")].map((b) => b.textContent), groups: [...document.querySelectorAll("#sheet .mbti-h")].map((g) => g.textContent),
     small: [...document.querySelectorAll('#sheet .mbtype, #sheet [data-act="surprise"], #sheet [data-act="mbti"]')].filter((b) => b.getBoundingClientRect().height < 44).length,
     over: document.documentElement.scrollWidth - document.documentElement.clientWidth }));
+  // 2.5.7: the picture must not paint over the round outline. Sample the ring on the diagonals,
+  // where a square picture's white corners used to cover it.
+  const ring = async (sel, score) => { const el = page.locator(sel); const bb = await el.boundingBox(); const bw = await el.evaluate((e) => parseFloat(getComputedStyle(e).borderTopWidth));
+    const { data, info } = await sharp(await el.screenshot()).raw().toBuffer({ resolveWithObject: true }); const kx = info.width / bb.width, ky = info.height / bb.height, out = [];
+    for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { // across the border on each diagonal, keep the pixel most like the ring
+      let best = null;
+      for (let depth = 0; depth <= bw + 1; depth += 0.25) {
+        const x = Math.round(info.width / 2 + dx * (bb.width / 2 - depth) * kx / Math.SQRT2), y = Math.round(info.height / 2 + dy * (bb.height / 2 - depth) * ky / Math.SQRT2);
+        if (x < 0 || y < 0 || x >= info.width || y >= info.height) continue;
+        const i = (y * info.width + x) * info.channels, px = [data[i], data[i + 1], data[i + 2]];
+        if (!best || score(px) > score(best)) best = px;
+      }
+      out.push(best); }
+    return out; };
+  const onRing = await ring('#sheet .vegpick.on', ([r, g]) => r - g);
+  check("the chosen picture's red ring is whole, not cut by the picture's corners (2.5.7)", onRing.every(([r, g, b]) => r > 150 && g < 120 && b < 120), JSON.stringify(onRing));
+  const plainRing = await ring('#sheet .vegpick:not(.on) >> nth=0', ([r, g, b]) => -(r + g + b));
+  check("…and so is the grey ring on the others", plainRing.every(([r, g, b]) => r < 240 && g < 240 && b < 240), JSON.stringify(plainRing));
   check("…opens to the 16 types in their four groups, each easy to tap", mb.types.length === 16 && mb.groups.join() === "Analysts,Diplomats,Sentinels,Explorers" && mb.small === 0 && mb.over <= 0, JSON.stringify(mb));
   await page.click('#sheet .mbtype[data-t="INFJ"]');
   check("…INFJ is basil, shown straight away with a line about it", (await page.getAttribute("#pfAv .av img", "src")) === "/avatars/basil.webp" && (await page.locator('#sheet .vegpick.on[data-v="basil"]').count()) === 1
