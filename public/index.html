@@ -1074,6 +1074,16 @@ function render(){
 
 function allTags(){ const c={}; Object.values(state.recipes).forEach(r=>(r.tags||[]).forEach(t=>c[t]=(c[t]||0)+1)); return Object.entries(c).sort((a,b)=>b[1]-a[1]).map(x=>x[0]); }
 
+/* Write a screen's HTML only if it changed (2.6.4). Tapping a tab redraws its
+   screen; rewriting identical HTML threw away every picture and drew it again, so
+   pictures and avatars flashed blank. Handlers on these screens are set on the
+   container (el.onclick), so keeping the old children is safe. If anything else
+   wrote into `el` since (its first child is no longer the one we wrote), write. */
+const FIRST_SCREEN=6; // cards on a phone's first screen or so: never lazy
+function setHtml(el,html){
+  if(el._html===html&&el._first===el.firstChild&&el.firstChild) return false;
+  el.innerHTML=html; el._html=html; el._first=el.firstChild; return true;
+}
 function renderRecipes(){
   const chips=document.getElementById("tagChips");
   const tags=allTags();
@@ -1090,27 +1100,29 @@ function renderRecipes(){
   }).filter(([id,r])=>keepRecipe(r,pref.filter)).sort((a,b)=>sortRecipes(a[1],b[1],pref.sort));
   paintCookBanner();
   const el=document.getElementById("rlist");
-  if (!Object.keys(state.recipes).length && store.loading){ el.innerHTML=`<div class="empty"><span class="spin"></span>Loading your recipes…</div>`; return; }
+  if (!Object.keys(state.recipes).length && store.loading){ setHtml(el,`<div class="empty"><span class="spin"></span>Loading your recipes…</div>`); return; }
   if (!Object.keys(state.recipes).length){
-    el.innerHTML=`<div class="empty"><h3>Nothing in the book yet</h3>Tap + to import a recipe from a link, caption, screenshots or a screen recording, or to write your own.<div style="margin-top:14px"><button class="btn primary" data-go="add">Add a recipe</button></div></div>`;
+    setHtml(el,`<div class="empty"><h3>Nothing in the book yet</h3>Tap + to import a recipe from a link, caption, screenshots or a screen recording, or to write your own.<div style="margin-top:14px"><button class="btn primary" data-go="add">Add a recipe</button></div></div>`);
     el.querySelector("[data-go]").onclick=()=>addSheet(); return;
   }
   if (!list.length){
-    el.innerHTML=`<div class="empty">None of your recipes match that.${pref.filter!=="all"?`<div style="margin-top:12px"><button class="btn small" data-reset>Show all recipes</button></div>`:""}</div>`;
+    setHtml(el,`<div class="empty">None of your recipes match that.${pref.filter!=="all"?`<div style="margin-top:12px"><button class="btn small" data-reset>Show all recipes</button></div>`:""}</div>`);
     const rb=el.querySelector("[data-reset]"); if(rb) rb.onclick=()=>{ listPrefs.set({...pref,filter:"all"}); renderRecipes(); };
     return;
   }
-  el.innerHTML=list.map(([id,r])=>cardHtml(r,`data-id="${esc(id)}"`)).join("");
+  setHtml(el,list.map(([id,r],i)=>cardHtml(r,`data-id="${esc(id)}"`,"",i>=FIRST_SCREEN)).join(""));
   el.onclick=e=>{ const c=e.target.closest(".rcard"); if(c){ if(state.detailId!==c.dataset.id) state.mult=1; state.detailId=c.dataset.id; show("detail"); } };
 }
 document.getElementById("search").addEventListener("input",e=>{ state.query=e.target.value; renderRecipes(); });
 // A recipe card. `attrs` says what tapping it opens; `extra` goes under the title (whose recipe it is).
-function cardHtml(r,attrs,extra=""){
+// `lazy`: only for cards below the first screen (2.6.4); the first few load at once, so nothing flashes.
+function cardHtml(r,attrs,extra="",lazy=false){
+  const L=lazy?'loading="lazy" ':"";
   const t=(r.prep_min||0)+(r.cook_min||0);
   const meta=[t?`${t} min`:null, r.servings?`${r.servings} serves`:null, r.source_type&&r.source_type!=="manual"?r.source_type:null].filter(Boolean).join(" · ");
   return `<button class="rcard" ${attrs}>
-    ${r.cover?`<div class="thumb cover"><img loading="lazy" decoding="async" src="${coverUrl(r.cover)}" alt=""></div>`
-      :`<div class="thumb">${r.photos&&r.photos.length?`<img loading="lazy" decoding="async" src="${photoUrl(r.photos[0])}" alt="">`:esc((r.title||"?").trim()[0]||"?").toUpperCase()}</div>`}
+    ${r.cover?`<div class="thumb cover"><img ${L}src="${coverUrl(r.cover)}" alt=""></div>`
+      :`<div class="thumb">${r.photos&&r.photos.length?`<img ${L}src="${photoUrl(r.photos[0])}" alt="">`:esc((r.title||"?").trim()[0]||"?").toUpperCase()}</div>`}
     <div class="body"><h3>${esc(r.title||"Untitled")}</h3>${extra}${r.rating?`<div class="cstars">${stars(r.rating)}</div>`:""}${meta?`<div class="meta">${esc(meta)}</div>`:""}
     <div class="tags">${(r.tags||[]).slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div></div></button>`;
 }
@@ -1343,23 +1355,23 @@ function renderPerson(){
   const p=cached?.person||people.byId(id);
   const head=`<div class="detail-head"><button class="btn small ghost" id="pBack">‹ Archives</button>${p&&p.me?`<button class="btn small" id="pEdit">Edit profile</button>`:""}</div>`;
   if(!cached){
-    el.innerHTML=head+`<div class="empty"><span class="spin"></span>Opening ${esc(possessive(p&&p.name))} recipes…</div>`;
+    setHtml(el,head+`<div class="empty"><span class="spin"></span>Opening ${esc(possessive(p&&p.name))} recipes…</div>`);
     api("/api/people/"+encodeURIComponent(id),{signal:timeout(10000)})
       .then(d=>{ state.person=d; if(state.view==="person"&&state.personId===id) renderPerson(); })
-      .catch(()=>{ if(state.view==="person"&&state.personId===id){ el.innerHTML=head+`<div class="empty">Can't reach the server to show ${esc(possessive(p&&p.name))} recipes. Try again when you're back online.</div>`; wirePersonHead(); } });
+      .catch(()=>{ if(state.view==="person"&&state.personId===id){ setHtml(el,head+`<div class="empty">Can't reach the server to show ${esc(possessive(p&&p.name))} recipes. Try again when you're back online.</div>`); wirePersonHead(); } });
     wirePersonHead(); return;
   }
   const rs=Object.entries(cached.recipes||{}).filter(([,r])=>r).sort((a,b)=>(a[1].title||"").localeCompare(b[1].title||""));
   const cooks=rs.flatMap(([rid,r])=>(r.cooks||[]).filter(c=>c&&c.date).map(c=>({rid,r,date:c.date,at:c.at||c.date}))).sort((a,b)=>(b.date+b.at).localeCompare(a.date+a.at));
   const me=cached.person.me;
-  el.innerHTML=`${head}
+  setHtml(el,`${head}
     <div class="profile">${avatar(cached.person,"lg")}<div><h2>${esc(cached.person.name)}</h2>
       <div class="meta">${rs.length} recipe${rs.length===1?"":"s"} · ${cooks.length} cook${cooks.length===1?"":"s"}</div></div></div>
     ${cooks.length?`<h3 class="tl-head">Recently cooked</h3><div class="tl-top">${cooks.slice(0,5).map(c=>{ const dt=new Date(c.date+"T00:00");
       return `<button class="slot" data-rid="${esc(c.rid)}">${miniThumb(c.r)}<span class="t">${esc(c.r.title||"Untitled")}<span class="tl-sub">${DAYS[(dt.getDay()+6)%7]} ${dt.getDate()} ${MONTHS[dt.getMonth()]}${c.r.rating?" · "+stars(c.r.rating):""}</span></span></button>`; }).join("")}</div>`:""}
     <h3 class="tl-head">${me?"Your recipes":esc(possessive(cached.person.name))+" recipes"}</h3>
-    ${rs.length?`<div class="rlist">${rs.map(([rid,r])=>cardHtml(r,`data-rid="${esc(rid)}"`, !me&&myCopyOf(id,rid)?`<div class="owner"><span class="inyours">In your recipes</span></div>`:"")).join("")}</div>`
-      :`<div class="empty">No recipes yet.</div>`}`;
+    ${rs.length?`<div class="rlist">${rs.map(([rid,r],i)=>cardHtml(r,`data-rid="${esc(rid)}"`, !me&&myCopyOf(id,rid)?`<div class="owner"><span class="inyours">In your recipes</span></div>`:"",i>=FIRST_SCREEN)).join("")}</div>`
+      :`<div class="empty">No recipes yet.</div>`}`);
   wirePersonHead();
   el.onclick=e=>{ const c=e.target.closest("[data-rid]"); if(!c) return; openTheirs(id,c.dataset.rid,"person"); };
 }
@@ -1743,8 +1755,8 @@ async function savePlanDay(dateISO,day){ if(day.entries.length){ state.plan[date
 
 // Small version of the recipe card's picture: cover whole on white, else first photo, else the first letter.
 function miniThumb(r){
-  if(r&&r.cover) return `<span class="mini cover"><img loading="lazy" decoding="async" src="${coverUrl(r.cover)}" alt=""></span>`;
-  if(r&&r.photos&&r.photos.length) return `<span class="mini"><img loading="lazy" decoding="async" src="${photoUrl(r.photos[0])}" alt=""></span>`;
+  if(r&&r.cover) return `<span class="mini cover"><img src="${coverUrl(r.cover)}" alt=""></span>`;
+  if(r&&r.photos&&r.photos.length) return `<span class="mini"><img src="${photoUrl(r.photos[0])}" alt=""></span>`;
   return `<span class="mini">${esc(((r&&r.title)||"?").trim()[0]||"?").toUpperCase()}</span>`;
 }
 function renderPlan(){
@@ -1752,7 +1764,7 @@ function renderPlan(){
   const today=iso(new Date());
   document.querySelector("#view-plan .weeknav").classList.toggle("current", iso(state.week)===iso(mondayOf(new Date())));
   const el=document.getElementById("days");
-  el.innerHTML = DAYS.map((n,i)=>{
+  setHtml(el,DAYS.map((n,i)=>{
     const d=addDays(state.week,i), k=iso(d), day=planDay(k);
     const slots=day.entries.map((e,ix)=>{
       const r=state.recipes[e.recipeId];
@@ -1760,7 +1772,7 @@ function renderPlan(){
     }).join("");
     return `<div class="day ${k===today?"today":""} ${day.entries.length?"":"nomeal"}"><div class="dn"><span class="w">${n}</span><span class="d">${d.getDate()}</span></div>
       <div class="slots">${slots}</div><button class="addslot" data-add="${k}" aria-label="Add a meal to ${n} ${d.getDate()}">+</button></div>`;
-  }).join("");
+  }).join(""));
   el.onclick=async e=>{
     const a=e.target.closest("[data-add]"); if(a){ pickRecipe(a.dataset.add); return; }
     const sl=e.target.closest("[data-slot]"); if(sl){ slotSheet(sl.dataset.slot,+sl.dataset.ix); return; }
@@ -1822,8 +1834,8 @@ function renderTimeline(){
   const row=shared?`<div class="people" role="list">${[meP,...people.others()].filter(Boolean).map(p=>`<button class="person" role="listitem" data-person="${esc(p.id)}" aria-label="${p.me?"You":esc(p.name)}">${avatar(p,"md")}<span>${p.me?"You":esc(firstName(p.name))}</span></button>`).join("")}</div>
     <div class="seg" role="group" aria-label="Whose cooks"><button data-who="everyone" class="${everyone?"on":""}" aria-pressed="${everyone}">Everyone</button><button data-who="me" class="${everyone?"":"on"}" aria-pressed="${!everyone}">Just me</button></div>`:"";
   if(!mine.length&&!theirs.length){
-    el.innerHTML = row + (store.loading ? `<div class="empty"><span class="spin"></span>Loading your cooks…</div>`
-      : `<div class="empty"><h3>Nothing cooked yet</h3>Open a recipe and tap Cook this. Each time you finish, it shows up here with the date.</div>`);
+    setHtml(el,row + (store.loading ? `<div class="empty"><span class="spin"></span>Loading your cooks…</div>`
+      : `<div class="empty"><h3>Nothing cooked yet</h3>Open a recipe and tap Cook this. Each time you finish, it shows up here with the date.</div>`));
     el.onclick=timelineClick; return;
   }
   const all=[...mine.map(e=>({...e,mine:true})),...theirs.map(e=>({...e,mine:false,date:e.date,at:e.at}))]
@@ -1845,7 +1857,7 @@ function renderTimeline(){
   };
   // group by month, then by day
   const months=[]; for(const e of all){ const m=e.date.slice(0,7); let g=months[months.length-1]; if(!g||g.m!==m) months.push(g={m,days:[]}); let d=g.days[g.days.length-1]; if(!d||d.date!==e.date) g.days.push(d={date:e.date,items:[]}); d.items.push(e); }
-  el.innerHTML=`${row}
+  setHtml(el,`${row}
     <div class="stats">
       <div class="stat"><b>${mine.filter(e=>e.date.startsWith(ym)).length}</b><span>This month</span></div>
       <div class="stat"><b>${mine.filter(e=>e.date.startsWith(y)).length}</b><span>This year</span></div>
@@ -1857,7 +1869,7 @@ function renderTimeline(){
     ${months.map(g=>{ const [yy,mm]=g.m.split("-").map(Number);
       return `<h3 class="tl-head">${MONTHS_LONG[mm-1]}${String(yy)===y?"":" "+yy}</h3><div class="feed">${g.days.map(d=>{ const dt=new Date(d.date+"T00:00");
         return `<div class="day"><div class="dn"><span class="w">${DAYS[(dt.getDay()+6)%7]}</span><span class="d">${dt.getDate()}</span></div>
-          <div class="slots">${d.items.map(entry).join("")}</div></div>`; }).join("")}</div>`; }).join("")}`;
+          <div class="slots">${d.items.map(entry).join("")}</div></div>`; }).join("")}</div>`; }).join("")}`);
   el.onclick=timelineClick;
 }
 function timelineClick(e){
@@ -2518,7 +2530,7 @@ function coverPicker(recipeId,chosen,justMade){
 }
 function pickPhotos(){ return new Promise(res=>{ const i=document.createElement("input"); i.type="file"; i.accept="image/*"; i.multiple=true; i.onchange=()=>res([...i.files]); i.click(); }); }
 function photosHtml(ids,editable){
-  return `<div class="photos">${(ids||[]).map(id=>`<div class="ph"><img loading="lazy" decoding="async" src="${photoUrl(id)}" alt="">${editable?`<button class="x" data-rmp="${esc(id)}" aria-label="Remove photo"><span>×</span></button>`:""}</div>`).join("")}${editable?`<button class="add" data-addp>+ Photo</button>`:""}</div>`;
+  return `<div class="photos">${(ids||[]).map(id=>`<div class="ph"><img src="${photoUrl(id)}" alt="">${editable?`<button class="x" data-rmp="${esc(id)}" aria-label="Remove photo"><span>×</span></button>`:""}</div>`).join("")}${editable?`<button class="add" data-addp>+ Photo</button>`:""}</div>`;
 }
 
 /* ---------- cost: home vs eating out (2.5) ----------

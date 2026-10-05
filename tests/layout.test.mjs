@@ -235,8 +235,31 @@ try {
   await page.evaluate(() => { state.draft = null; state.editingId = null; state.view = "recipes"; show("recipes"); });
   const pad = await page.evaluate(() => [...document.styleSheets].flatMap((sh) => { try { return [...sh.cssRules]; } catch { return []; } }).find((r) => r.selectorText === "main")?.cssText || "");
   check("…the space under a page includes the iPhone's home bar", /safe-area-inset-bottom/.test(pad), pad);
-  const lazy = await page.evaluate(() => { const r = { cover: "c".repeat(32), photos: ["d".repeat(32)] }; return [cardHtml(r, ""), cardHtml({ photos: ["d".repeat(32)] }, ""), miniThumb(r), miniThumb({ photos: ["d".repeat(32)] }), photosHtml(["d".repeat(32)], false)].map((h) => /loading="lazy"/.test(h)); });
-  check("…pictures in lists load as they scroll into view", lazy.every(Boolean), JSON.stringify(lazy));
+  // 2.6.4: lazy only below the first screen, so cards already on screen never flash blank
+  const lazy = await page.evaluate(() => { const r = { cover: "c".repeat(32), photos: ["d".repeat(32)] };
+    return { below: [cardHtml(r, "", "", true), cardHtml({ photos: ["d".repeat(32)] }, "", "", true)].every((h) => /loading="lazy"/.test(h)),
+      eager: [cardHtml(r, ""), miniThumb(r), miniThumb({ photos: ["d".repeat(32)] }), photosHtml(["d".repeat(32)], false)].every((h) => !/loading="lazy"/.test(h)),
+      noAsync: !/decoding=/.test(cardHtml(r, "", "", true)) };
+  });
+  check("…pictures below the first screen load as you scroll; those on it, thumbnails and photo strips load at once", lazy.below && lazy.eager && lazy.noAsync, JSON.stringify(lazy));
+  await page.evaluate(() => { for (let i = 0; i < 9; i++) state.recipes["lz" + i] = { title: "Lazy " + i, photos: ["e".repeat(32)], ingredients: [], steps: [], tags: [], created_at: "2026-10-0" + (i + 1) }; renderRecipes(); });
+  const lz = await page.evaluate(() => [...document.querySelectorAll("#rlist .rcard img")].map((i) => i.loading === "lazy"));
+  check("…in the list, the first 6 cards load at once and the rest lazily", lz.slice(0, 6).every((x) => !x) && lz.slice(6).every((x) => x) && lz.length > 6, JSON.stringify(lz));
+
+  // --- 2.6.4: tapping the tab you're on doesn't redraw it, so pictures don't flash
+  const same = async (tab, sel) => {
+    await page.click(`#tabs button[data-view="${tab}"]`); await page.waitForTimeout(150);
+    const before = await page.evaluateHandle((q) => [...document.querySelectorAll(q)], sel);
+    await page.click(`#tabs button[data-view="${tab}"]`); await page.waitForTimeout(150);
+    return page.evaluate(([b, q]) => { const now = [...document.querySelectorAll(q)]; return now.length > 0 && now.length === b.length && now.every((e, i) => e === b[i]); }, [before, sel]);
+  };
+  await page.evaluate(() => { const k = iso(new Date()); state.plan[k] = { date: k, entries: [{ recipeId: "lz0", servings: 2 }] }; state.recipes.lz0.cooks = [{ date: iso(new Date()), at: new Date().toISOString(), mult: 1 }]; });
+  const kept = { recipes: await same("recipes", "#rlist img"), plan: await same("plan", "#days img"), archives: await same("timeline", "#view-timeline .slot") };
+  check("tapping the tab you're on keeps its pictures (Recipes, Plan, Archives): nothing flashes", kept.recipes && kept.plan && kept.archives, JSON.stringify(kept));
+  await page.click('#tabs button[data-view="recipes"]');
+  const changed = await page.evaluate(() => { const first = document.querySelector("#rlist .rcard"); state.recipes.lzNew = { title: "Brand new", photos: [], ingredients: [], steps: [], tags: [], created_at: "2026-12-31" }; renderRecipes(); return document.querySelector("#rlist .rcard") !== first && /Brand new/.test(document.querySelector("#rlist").textContent); });
+  check("…but a real change still shows straight away", changed);
+  await page.evaluate(() => { for (const k of Object.keys(state.recipes)) if (/^lz/.test(k)) delete state.recipes[k]; renderRecipes(); });
 
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
