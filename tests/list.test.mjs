@@ -36,22 +36,22 @@ try {
   check("sort: 'Quickest' is still there", await page.$$eval("#sortBy option", (os) => os.some((o) => o.value === "quick")));
 
   // --- 2.6.0: grid or list, remembered on this phone, for every recipe list
-  const view = () => page.evaluate(() => ({ list: document.body.classList.contains("aslist"), cols: getComputedStyle(document.getElementById("rlist")).gridTemplateColumns.split(" ").length, tags: getComputedStyle(document.querySelector("#rlist .rcard .tags")).display, pressed: document.querySelector('.viewtog [aria-pressed="true"]')?.dataset.as }));
+  const view = () => page.evaluate(() => ({ list: document.body.classList.contains("aslist"), cols: getComputedStyle(document.getElementById("rlist")).gridTemplateColumns.split(" ").length, tags: getComputedStyle(document.querySelector("#rlist .rcard .tags")).display, pressed: document.getElementById("viewTog").dataset.view }));
   await page.selectOption("#filterBy", "all");
   let v = await view();
   check("view: grid by default, two across", !v.list && v.cols === 2 && v.pressed === "grid", JSON.stringify(v));
-  await page.click('.viewtog [data-as="list"]'); v = await view();
+  await page.click('#viewTog[data-as="list"]'); v = await view();
   check("view: list is one per row, without tags", v.list && v.cols === 1 && v.tags === "none" && v.pressed === "list", JSON.stringify(v));
   check("…and doesn't change the sort or filter", (await order()) === "ABCDE", await order());
   await page.reload(); await page.waitForSelector("#rlist .rcard"); v = await view();
   check("view: remembered after a reload", v.list && JSON.parse(await page.evaluate(() => localStorage.getItem("bourdain.listPrefs"))).view === "list");
   await page.evaluate(() => { localStorage.setItem("bourdain.listPrefs", JSON.stringify({ sort: "az", filter: "all", view: "tiles" })); syncListCtl(); }); v = await view();
   check("view: a saved view that isn't an option falls back to grid", !v.list && v.pressed === "grid");
-  await page.click('.viewtog [data-as="list"]');
+  await page.click('#viewTog[data-as="list"]');
   await page.evaluate(() => { document.getElementById("others").innerHTML = `<div class="rlist" id="otherList">${cardHtml({ title: "Someone's soup", tags: ["x"] }, "")}</div>`; });
   check("view: other people's books and search hits follow it too", await page.evaluate(() => getComputedStyle(document.getElementById("otherList")).gridTemplateColumns.split(" ").length === 1));
   await page.evaluate(() => { document.getElementById("others").innerHTML = ""; });
-  await page.click('.viewtog [data-as="grid"]');  await page.evaluate(() => localStorage.setItem("bourdain.listPrefs", JSON.stringify({ sort: "az", filter: "quick" })));
+  await page.click('#viewTog[data-as="grid"]');  await page.evaluate(() => localStorage.setItem("bourdain.listPrefs", JSON.stringify({ sort: "az", filter: "quick" })));
   await page.reload(); await page.waitForFunction(() => !store.loading);
   check("a phone that had '30 minutes or less' saved shows All recipes", (await page.inputValue("#filterBy")) === "all" && (await page.inputValue("#sortBy")) === "az" && (await order()) === "ABCDE", `${await page.inputValue("#filterBy")} ${await order()}`);
 
