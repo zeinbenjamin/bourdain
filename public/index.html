@@ -31,7 +31,12 @@
 }
 *{box-sizing:border-box}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
-html,body{height:100%;margin:0}
+/* The page itself scrolls (2.6.2), not an inner box: iPhone Safari sometimes sent a
+   swipe to the fixed-height page instead of the inner box, especially after a pinch
+   zoom, and the page just bounced. The header is sticky, the tabs are fixed. */
+html{height:100%}
+body{margin:0;min-height:100%}
+html.sheet-open{overflow:hidden}
 body{
   background:var(--paper); color:var(--ink);
   font-family:var(--serif);
@@ -66,7 +71,7 @@ a{color:inherit}
 .top .sub{font-family:var(--sans);color:var(--ink-3);font-size:11px;font-weight:500;letter-spacing:.02em}
 .top .sync{color:var(--ink);font-weight:700}
 
-main{flex:1; overflow-y:auto; padding:0 0 84px}
+main{flex:1; padding:0 0 84px}
 .signinbar{display:block;width:100%;min-height:48px;border:0;border-bottom:1px solid var(--rule);background:var(--flame);color:var(--paper);font-family:var(--sans);font-size:14px;font-weight:600;padding:10px 18px;text-align:left}
 .signinbar[hidden]{display:none}
 section.view{display:none; padding:16px 18px 24px; max-width:760px; margin:0 auto; width:100%}
@@ -990,7 +995,7 @@ function show(view){
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.view===tab));
   const sub=document.getElementById("topSub");
   const now=new Date(); sub.textContent = `${DAYS[(now.getDay()+6)%7]} ${now.getDate()} ${MONTHS[now.getMonth()]}`;
-  document.getElementById("main").scrollTop=0;
+  window.scrollTo(0,0);
   if(view!=="cook") wake.release();
   render();
 }
@@ -1885,12 +1890,13 @@ document.getElementById("thisWeek").onclick=()=>{ const m=mondayOf(new Date()); 
 function openSheet(html){
   const old=document.getElementById("sheet"); const s=old.cloneNode(false); // drops every handler attached to the previous sheet
   old.replaceWith(s); s.innerHTML=html; s.classList.add("open"); document.getElementById("sheetBg").classList.add("open");
+  document.documentElement.classList.add("sheet-open"); // the page behind a sheet stays put
   document.getElementById("toast").classList.remove("show"); // a leftover toast would sit on top of the sheet
   s.addEventListener("click",e=>{ const b=e.target.closest("[data-act]"); if(!b||!s._acts) return; const fn=s._acts[b.dataset.act]; if(fn) fn(b,e); });
   return s;
 }
 function sheetActions(s,acts){ s._acts=acts; }
-function closeSheet(){ document.getElementById("sheet").classList.remove("open"); document.getElementById("sheetBg").classList.remove("open"); }
+function closeSheet(){ document.getElementById("sheet").classList.remove("open"); document.getElementById("sheetBg").classList.remove("open"); document.documentElement.classList.remove("sheet-open"); }
 document.getElementById("sheetBg").onclick=closeSheet;
 
 function pickRecipe(dateISO){
@@ -2102,7 +2108,7 @@ async function writeRecipe(idea,btn){
     const data=await store.ai("write", {title:idea.title, have:pantryText(), missing:idea.missing||[]});
     if(!data||!data.title) throw {code:"empty_completion"};
     state.draft=normalise(data,""); state.draft.photos=[]; state.editingId=null; state.draftManual=false; state.ideas=null;
-    show("import"); document.getElementById("main").scrollTop=0;
+    show("import"); window.scrollTo(0,0);
   }catch(e){ btn.disabled=false; btn.textContent=old; toast(aiError(e,"writing that one")); }
 }
 
@@ -2346,7 +2352,7 @@ async function runParse(){
         : "Couldn't find a recipe in that. Try pasting more of the caption or a clearer screenshot.";
       btn.disabled=false; return; }
     state.draft=normalise(data,url); state.editingId=null; state.draftManual=false;
-    status.textContent=""; btn.disabled=false; renderImport(); document.getElementById("main").scrollTop=0;
+    status.textContent=""; btn.disabled=false; renderImport(); window.scrollTo(0,0);
   }catch(e){
     btn.disabled=false;
     if(e&&e.name==="AbortError"){ status.className="status"; status.textContent="Stopped. Nothing was imported."; return; }
@@ -2750,7 +2756,7 @@ async function loadAdminList(kind){
 }
 function adminGo(screen, extra={}){
   Object.assign(state, extra); state.adminScreen=screen;
-  renderAdmin(); document.getElementById("main").scrollTop=0;
+  renderAdmin(); window.scrollTo(0,0);
   if(screen==="activity") loadAdminActivity(true);
   if(screen==="audit") loadAdminList("audit");
   if(screen==="errors") loadAdminList("errors");
