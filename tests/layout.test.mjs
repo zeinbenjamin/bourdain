@@ -80,7 +80,9 @@ try {
   check("plan: '+' sits at the right edge of the day row", Math.abs(addBtn.right - day.right) <= 1 && addBtn.top - day.top <= 14, JSON.stringify({ day, addBtn }));
   // planned meals: mini picture and titles that wrap instead of "…" (1.7.6)
   await page.evaluate(() => {
-    const k = iso(state.week);
+    // Not today: a later check gives today a meal of its own, which on a Monday would replace these.
+    const d = new Date(state.week); if (iso(d) === iso(new Date())) d.setDate(d.getDate() + 1);
+    const k = iso(d);
     state.recipes.long = { title: "Grandma's slow-roasted lamb shoulder with anchovy, rosemary and white beans", servings: 6, photos: [] };
     state.recipes.cov = { title: "Leek soup", cover: "c".repeat(32), photos: ["d".repeat(32)] };
     state.plan[k] = { date: k, entries: [{ recipeId: "long", servings: 6 }, { recipeId: "cov", servings: 2 }, { recipeId: "a", servings: 4 }, { recipeId: "gone", servings: 2 }] };

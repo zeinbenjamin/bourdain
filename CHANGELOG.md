@@ -6,6 +6,12 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.5.8 — 2026-10-05
+- Screen recordings read much better. Each sheet of frames now holds 3 frames instead of 6, at twice the size, so small on-screen captions (like "2 tbsp soy sauce") are readable.
+- Captions that flash up for a second are no longer skipped, including over a still shot where only the text changes.
+- A recording can now fill up to 10 sheets, and you can add up to 10 screenshots to an import (was 4).
+- Captions fetched from a link (Instagram's, for one) show emoji and quotes properly in the import form, instead of codes like &quot;.
+
 ## 2.5.7 — 2026-10-03
 - Fixed: in the profile's vegetable picker, the pictures cut into their round outlines (and the red ring around the one you've chosen). The circles are whole now.
 

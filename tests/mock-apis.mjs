@@ -18,7 +18,7 @@ globalThis.fetch = async (url, opts = {}) => {
   if (u.startsWith("https://api.anthropic.com")) {
     await wait(m.claudeDelay || 200, opts.signal);
     const body = JSON.parse(opts.body); const prompt = body.messages[0].content.at(-1).text;
-    console.log("MOCK_CLAUDE_REQ", JSON.stringify({ model: body.model, max_tokens: body.max_tokens }));
+    console.log("MOCK_CLAUDE_REQ", JSON.stringify({ model: body.model, max_tokens: body.max_tokens, images: body.messages[0].content.filter((c) => c.type === "image").length }));
     console.log("MOCK_CLAUDE_PROMPT " + JSON.stringify(prompt.slice(0, 80)) + " … " + JSON.stringify(prompt.slice(-160)));
     const usage = { input_tokens: 1000, output_tokens: 500 }; // like the real API; the server estimates cost from it
     switch (m.claude) {
@@ -72,7 +72,7 @@ globalThis.fetch = async (url, opts = {}) => {
     console.log("MOCK_YOUTUBE " + u.slice(0, 90));
     if (u.includes("/oembed")) return json(200, { title: "Easy beef rendang", author_name: "Kitchen Channel" });
     const desc = m.youtube === "nodesc" ? "" : "Beef rendang\n\n1kg beef chuck\n400ml coconut milk\n2 stalks lemongrass\n\nBrown the beef, add the paste and coconut milk, simmer 2 hours.";
-    return new Response(`<html><head><meta name="description" content="Short meta"></head><body><script>var ytInitialPlayerResponse = {"videoDetails":{"videoId":"abcdefghijk","shortDescription":${JSON.stringify(desc)}}};</script></body></html>`, { status: 200, headers: { "content-type": "text/html" } });
+    return new Response(`<html><head><meta name="description" content="Short meta &#x1f957; it&rsquo;s &quot;quick&quot;"></head><body><script>var ytInitialPlayerResponse = {"videoDetails":{"videoId":"abcdefghijk","shortDescription":${JSON.stringify(desc)}}};</script></body></html>`, { status: 200, headers: { "content-type": "text/html" } });
   }
   if (u.startsWith("https://api.openai.com")) {
     const body = JSON.parse(opts.body);

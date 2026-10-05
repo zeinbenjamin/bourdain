@@ -231,7 +231,7 @@ people (see **Other people** below).
 **AI jobs and limits (2.2)** (`AI_JOBS`, `runAi`, `aiBlock` in `server.js`):
 - **Prompts are the server's.** `POST /api/ai {kind, material, images}` builds
   the prompt from `AI_JOBS[kind]` (`PARSE_PROMPT`, `SCAN_PROMPT`, the ideas and
-  write prompts, `DISH_PROMPT`, `COST_PROMPT`), clips the material and caps the images (4 for an import, 6 for
+  write prompts, `DISH_PROMPT`, `COST_PROMPT`), clips the material and caps the images (10 for an import, 6 for
   a scan, 3 for a dish guess, none otherwise). There is no route that takes a prompt: that would be
   free Claude on Zein's key for anyone signed in. `/api/claude` is gone.
 - **Every call that reaches Claude or OpenAI is logged** in `ai_usage` with
@@ -391,8 +391,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v42"`
-in `public/sw.js` → `v43`, `v44`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v43"`
+in `public/sw.js` → `v44`, `v45`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -555,10 +555,15 @@ Four routes in, most to least reliable:
    from the watch page (sent with a consent cookie). Only the description is
    read, so a recipe that's only spoken needs a screen recording.
 3. **Screenshots** — sent to the model as images.
-4. **Screen recording** — the browser samples frames, drops near-duplicates by
-   comparing downscaled pixel diffs, and tiles survivors into contact sheets
-   (6 per sheet, 4 sheets max). Audio is not transcribed; the model reads
-   on-screen text and caption overlays.
+4. **Screen recording** (`videoToSheets`, reworked in 2.5.8) — the browser
+   samples about 3 frames a second (up to 120), compares 120px-wide greyscale
+   copies block by block (so a small caption counts even when the rest is still),
+   and drops repeats. If there are still more than fit, it removes the frames most
+   like a neighbour first, counting a frame that stayed on screen longer as worth
+   more. Survivors are drawn full size in a second pass, 3 per sheet side by side
+   (stacked for landscape), each frame ~522px wide, up to 10 sheets (the import
+   cap is 10 images). Audio is not transcribed; the model reads on-screen text
+   and caption overlays.
 
 The import form lists these under the link box (`.srcicons`, 2.5.3: recipe
 sites, Instagram, TikTok, YouTube, as plain ink line icons); add a route there

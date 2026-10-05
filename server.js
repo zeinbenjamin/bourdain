@@ -679,7 +679,7 @@ const PARSE_PROMPT = `You are the import step of a personal recipe app. Extract 
  "tags": [string, ...] (2-5 short lowercase tags: cuisine, protein, style like "weeknight", "meal prep", "high protein"),
  "notes": string (tips, swaps, storage, or "")}
 
-If an image is a grid of video frames (a contact sheet from a screen recording), read the frames in order left-to-right then top-to-bottom, and treat on-screen text, captions and subtitles as the recipe source; ingredients often appear as overlaid text and quantities may be spoken in captions. Combine all frames into one recipe.
+If an image is a strip of video frames (a contact sheet from a screen recording: frames side by side, or stacked for a landscape video), read the frames in order left-to-right then top-to-bottom, and the sheets in the order given, and treat on-screen text, captions and subtitles as the recipe source; ingredients often appear as overlaid text and quantities may be spoken in captions. Combine all frames into one recipe. Keep every amount you can read on screen ("2 tbsp soy sauce", "300g beef mince"); only leave a quantity empty when no frame shows one.
 
 Rules: convert vulgar fractions to decimals (½ -> 0.5). Convert ounces to g and fl oz/pints to ml. Use "whole" for countable items (2 eggs -> quantity 2, unit "whole", item "egg"). Use "drizzle" for an unmeasured drizzle (e.g. olive oil to finish), with quantity null. If a quantity is genuinely missing, use null and unit "". Ignore hashtags, follow-me lines, emoji and comments. If the material contains no recipe at all, reply {"error":"no recipe found"}.
 
@@ -700,7 +700,7 @@ Reply with ONLY a JSON object, no prose: {"items":[{"item": string, "qty": numbe
 const clip = (v, n) => String(v ?? "").slice(0, n);
 // kind -> how to build the prompt from the material, how many images, and which limit it counts against
 const AI_JOBS = {
-  import: { group: "import", images: 4, prompt: (m) => PARSE_PROMPT + (m.url ? `Source URL: ${clip(m.url, 500)}\n\n` : "") + (m.text ? clip(m.text, 20000) : "(no text — read the screenshots)") },
+  import: { group: "import", images: 10, prompt: (m) => PARSE_PROMPT + (m.url ? `Source URL: ${clip(m.url, 500)}\n\n` : "") + (m.text ? clip(m.text, 20000) : "(no text — read the screenshots)") },
   scan: { group: "scan", images: 6, prompt: () => SCAN_PROMPT },
   ideas: { group: "ideas", images: 0, prompt: (m) => `I have these ingredients: ${clip(m.have, 4000)}.
 Assume salt, pepper, cooking oil and water are always on hand. Suggest 3 different dishes I could realistically cook. Favour ones needing nothing extra; a dish may need at most 2 common extra items.
@@ -1359,7 +1359,13 @@ function youtubeId(link) {
     return /^[\w-]{11}$/.test(id || "") ? id : null;
   } catch { return null; }
 }
-const decodeEntities = (t) => t.replace(/&amp;/g, "&").replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+// Pages put emoji and punctuation in their meta tags as entities (&#x1f957;, &quot;, &rsquo;).
+const NAMED_ENTITIES = { quot: '"', apos: "'", lt: "<", gt: ">", nbsp: " ", rsquo: "\u2019", lsquo: "\u2018", rdquo: "\u201d", ldquo: "\u201c", ndash: "\u2013", mdash: "\u2014", hellip: "\u2026", deg: "\u00b0", frac12: "\u00bd", frac14: "\u00bc", frac34: "\u00be", amp: "&" };
+const decodeEntities = (t) => t.replace(/&(#x[0-9a-f]{1,6}|#\d{1,7}|[a-z][a-z0-9]{1,7});/gi, (all, e) => {
+  if (e[0] !== "#") return NAMED_ENTITIES[e.toLowerCase()] ?? all;
+  const n = e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+  return n > 0 && n <= 0x10ffff && !(n >= 0xd800 && n <= 0xdfff) ? String.fromCodePoint(n) : all;
+});
 async function youtubeText(id) {
   const watch = `https://www.youtube.com/watch?v=${id}`, parts = [];
   try {
@@ -1426,7 +1432,7 @@ app.post("/api/fetch", async (req, res) => {
       }
 
       const ogDesc = body.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)/i)?.[1];
-      parts.push([ogDesc, stripTags(body).slice(0, 20000)].filter(Boolean).join("\n\n"));
+      parts.push([ogDesc && decodeEntities(ogDesc), stripTags(body).slice(0, 20000)].filter(Boolean).join("\n\n"));
     } catch (err) {
       if (err instanceof BlockedAddress) {
         console.warn(`refused to fetch ${target} for ${who}: ${err.message}`);
