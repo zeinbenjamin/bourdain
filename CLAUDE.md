@@ -51,8 +51,10 @@ A recipe:
   source_url, source_type,          // web | instagram | tiktok | youtube | manual | photo (guessed from a dish, 2.5)
   photos: [assetId],                // first one is the hero image, unless there's a cover
   cover: assetId,                   // optional AI illustration, served from /api/covers/:id (WebP)
+  covers: [assetId],                // 2.6.0: every cover made for it, newest first, up to 6 (COVERS_MAX); `cover` is the one shown
   rating: 0|1|2|3,                  // optional Michelin-style stars; 0 = rated "no stars", missing = not rated
-  cooks: [{date, at, mult}],        // one per finished cook: local ISO date, timestamp, batch multiplier
+  cooks: [{date, at, mult, added}], // one per cook, in date order: local ISO date, timestamp, batch multiplier;
+                                    // added: true for one added later for an earlier day (2.6.0, at = midday)
   copied_from: {owner, id, name, title}, // set on a copy made with Add to my recipes (2.1); the credit line
   cost: {home_per_serve, casual_per_serve, out_per_serve, course, currency, hash, at}, // 2.5, see Cost
   guess: {dish, cuisine, confidence, alternatives, basis}, // 2.5, set by Guess from a photo
@@ -137,7 +139,13 @@ single in-progress cook in `localStorage["bourdain.cooking"]` as
 `{recipeId, mult, started, ing:[index], steps:[index], timers:[{id, label, secs, ends, done}]}`, so ticking is instant,
 works offline and survives reloads. Nothing is written to the server until
 **Finished cooking**, which appends to `recipe.cooks` (and sets `rating` if one
-was picked) with a normal `store.put`. The cooking screen (`state.view ===
+was picked) with a normal `store.put`. Cooks are always kept in date order (`addCook()`), since "last cooked"
+reads the last one. **Past cooks** (2.6.0, `pastCookSheet`, from "Add a date I
+cooked this" in the cook-log sheet): any date up to today, a batch, stored with
+`added: true`. The server logs them as `cook_added` ("added a past cook of", with
+the date), never `cook_logged`, and the owner's view counts them apart
+(`cooks_added`), so the pilot's count of finished cooks stays honest (Zein,
+2026-10-05). Everywhere on the phone they count like any other cook. The cooking screen (`state.view ===
 "cook"`, `renderCook`) toggles ticks in place instead of re-rendering, so the
 page never jumps while you cook. `wake` holds a Screen Wake Lock while it's open
 and releases it in `show()` for any other view.
@@ -259,6 +267,14 @@ people (see **Other people** below).
   limits, 413 `storage_full` over it. Photos from before 2.3 aren't in the table.
   `storageUsed()` counts only photos still in one of the person's recipes or
   their profile, plus the last day's uploads (drafts), so removing a photo frees it.
+- **What's left, before a limit** (2.6.0, `allowanceFor()` in `server.js`,
+  `allowance` in `index.html`): `/api/me` has `allowance` (today's `{used, limit}`
+  for `import`, `scan`, `ideas`, `cover`, `month_pct`, `storage`; or just
+  `{exempt: true}`), and every `/api/ai` and `/api/cover` reply carries the new
+  count for its group. **Never prices** (Zein): no US$, no `monthly_usd`, to anyone
+  but the admin's own screens. From half left (`left <= limit / 2`) a grey
+  `[data-allow=<group>]` line under the button and one toast a day per group; the
+  month the same from 50%. The profile sheet shows all of it. `cost` isn't shown.
 
 **The owner's view (2.2, rebuilt as an admin overview in 2.4)** (`openAdmin`,
 `renderAdmin`, `view-admin`): a long press (600ms) on the version sheet's
@@ -294,7 +310,10 @@ filter that is no longer an option falls back to the default in `listPrefs.get()
 reads top to bottom: title, a `.cstars` row with the Michelin stars (omitted
 entirely when the recipe has none), the `.meta` row (time · serves · source), and
 tags. Cards deliberately don't show the cook count; that is only on the recipe
-page.
+page. **Grid or list** (2.6.0): `listPrefs.view` (`grid` | `list`), the
+`.viewtog` switch beside sort and filter. List view is `body.aslist`, CSS only, so
+every `.rlist` follows it (other people's books, search hits, profiles): one card a
+row, a 56px picture, no tags.
 
 **The Anthropic and OpenAI API keys live only on the server.** Neither may appear
 in `index.html` or any client-visible file.
@@ -323,8 +342,8 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   (outbox and photo queue across server outages), `loading` (slow Wi-Fi, Stop,
   version sheet), `covers` (cover UI, import errors, shrinking), `review`
   (edit form: description, double-tap Save), `cook` (cook mode, ratings,
-  cook log), `timers` (fake clock via `page.clock`), `list` (sort, filter,
-  cards), `layout` (measured gaps and tap targets at phone width), `add` (the
+  cook log, past cooks), `timers` (fake clock via `page.clock`), `list` (sort, filter,
+  cards, grid or list), `layout` (measured gaps and tap targets at phone width), `add` (the
   "+" sheet, import vs write your own, carrying on with an unsaved draft),
   `timeline` (the Archives tab: stats, most cooked, the feed, back navigation),
   `dataversion` (data version stamps, per-user keys on the phone, adopting 1.x
@@ -339,7 +358,8 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   sizes, storage in use, malformed cooks), `migration` (the 1 → 2
   conversion, refusing to start, Cloudflare refused, `/api/me`, the export
   zip), `cost` (estimates, savings in the Archives, re-estimating), `dish`
-  (Guess from a photo, YouTube links), `scan`, `video`.
+  (Guess from a photo, YouTube links), `allowance` (what's left of the AI
+  allowance, 2.6.0), `scan`, `video`.
 - `slowProxy` delays: `shell` (index.html), `state` (`/api/state`), `write`
   (PUT/DELETE).
 
@@ -391,8 +411,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v45"`
-in `public/sw.js` → `v46`, `v47`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v46"`
+in `public/sw.js` → `v47`, `v48`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -710,11 +730,17 @@ deletes a `.webp` only if no recipe's `cover` points at it and it is older than
 `COVER_GRACE_DAYS` (7). The grace period covers unsaved drafts and saves still
 in a phone's outbox. The sweep is skipped entirely if any recipe row is
 unreadable or there are no recipes, since either would make every cover look
-unused. It never touches photos (`.jpg`). Transparency is a preview feature on `gpt-image-2`. If OpenAI rejects it,
+unused. Since 2.6.0 it also spares every id in a recipe's `covers`. It never touches photos (`.jpg`). Transparency is a preview feature on `gpt-image-2`. If OpenAI rejects it,
 `paintCover` retries once with an opaque white background, which looks the same
 because covers are always shown on `--paper` white. The PNG is stored as WebP
 (keeps alpha; the photo pipeline's JPEG would not) in the photos dataset as
 `<id>.webp`.
+
+**Choosing between covers** (2.6.0, `coversOf`, `withCover`, `coverPicker`): a new
+cover is used straight away and added to `covers`; if there are others, the picker
+opens with it chosen. "Choose from your N covers" on the recipe page (or a tap on
+the cover) opens it without painting. × removes one not in use. `/api/copy` drops
+`covers`, so a copy has only the chosen one. The export zip has all of them.
 
 Display rule: a cover is shown whole (`object-fit: contain`) on `--paper`, never
 on the grey `--steel` tile and never cropped. That rule is what makes the dish

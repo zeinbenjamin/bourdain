@@ -27,6 +27,30 @@ try {
   check("card: cover on a white tile, uncropped", card.cls.includes("cover") && card.bg === "rgb(255, 255, 255)" && card.fit === "contain", JSON.stringify(card));
   check("card without a cover keeps the grey letter tile", (await page.evaluate(() => getComputedStyle(document.querySelector('.rcard[data-id="r2"] .thumb')).backgroundColor)) === "rgb(247, 247, 247)");
 
+  // --- 2.6.0: a second cover; choose between them
+  const first = (await s.state()).recipes.r1.cover;
+  check("one cover: no picker, no 'Choose from' line", !(await page.isVisible("#pickCover")));
+  await page.click('.rcard:has-text("Chicken donburi")'); await page.click("#makeCover");
+  await page.waitForSelector("#sheet.open .coverchoices", { timeout: 15000 });
+  let st = (await s.state()).recipes.r1;
+  check("second cover: used straight away, both kept, newest first", st.cover !== first && st.covers?.length === 2 && st.covers[0] === st.cover && st.covers[1] === first, JSON.stringify({ cover: st.cover, covers: st.covers }));
+  const pk = await page.evaluate(() => ({ h: document.querySelector("#sheet h3").textContent, n: document.querySelectorAll("#sheet .ccpick").length, on: document.querySelector("#sheet .ccpick.on")?.dataset.id,
+    xs: document.querySelectorAll("#sheet .cc .x").length, tiles: [...document.querySelectorAll("#sheet .ccpick")].map((x) => Math.round(x.getBoundingClientRect().width)), xbox: [...document.querySelectorAll("#sheet .cc .x")].map((x) => Math.round(x.getBoundingClientRect().height)) }));
+  check("…the picker opens: both covers, the new one chosen, × only on the one not in use", /New cover added/.test(pk.h) && pk.n === 2 && pk.on === st.cover && pk.xs === 1 && pk.xbox.every((h) => h >= 44) && pk.tiles.every((w) => w >= 80), JSON.stringify(pk));
+  await page.click(`#sheet .ccpick[data-id="${first}"]`); await page.click('#sheet [data-act="use"]'); await sleep(400);
+  st = (await s.state()).recipes.r1;
+  check("…picking the earlier one and 'Use this cover' switches back, keeping both", st.cover === first && st.covers.length === 2 && (await page.getAttribute("img.hero.cover", "src")).includes(first));
+  check("…the recipe page offers 'Choose from your 2 covers'", /Choose from your 2 covers/.test(await page.textContent("#pickCover")));
+  await page.click("img.hero.cover"); await page.waitForSelector("#sheet.open .coverchoices");
+  check("…tapping the cover opens the picker, with no new painting", /Choose a cover/.test(await page.textContent("#sheet h3")) && (await page.locator("#sheet .ccpick.on").getAttribute("data-id")) === first);
+  await page.click("#sheet .cc .x"); await sleep(400);
+  st = (await s.state()).recipes.r1;
+  check("…× removes a cover not in use; with one left the picker closes", st.cover === first && st.covers.length === 1 && !(await page.isVisible("#sheet.open")) && !(await page.isVisible("#pickCover")));
+  const capped = await page.evaluate(() => { const r = { cover: null }; for (let i = 0; i < 8; i++) withCover(r, String(i).repeat(32)); return { n: r.covers.length, first: r.covers[0], last: r.covers.at(-1), cover: r.cover }; });
+  check("…at most 6 are kept, the oldest dropping off", capped.n === 6 && capped.first === "7".repeat(32) && capped.last === "2".repeat(32) && capped.cover === "7".repeat(32), JSON.stringify(capped));
+  check("…a recipe from before 2.6.0 (cover, no list) counts as one", await page.evaluate(() => coversOf({ cover: "a".repeat(32) }).length === 1 && coversOf({}).length === 0 && coversOf({ covers: ["<img>", "b".repeat(32)] }).join() === "b".repeat(32)));
+  await page.click("#back");
+
   // --- Stop, and an error shown in the sheet
   await page.click('.rcard:has-text("Leek soup")'); s.clearLog(); s.setMode({ imageDelay: 8000 });
   await page.click("#makeCover"); await sleep(1200); await page.click('#sheet [data-act="stop"]'); await sleep(600);
@@ -41,9 +65,11 @@ try {
   await page.fill("#fTitle", "Mock donburi (edited)");
   await page.click("#revCover"); await page.waitForSelector(".coverbox img", { timeout: 15000 });
   check("review: cover preview appears, typed edit kept", (await page.inputValue("#fTitle")) === "Mock donburi (edited)");
+  await page.click("#revCover"); await page.waitForFunction(() => coversOf(state.draft || {}).length === 2, null, { timeout: 15000 });
+  check("review: a second cover keeps the first in the draft's list", (await page.evaluate(() => state.draft.covers.length === 2 && state.draft.cover === state.draft.covers[0])) && (await page.inputValue("#fTitle")) === "Mock donburi (edited)");
   await page.click("#revSave"); await page.waitForSelector("img.hero.cover");
   const imported = Object.values((await s.state()).recipes).find((x) => x.title === "Mock donburi (edited)");
-  check("review: saved recipe has the cover", imported && /^[a-f0-9]{32}$/.test(imported.cover || ""));
+  check("review: saved recipe has the cover, and both covers to choose from", imported && /^[a-f0-9]{32}$/.test(imported.cover || "") && imported.covers?.length === 2);
 
   // --- import error messages
   await addRecipe(page, "import");

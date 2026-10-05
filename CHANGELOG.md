@@ -6,6 +6,12 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.6.0 — 2026-10-05
+- Add a cook you didn't log at the time: on a recipe, tap the stars and cook count, then "Add a date I cooked this". Pick any date up to today and the batch size. It shows in your Archives and savings like any other cook.
+- Recipes can be shown as a list as well as a grid: use the switch next to sort and filter. Your choice is remembered on this phone.
+- Every cover you make for a recipe is kept, up to six. After making a new one you can switch back to one you liked better, and "Choose from your covers" on the recipe page does the same any time, without painting a new one.
+- See how much of your AI allowance is left before you run out. Once half of something is used, a line under its button says how many are left today, and your profile shows the whole picture, including this month's AI use as a percentage.
+
 ## 2.5.10 — 2026-10-05
 - Fixed: some recipe sites (feedthepudge.com, for one) couldn't be fetched, because they turn away anything that doesn't look like a web browser. Bourdain now asks for pages the way a browser does.
 - Fixed: when Bourdain was signed in through the web address, a page it couldn't read, or a problem with Claude, showed a vague "error (502)" instead of saying what went wrong. The specific messages come through now.

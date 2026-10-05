@@ -330,7 +330,7 @@ app.use("/api", async (req, res, next) => {
 
 // The vegetable pictures in public/avatars (2.5), chosen as "veg:<name>".
 const VEG_AVATARS = ["tomato", "carrot", "onion", "garlic", "broccoli", "eggplant", "capsicum", "mushroom", "potato", "lemon", "avocado", "corn", "chilli", "ginger", "basil", "spring-onion", "spinach", "red-onion"];
-const me = (u) => ({ id: u.id, email: u.email, name: u.name || null, photo: u.photo || null, is_admin: Boolean(u.is_admin), ai: Boolean(API_KEY) });
+const me = (u) => ({ id: u.id, email: u.email, name: u.name || null, photo: u.photo || null, is_admin: Boolean(u.is_admin), ai: Boolean(API_KEY), allowance: allowanceFor(u) });
 app.get("/api/me", (req, res) => res.json(me(db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id))));
 // Name and photo. The photo is an id from /api/photos, like a recipe photo.
 app.put("/api/me", (req, res) => {
@@ -391,7 +391,7 @@ app.post("/api/copy", (req, res) => {
   if (existing) return res.json({ id: existing, recipe: JSON.parse(db.prepare("SELECT doc FROM recipes WHERE owner = ? AND id = ?").get(req.user.id, existing).doc), already: true });
   const now = new Date().toISOString();
   const copy = { ...src, copied_from: { owner: u.id, id: String(id), name: u.name || "", title: src.title || "" }, created_at: now, updated_at: now };
-  delete copy.rating; copy.cooks = [];
+  delete copy.rating; delete copy.covers; copy.cooks = []; // the chosen cover only, not the ones its owner passed over
   const newId = randomUUID().replace(/-/g, "").slice(0, 12);
   db.prepare("INSERT INTO recipes (owner, id, doc, updated_at) VALUES (?, ?, ?, ?)").run(req.user.id, newId, JSON.stringify(copy), now);
   logActivity(req.user.id, "recipe_copied", `${src.title || "Untitled"} (from ${u.name || "someone"})`);
@@ -496,7 +496,7 @@ app.get("/api/export", async (req, res) => {
   const assets = new Map(); // file name -> path on disk
   for (const r of Object.values(data.recipes)) {
     for (const id of r.photos || []) if (/^[a-f0-9]{32}$/.test(id)) assets.set(`photos/${id}.jpg`, path.join(PHOTO_DIR, `${id}.jpg`));
-    if (/^[a-f0-9]{32}$/.test(r.cover || "")) assets.set(`covers/${r.cover}.webp`, path.join(PHOTO_DIR, `${r.cover}.webp`));
+    for (const c of [r.cover, ...(Array.isArray(r.covers) ? r.covers : [])]) if (/^[a-f0-9]{32}$/.test(c || "")) assets.set(`covers/${c}.webp`, path.join(PHOTO_DIR, `${c}.webp`));
   }
   if (/^[a-f0-9]{32}$/.test(u.photo || "")) assets.set(`profile/${u.photo}.jpg`, path.join(PHOTO_DIR, `${u.photo}.jpg`));
   let missing = 0;
@@ -523,9 +523,17 @@ app.put("/api/:col(recipes|plan|pantry|shop)/:id", sameDataVersion, (req, res) =
   if (col === "recipes") {
     const prev = db.prepare("SELECT doc FROM recipes WHERE owner = ? AND id = ?").get(req.user.id, id);
     let was = null; try { was = prev && JSON.parse(prev.doc); } catch {}
-    const cooked = ((doc.cooks || []).length) > (((was && was.cooks) || []).length);
+    const cooksOf = (r) => (r && Array.isArray(r.cooks) ? r.cooks : []).filter((c) => c && typeof c === "object");
+    const before = new Set(cooksOf(was).map((c) => `${c.date}|${c.at}`));
+    const fresh = cooksOf(doc).filter((c) => !before.has(`${c.date}|${c.at}`));
+    const cooked = cooksOf(doc).length > cooksOf(was).length;
+    // 2.6.0: a cook added for an earlier day (not finished in cook mode) is its own kind,
+    // so "finished a cook" in the activity log stays a count of real, live cooks.
+    const addedLater = cooked && fresh.length > 0 && fresh.every((c) => c.added === true);
     const sameApart = (a, b) => { const strip = ({ cost, updated_at, ...rest } = {}) => JSON.stringify(rest); return strip(a) === strip(b); };
-    if (!(was && sameApart(was, doc))) logActivity(req.user.id, !prev ? "recipe_added" : cooked ? "cook_logged" : "recipe_edited", doc.title || "Untitled"); // a new cost estimate isn't an edit
+    const title = doc.title || "Untitled";
+    if (!(was && sameApart(was, doc))) logActivity(req.user.id, !prev ? "recipe_added" : addedLater ? "cook_added" : cooked ? "cook_logged" : "recipe_edited",
+      addedLater ? `${title} (${fresh.map((c) => String(c.date).slice(0, 10)).join(", ")})` : title); // a new cost estimate isn't an edit
   } else if (col === "plan") logActivity(req.user.id, "plan_changed", id);
   else if (col === "pantry") logActivity(req.user.id, "pantry_changed", doc.item || id);
   db.prepare(`INSERT INTO ${col} (owner, id, doc, updated_at) VALUES (?, ?, ?, ?)
@@ -796,6 +804,24 @@ function aiBlock(user, group) {
   if (spent >= lim.monthly_usd) return { status: 429, body: { error: "monthly AI allowance used up", code: "ai_budget", limit: lim.monthly_usd } };
   return null;
 }
+/* How much of their allowance someone has used (2.6.0), for the phone to show before
+   a limit is reached. Counts and a percentage only: never what anything costs, and
+   never the monthly allowance in US$ (Zein, 2026-10-05). `cost` estimates run in the
+   background and aren't shown. The owner, while exempt, just gets exempt: true. */
+const SHOWN_GROUPS = ["import", "scan", "ideas", "cover"];
+function allowanceFor(user) {
+  const lim = limitsFor(user.id);
+  if (user.is_admin && lim.admin_exempt) return { exempt: true };
+  const used = Object.fromEntries(db.prepare("SELECT grp, COUNT(*) AS n FROM ai_usage WHERE user = ? AND day = ? GROUP BY grp").all(user.id, localDay()).map((r) => [r.grp, r.n]));
+  const spent = db.prepare("SELECT COALESCE(SUM(est_usd), 0) AS s FROM ai_usage WHERE user = ? AND day LIKE ?").get(user.id, localDay().slice(0, 7) + "%").s;
+  return {
+    exempt: false,
+    today: Object.fromEntries(SHOWN_GROUPS.map((g) => [g, { used: used[g] || 0, limit: lim[g] }])),
+    month_pct: lim.monthly_usd > 0 ? Math.min(100, Math.round((spent / lim.monthly_usd) * 100)) : 100,
+    storage: { used_mb: Math.round(storageUsed(user.id) / 1048576), limit_mb: lim.storage_mb },
+  };
+}
+const allowanceOf = (user, group) => { const a = allowanceFor(user); return a.exempt ? { exempt: true } : { group, ...(a.today[group] || {}), month_pct: a.month_pct }; };
 /* Runs one AI job for req.user: checks the limits, allows one at a time per
    person, and records the call if it reached Claude or OpenAI (a call that never
    left the server, like a missing key, isn't counted: it cost nothing). */
@@ -843,7 +869,7 @@ app.post("/api/ai", async (req, res) => {
       return job.finish ? job.finish(json, material && typeof material === "object" ? material : {}) : json;
     });
     if (r.blocked) return;
-    res.json({ json: r.value });
+    res.json({ json: r.value, allowance: allowanceOf(req.user, job.group) });
   } catch (err) {
     if (up.clientGone()) return console.log(`${kind} cancelled: the client stopped waiting`);
     if (err instanceof UpstreamError) return send(res, err);
@@ -953,7 +979,8 @@ app.get("/api/admin/summary", requireAdmin, async (req, res, next) => {
       const byKind = monthUse("AND user = ?", [u.id]);
       return { id: u.id, email: u.email, name: u.name || null, photo: u.photo || null, is_admin: Boolean(u.is_admin), paused: Boolean(u.disabled_at), paused_at: u.disabled_at || null,
         created_at: u.created_at, last_seen: u.last_seen,
-        recipes: rs.length, cooks: rs.reduce((n, r) => n + (Array.isArray(r.cooks) ? r.cooks : []).filter((c) => c && c.date).length, 0), copies: rs.filter((r) => r.copied_from).length,
+        recipes: rs.length, cooks: rs.reduce((n, r) => n + (Array.isArray(r.cooks) ? r.cooks : []).filter((c) => c && c.date && c.added !== true).length, 0),
+        cooks_added: rs.reduce((n, r) => n + (Array.isArray(r.cooks) ? r.cooks : []).filter((c) => c && c.date && c.added === true).length, 0), copies: rs.filter((r) => r.copied_from).length,
         ai: { today, month_calls: byKind.reduce((n, r) => n + r.calls, 0), month_usd: byKind.reduce((n, r) => n + r.usd, 0), month_by_kind: byKind },
         storage_bytes: storageUsed(u.id), limits: limitsFor(u.id), overrides: getSetting(`limits:${u.id}`) };
     });
@@ -1177,7 +1204,7 @@ app.post("/api/cover", async (req, res) => {
       return { id, url: `/api/covers/${id}`, dish };
     });
     if (r.blocked) return;
-    res.json(r.value);
+    res.json({ ...r.value, allowance: allowanceOf(req.user, "cover") });
   } catch (err) {
     if (up.clientGone()) return console.log("cover cancelled: the client stopped waiting");
     if (err instanceof UpstreamError) return send(res, err);
@@ -1196,7 +1223,8 @@ async function sweepCovers() {
   let rows = 0;
   for (const r of db.prepare("SELECT id, doc FROM recipes").all()) {
     rows++;
-    try { const c = JSON.parse(r.doc).cover; if (c) used.add(c); }
+    // 2.6.0: every cover kept in `covers` (the ones to choose between) is in use too
+    try { const d = JSON.parse(r.doc); if (d.cover) used.add(d.cover); for (const c of (Array.isArray(d.covers) ? d.covers : [])) if (typeof c === "string") used.add(c); }
     catch { console.warn(`cover sweep skipped: recipe ${r.id} can't be read, so its cover can't be ruled out`); return { skipped: "corrupt_row" }; }
   }
   if (!rows) { console.warn("cover sweep skipped: no recipes in the database"); return { skipped: "no_recipes" }; }

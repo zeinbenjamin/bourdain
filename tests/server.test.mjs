@@ -133,10 +133,12 @@ try {
   const old = (Date.now() - 10 * 86_400_000) / 1000;
   const file = (name, age) => { const f = path.join(photos, name); writeFileSync(f, "x"); if (age === "old") utimesSync(f, old, old); return f; };
   s = await startServer({ port: 18102, dataDir: data });
-  await s.put("recipes", "r1", { title: "Uses a cover", cover: id("a") });
+  await s.put("recipes", "r1", { title: "Uses a cover", cover: id("a"), covers: [id("f"), id("a")] });
+  const kept = file(id("f") + ".webp", "old"); // 2.6.0: made for the recipe, not the one in use
   const used = file(id("a") + ".webp", "old"), orphan = file(id("b") + ".webp", "old"), fresh = file(id("c") + ".webp", "new"), photo = file(id("d") + ".jpg", "old");
   s.clearLog(); await s.restart(); // the sweep runs at startup
   check("sweep: cover in use is kept", existsSync(used));
+  check("sweep: an earlier cover kept to choose between is kept too (2.6.0)", existsSync(kept));
   check("sweep: unused cover older than 7 days is removed", !existsSync(orphan));
   check("sweep: unused cover newer than 7 days is kept", existsSync(fresh));
   check("sweep: photos (.jpg) are never touched", existsSync(photo));
