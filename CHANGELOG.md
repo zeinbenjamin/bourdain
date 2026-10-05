@@ -6,6 +6,11 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.5.9 — 2026-10-05
+- When fetching a link fails, the message now says what actually happened: you're offline, the connection dropped, or Cloudflare sent back an error (with its number). It used to blame the server every time.
+- A link fetch that drops out is tried once more on its own before giving up.
+- Messages no longer tell you to get back on home Wi-Fi; Bourdain works from anywhere now.
+
 ## 2.5.8 — 2026-10-05
 - Screen recordings read much better. Each sheet of frames now holds 3 frames instead of 6, at twice the size, so small on-screen captions (like "2 tbsp soy sauce") are readable.
 - Captions that flash up for a second are no longer skipped, including over a still shot where only the text changes.

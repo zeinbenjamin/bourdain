@@ -1884,7 +1884,7 @@ function tidyScan(out){
   return items;
 }
 async function scanPantry(){
-  if(!store.online){ toast("Scanning needs the server. Try again when you're back on home Wi-Fi."); return; }
+  if(!store.online){ toast("Scanning needs the server. Try again when you're back online."); return; }
   let files=(await pickPhotos()).filter(f=>f.type.startsWith("image/")); if(!files.length) return;
   if(files.length>SCAN_MAX){ files=files.slice(0,SCAN_MAX); toast(`Using the first ${SCAN_MAX} photos.`); }
   const ctl=new AbortController();
@@ -2001,8 +2001,19 @@ function aiError(e, what="reading that"){
     return `You've used today's ${n?n+" ":""}${what}. More tomorrow.`;
   }
   if(m[c]) return m[c];
-  if(!e||!e.status) return "Couldn't reach the server. Check you're on home Wi-Fi, then try again.";
-  return `Something went wrong ${what}. Try again.`;
+  return reachError(e) || `Something went wrong ${what}. Try again.`;
+}
+/* When the answer didn't come from Bourdain itself (2.5.9). Either nothing came
+   back at all (no signal, or the connection dropped on the way), or something in
+   between (Cloudflare, mostly) answered with its own error page, which has a
+   status but none of our codes. Say which, with the number, so it can be looked
+   up; never "check the server" when the server may be fine. Null otherwise. */
+function reachError(e){
+  if(!e||!e.status) return navigator.onLine===false
+    ? "You're offline. Connect to Wi-Fi or mobile data, then try again."
+    : "Couldn't get through to Bourdain. Check your connection and try again. If it keeps happening, tell Zein.";
+  if(/^http_/.test(e.code||"")) return `The connection to Bourdain sent back an error (${e.status}) before it got there. Try again in a minute. If it keeps happening, tell Zein the number.`;
+  return null;
 }
 
 /* ---------- import ---------- */
@@ -2137,7 +2148,8 @@ document.getElementById("btnFetch").onclick=async()=>{
   if(!/^https?:\/\//i.test(url)){ status.className="status err"; status.textContent="Paste a full link starting with https://"; return; }
   btn.disabled=true; status.className="status"; status.innerHTML=`<span class="spin"></span>Fetching the page…`;
   try{
-    const f = await store.fetchUrl(url);
+    // One quiet retry when nothing came back at all: a dropped connection on a phone is common.
+    const f = await store.fetchUrl(url).catch(e=>{ if(e&&!e.status&&navigator.onLine!==false) return store.fetchUrl(url); throw e; });
     if(!f || !f.text || f.text.length<40){
       status.className="status err";
       status.textContent = /instagram/.test(hostOf(url)) ? "Instagram didn't hand over the caption. Paste it below, or add screenshots, then tap Read recipe." : sourceType(url)==="youtube" ? "That video's description doesn't include the recipe. Screen-record the video while it shows the recipe, and add the recording instead." : "That page came back empty. Paste the recipe text or add screenshots instead.";
@@ -2164,8 +2176,7 @@ document.getElementById("btnFetch").onclick=async()=>{
     status.textContent = (e&&e.code==="fetch_failed")
       ? "The server couldn't read that page. Paste the text or add screenshots instead."
       : (e&&e.code==="blocked_address") ? "That link points inside a private network, so Bourdain won't open it. Use a public recipe link, or paste the text."
-      : keepForLater(e) ? aiError(e)
-      : "Couldn't reach the server. Check it's running, then try again.";
+      : aiError(e, "fetching that page");
   }
 };
 document.getElementById("btnParse").onclick=()=>runParse();
@@ -2286,7 +2297,7 @@ function coverUrl(id){ return ASSET_ID.test(String(id??"")) ? "/api/covers/"+id 
    the background; onDone still receives the new cover id. */
 async function makeCover(recipe, onDone){
   if(!recipe.title){ toast("Give the recipe a title first, so there's something to paint."); return; }
-  if(!store.online){ toast("Covers are painted on the server. Try again when you're back on home Wi-Fi."); return; }
+  if(!store.online){ toast("Covers are painted on the server. Try again when you're back online."); return; }
   const ctl=new AbortController();
   const sh=openSheet(`<h3>Painting the cover</h3>
     <p class="status" id="coverStatus"><span class="spin"></span>Describing the dish, then painting it. This can take up to a minute.</p>
@@ -2562,7 +2573,7 @@ function adminGo(screen, extra={}){
   if(screen==="errors") loadAdminList("errors");
   if(screen==="person") loadAdminList("personAct");
 }
-const adminFail=e=>e.code==="not_admin"?"Only the owner can see this.":keepForLater(e)?aiError(e):e.status?`The server couldn't load this (${e.code}). Check the server logs.`:"Can't reach the server. Try again when you're back on home Wi-Fi.";
+const adminFail=e=>e.code==="not_admin"?"Only the owner can see this.":keepForLater(e)?aiError(e):e.status?`The server couldn't load this (${e.code}). Check the server logs.`:"Can't reach the server. Try again when you're back online.";
 function actLine(r){
   let t=r.target||"";
   if(r.action==="plan_changed"&&/^\d{4}-\d{2}-\d{2}$/.test(t)) t=fmtDate(t);
@@ -2775,7 +2786,7 @@ function pauseSheet(p,pause){
     b.disabled=true;
     try{ await api("/api/admin/people/"+encodeURIComponent(p.id),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({paused:pause}),signal:timeout(10000)});
       closeSheet(); toast(pause?`${p.name||p.email}'s account is paused`:`${p.name||p.email}'s account is back`); loadAdmin(); }
-    catch(e){ b.disabled=false; toast(e.status?`The server didn't take that: ${e.message}.`:"Can't reach the server. Try again when you're back on home Wi-Fi."); }
+    catch(e){ b.disabled=false; toast(e.status?`The server didn't take that: ${e.message}.`:"Can't reach the server. Try again when you're back online."); }
   } });
 }
 function inviteSheet(){
@@ -2803,7 +2814,7 @@ function readLimits(box,blankOk){
 }
 async function putLimits(body){
   try{ await api("/api/admin/limits",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:timeout(10000)}); return true; }
-  catch(e){ toast(e.status?`The server didn't take that: ${e.message}.`:"Can't reach the server. Try again when you're back on home Wi-Fi."); return false; }
+  catch(e){ toast(e.status?`The server didn't take that: ${e.message}.`:"Can't reach the server. Try again when you're back online."); return false; }
 }
 async function saveDefaultLimits(){
   const el=document.getElementById("view-admin"), lim=readLimits(el,false); if(!lim) return;
@@ -2839,7 +2850,7 @@ async function openVersion(){
   if(store.me?.is_admin) longPress(sh.querySelector("#verHead"),600,openAdmin); // the owner's screen: deliberately not a button
   let info=null; try{ info=await api("/api/version",{signal:timeout(10000)}); }catch(e){ console.warn("version check failed",e); }
   const body=sh.querySelector("#verBody"); if(!sh.isConnected||!body) return; // another sheet opened meanwhile
-  if(!info){ body.innerHTML=`<p class="vernote">Couldn't reach the server, so I can't check for a newer version or show the history. Try again when you're back on home Wi-Fi.</p>`; return; }
+  if(!info){ body.innerHTML=`<p class="vernote">Couldn't reach the server, so I can't check for a newer version or show the history. Try again when you're back online.</p>`; return; }
   const note = isStale(info)
     ? `<p class="vernote stale">The server has <strong>${esc(info.version)}</strong> (build ${esc(info.commit)}), but this phone is still running ${esc(APP.version)}. Close the app fully and reopen it to update.</p>`
     : `<p class="vernote">Up to date with the server.</p>`;
@@ -2863,7 +2874,7 @@ async function exportData(btn){
     toast(`Saved ${name}. It has your recipes, plan, pantry and their photos.`);
   }catch(e){
     console.warn("export failed",e);
-    toast(e.code==="signed_out" ? "You're signed out. Tap the red bar at the top to sign in again, then export." : e.status ? `The server couldn't make the export (${e.code||e.status}). Check the server logs.` : "Couldn't reach the server to make the export. Try again when you're back on home Wi-Fi.");
+    toast(e.code==="signed_out" ? "You're signed out. Tap the red bar at the top to sign in again, then export." : e.status ? `The server couldn't make the export (${e.code||e.status}). Check the server logs.` : "Couldn't reach the server to make the export. Try again when you're back online.");
   }finally{ btn.disabled=false; btn.innerHTML=old; }
 }
 /* Quietly tell the user when the server has a newer build than the one this phone is running. */
