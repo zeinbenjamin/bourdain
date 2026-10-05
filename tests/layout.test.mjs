@@ -203,6 +203,25 @@ try {
   check("list view: rows are full width, at least 56px tall, with a 56px picture and 12px before the title", lv.rows.length > 0 && lv.rows.every((r) => r.h >= 56 && r.w >= lv.vw - 40 && r.thumb[0] === 56 && r.thumb[1] === 56 && r.gap === 12), JSON.stringify(lv.rows));
   check("list view: no sideways scroll", lv.over <= 0, String(lv.over));
   await page.click('.viewtog [data-as="grid"]');
+  // --- 2.6.2: the page itself scrolls, not an inner box (iPhone Safari sometimes
+  // dragged the fixed-height page instead, and it bounced back)
+  await page.evaluate(() => { for (let i = 0; i < 14; i++) state.recipes["many" + i] = { title: "Long list recipe " + i, ingredients: [], steps: [], photos: [], tags: [] }; state.view = "recipes"; show("recipes"); });
+  const sc = await page.evaluate(async () => {
+    const main = getComputedStyle(document.getElementById("main")).overflowY, tall = document.scrollingElement.scrollHeight > innerHeight + 200;
+    window.scrollTo(0, document.scrollingElement.scrollHeight); await new Promise((r) => setTimeout(r, 100));
+    const cards = [...document.querySelectorAll("#rlist .rcard")], last = cards.at(-1).getBoundingClientRect(), tabs = document.getElementById("tabs").getBoundingClientRect(), top = document.querySelector(".top").getBoundingClientRect();
+    return { main, tall, y: Math.round(scrollY), lastBottom: Math.round(last.bottom), tabsTop: Math.round(tabs.top), headerTop: Math.round(top.top), vh: innerHeight };
+  });
+  check("scrolling: the page scrolls, not an inner box", sc.main === "visible" && sc.tall && sc.y > 0, JSON.stringify(sc));
+  check("…at the bottom the last recipe clears the tab bar, and the header stays at the top", sc.lastBottom <= sc.tabsTop && sc.headerTop === 0, JSON.stringify(sc));
+  await page.click("#btnManual"); await page.waitForSelector("#sheet.open");
+  const locked = await page.evaluate(() => getComputedStyle(document.documentElement).overflowY);
+  await page.evaluate(() => closeSheet());
+  check("…a sheet holds the page still behind it, and lets go when closed", locked === "hidden" && (await page.evaluate(() => getComputedStyle(document.documentElement).overflowY)) !== "hidden", locked);
+  await page.click('.rcard:has-text("Long list recipe 0")'); await page.waitForSelector("#view-detail.active");
+  check("…a new screen starts at the top", await page.evaluate(() => scrollY) === 0);
+  await page.evaluate(() => { for (let i = 0; i < 14; i++) delete state.recipes["many" + i]; show("recipes"); });
+
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
 } catch (e) { finish(e); } finally { await b?.browser.close(); await s?.cleanup(); }

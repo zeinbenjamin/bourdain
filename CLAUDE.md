@@ -413,8 +413,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v47"`
-in `public/sw.js` → `v48`, `v49`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v48"`
+in `public/sw.js` → `v49`, `v50`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -444,6 +444,14 @@ Docker's gateway, so `TRUSTED_NETS` could never match a real device.
 **`docker-compose.yml` mirrors the live TrueNAS YAML**, with the pool path and
 API key replaced by placeholders. If you change the YAML in TrueNAS, change this
 file to match. The live setup uses datasets under `/mnt/sonic/builds_/bourdain/`.
+
+**The page itself scrolls, never an inner box (2.6.2).** Until 2.6.1, `html` and
+`body` were fixed at the screen height and only `<main>` scrolled. iPhone Safari
+sometimes sent a swipe to the page instead (often after a pinch zoom), so the page
+bounced and the list wouldn't move. Now the document scrolls, `.top` is sticky and
+`.tabs` fixed; reset with `window.scrollTo(0,0)`, not `main.scrollTop`. An open
+sheet sets `html.sheet-open` (`overflow:hidden`) so the page behind stays put.
+Don't give `<main>` or `body` a fixed height or `overflow` again.
 
 **No `confirm()` or `alert()`.** The app runs in a sandboxed frame in some
 contexts where those are silently blocked and return false — a delete button
