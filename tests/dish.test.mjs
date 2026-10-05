@@ -81,6 +81,37 @@ try {
   await page.waitForFunction(() => document.querySelector("#importStatus").classList.contains("err"));
   check("a video whose description has no recipe points to a screen recording", /Screen-record the video/.test(await page.textContent("#importStatus")));
   await page.unroute("**/api/ai");
+
+  // --- 2.5.9: when Fetch & read gets no answer from Bourdain itself, say what happened
+  const fetchStatus = async (url = "https://feedthepudge.com/beef-pepper-rice/") => {
+    await page.evaluate(() => { const st = document.querySelector("#importStatus"); st.className = "status"; st.textContent = ""; document.getElementById("srcText").value = ""; });
+    await page.fill("#srcUrl", url); await page.click("#btnFetch");
+    await page.waitForFunction(() => document.querySelector("#importStatus").classList.contains("err") || !document.getElementById("btnFetch").disabled && document.getElementById("srcText").value);
+    return page.textContent("#importStatus");
+  };
+  let calls = 0;
+  await page.route("**/api/fetch", (r) => (++calls === 1 ? r.abort("connectionreset") : r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ text: "Beef pepper rice. 300g thinly sliced beef, 2 cups cooked rice, 1 tbsp butter. Cook it all on a hot pan.", recipeJson: null }) })));
+  await page.route("**/api/ai", (r) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ json: { error: "no recipe found" } }) }));
+  await fetchStatus();
+  check("a dropped connection is retried once, quietly", calls === 2 && /Beef pepper rice/.test(await page.inputValue("#srcText")), `${calls} calls`);
+  await page.unroute("**/api/fetch"); await page.unroute("**/api/ai");
+  await page.route("**/api/fetch", (r) => r.abort("connectionreset"));
+  let msg = await fetchStatus();
+  check("…and if nothing ever comes back, it says it couldn't get through, not that the server is down", /Couldn't get through to Bourdain/.test(msg) && !/server/i.test(msg), msg);
+  await page.unroute("**/api/fetch");
+  await page.route("**/api/fetch", (r) => r.fulfill({ status: 524, contentType: "text/html", body: "<html>A timeout occurred</html>" }));
+  msg = await fetchStatus();
+  check("an error page from Cloudflare says so, with its number", /sent back an error \(524\)/.test(msg), msg);
+  await page.unroute("**/api/fetch");
+  await page.route("**/api/fetch", (r) => r.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "boom", code: "server_error" }) }));
+  msg = await fetchStatus();
+  check("a real server error isn't called a connection problem", /Something went wrong fetching that page/.test(msg), msg);
+  await page.unroute("**/api/fetch");
+  await b.ctx.setOffline(true);
+  msg = await fetchStatus();
+  await b.ctx.setOffline(false);
+  check("offline says offline", /You're offline/.test(msg), msg);
+
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
 } catch (e) { finish(e); } finally { await b?.browser.close(); await s?.cleanup(); }
