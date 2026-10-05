@@ -6,6 +6,11 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.5.10 — 2026-10-05
+- Fixed: some recipe sites (feedthepudge.com, for one) couldn't be fetched, because they turn away anything that doesn't look like a web browser. Bourdain now asks for pages the way a browser does.
+- Fixed: when Bourdain was signed in through the web address, a page it couldn't read, or a problem with Claude, showed a vague "error (502)" instead of saying what went wrong. The specific messages come through now.
+- Fixed: an occasional "error (502)" on any action, caused by the connection between Cloudflare and Bourdain being closed too early. A fetch that hits one is also tried once more on its own.
+
 ## 2.5.9 — 2026-10-05
 - When fetching a link fails, the message now says what actually happened: you're offline, the connection dropped, or Cloudflare sent back an error (with its number). It used to blame the server every time.
 - A link fetch that drops out is tried once more on its own before giving up.
