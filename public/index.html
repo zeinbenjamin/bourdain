@@ -2148,8 +2148,9 @@ document.getElementById("btnFetch").onclick=async()=>{
   if(!/^https?:\/\//i.test(url)){ status.className="status err"; status.textContent="Paste a full link starting with https://"; return; }
   btn.disabled=true; status.className="status"; status.innerHTML=`<span class="spin"></span>Fetching the page…`;
   try{
-    // One quiet retry when nothing came back at all: a dropped connection on a phone is common.
-    const f = await store.fetchUrl(url).catch(e=>{ if(e&&!e.status&&navigator.onLine!==false) return store.fetchUrl(url); throw e; });
+    // One quiet retry when nothing came back from Bourdain itself: a dropped connection,
+    // or Cloudflare's own 5xx page (http_5xx). Both are usually gone a second later.
+    const f = await store.fetchUrl(url).catch(e=>{ if(e&&(!e.status||/^http_5/.test(e.code||""))&&navigator.onLine!==false) return store.fetchUrl(url); throw e; });
     if(!f || !f.text || f.text.length<40){
       status.className="status err";
       status.textContent = /instagram/.test(hostOf(url)) ? "Instagram didn't hand over the caption. Paste it below, or add screenshots, then tap Read recipe." : sourceType(url)==="youtube" ? "That video's description doesn't include the recipe. Screen-record the video while it shows the recipe, and add the recording instead." : "That page came back empty. Paste the recipe text or add screenshots instead.";

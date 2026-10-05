@@ -48,10 +48,13 @@ try {
   const db2 = new Database(path.join(s.data, "bourdain.db")); db2.prepare("DELETE FROM recipes WHERE id='broken'").run(); db2.close();
 
   // --- Claude failures get specific codes
+  // 2.5.10: never as a 502 or 504, which Cloudflare swaps for its own error page.
+  const statuses = [];
   for (const [mode, code] of [["401", "bad_api_key"], ["404", "model_unavailable"], ["529", "overloaded"], ["credit", "no_credit"], ["image", "image_rejected"], ["max_tokens", "truncated"], ["refusal", "refused"]]) {
     s.setMode({ claude: mode });
     const r = await s.post("/api/ai", { kind: "import", material: { text: "x" } });
     check(`Claude ${mode} -> ${code}`, r.code === code, `${r.status} ${r.code}`);
+    statuses.push(`${code} ${r.status}`);
   }
   s.setMode({}); s.clearLog();
   const ok = await s.post("/api/ai", { kind: "import", material: { text: "x" } });
@@ -83,8 +86,29 @@ try {
     s.setMode({ image: mode });
     const x = await s.post("/api/cover", { recipe });
     check(`OpenAI ${mode} -> ${code}`, x.code === code, `${x.status} ${x.code}`);
+    statuses.push(`${code} ${x.status}`);
   }
   s.setMode({});
+  check("no Claude or OpenAI failure answers 502 or 504 (Cloudflare would hide the code)", statuses.every((x) => !/ 50[24]$/.test(x)), statuses.join(", "));
+
+  // --- 2.5.10: a page that can't be read is a 422 with what the site said, not a 502
+  s.clearLog();
+  const unread = await s.post("/api/fetch", { url: "https://nowhere.bourdain-test.invalid/recipe" });
+  check("a page that can't be fetched: 422 fetch_failed, with the reason", unread.status === 422 && unread.code === "fetch_failed" && /nowhere\.bourdain-test\.invalid/.test(unread.detail || ""), JSON.stringify(unread));
+
+  // --- 2.5.10: an idle connection stays open longer than cloudflared keeps one (90s),
+  // so a request sent on it isn't refused. Node's default closed it after 5s.
+  const net = await import("node:net");
+  const sock = net.connect(Number(new URL(B).port), "127.0.0.1");
+  await new Promise((r) => sock.once("connect", r));
+  const ask = () => new Promise((r) => { let got = ""; const on = (c) => { got += c; if (/\r\n\r\n[\s\S]*\}/.test(got)) { sock.off("data", on); r(got); } }; sock.on("data", on);
+    sock.write(`GET /api/health HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: keep-alive\r\n\r\n`); });
+  const first = await ask();
+  let closed = false; sock.once("close", () => (closed = true));
+  await new Promise((r) => setTimeout(r, 6500));
+  const second = closed ? "" : await ask();
+  sock.destroy();
+  check("an idle connection is still open after 6s, and answers", /^HTTP\/1\.1 200/.test(first) && !closed && /^HTTP\/1\.1 200/.test(second), closed ? "closed by the server" : second.slice(0, 40));
   check("cover without a title -> no_title", (await s.post("/api/cover", { recipe: {} })).code === "no_title");
 
   // --- the phone giving up cancels the upstream call

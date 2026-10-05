@@ -607,6 +607,9 @@ app.get("/api/photos/:id", (req, res) => {
 /* ---------------- upstream calls ----------------
    Every failure from Claude or OpenAI becomes an UpstreamError with a code the
    client turns into a specific message; retrying only helps for some of them. */
+// 503, never 502 or 504: Cloudflare replaces an origin's 502/504 with its own error
+// page, so the phone would get HTML instead of the code below (2.5.10).
+const UPSTREAM_FAILED = 503;
 class UpstreamError extends Error {
   constructor(status, code, message, detail) { super(message); this.status = status; this.code = code; this.detail = detail; }
 }
@@ -639,24 +642,24 @@ async function callClaude({ content, maxTokens = 16000, up, who = "claude" }) {
     // Stopped or timed out mid-call: it may already be billed, so it counts. Unreachable: it isn't.
     if (up.meter && (up.clientGone() || up.timedOut())) up.meter.reached = true;
     if (up.clientGone()) throw err;
-    if (up.timedOut()) throw new UpstreamError(504, "upstream_timeout", "Claude took too long to answer");
+    if (up.timedOut()) throw new UpstreamError(UPSTREAM_FAILED, "upstream_timeout", "Claude took too long to answer");
     console.error(`${who}: could not reach Anthropic`, err.message);
-    throw new UpstreamError(502, "upstream_unreachable", "could not reach the Anthropic API");
+    throw new UpstreamError(UPSTREAM_FAILED, "upstream_unreachable", "could not reach the Anthropic API");
   }
   if (up.meter) up.meter.reached = true;
   if (!r.ok) {
     const body = await r.text();
     let msg = ""; try { msg = JSON.parse(body).error?.message || ""; } catch {}
     console.error(`${who}: anthropic ${r.status}`, body.slice(0, 500));
-    if (r.status === 401 || r.status === 403) throw new UpstreamError(502, "bad_api_key", "the Anthropic API key was rejected");
-    if (r.status === 404) throw new UpstreamError(502, "model_unavailable", `model ${MODEL} is not available`, MODEL);
+    if (r.status === 401 || r.status === 403) throw new UpstreamError(UPSTREAM_FAILED, "bad_api_key", "the Anthropic API key was rejected");
+    if (r.status === 404) throw new UpstreamError(UPSTREAM_FAILED, "model_unavailable", `model ${MODEL} is not available`, MODEL);
     if (r.status === 413) throw new UpstreamError(413, "too_large", "request too large for the Anthropic API");
     if (r.status === 429) throw new UpstreamError(429, "rate_limited", "rate limited");
     if (r.status === 529 || r.status === 503) throw new UpstreamError(503, "overloaded", "Claude is overloaded");
     if (r.status === 400 && /credit balance/i.test(msg)) throw new UpstreamError(402, "no_credit", "the Anthropic account is out of credit");
     if (r.status === 400 && /image/i.test(msg)) throw new UpstreamError(422, "image_rejected", "an image was rejected", msg.slice(0, 200));
     if (r.status === 400) throw new UpstreamError(422, "upstream_rejected", "the Anthropic API rejected the request", msg.slice(0, 200));
-    throw new UpstreamError(502, "upstream_error", "the Anthropic API returned an error");
+    throw new UpstreamError(UPSTREAM_FAILED, "upstream_error", "the Anthropic API returned an error");
   }
   const data = await r.json();
   if (up.meter) { up.meter.input += data.usage?.input_tokens || 0; up.meter.output += data.usage?.output_tokens || 0; }
@@ -845,7 +848,7 @@ app.post("/api/ai", async (req, res) => {
     if (up.clientGone()) return console.log(`${kind} cancelled: the client stopped waiting`);
     if (err instanceof UpstreamError) return send(res, err);
     console.error(`${kind} failed`, err);
-    res.status(502).json({ error: "the AI job failed", code: "upstream_error" });
+    res.status(UPSTREAM_FAILED).json({ error: "the AI job failed", code: "upstream_error" });
   }
 });
 
@@ -1128,29 +1131,29 @@ async function paintCover(prompt, up) {
     } catch (err) {
       if (up.meter && (up.clientGone() || up.timedOut())) { up.meter.reached = true; up.meter.images += 1; } // may already be billed
       if (up.clientGone()) throw err;
-      if (up.timedOut()) throw new UpstreamError(504, "image_timeout", "the image model took too long");
+      if (up.timedOut()) throw new UpstreamError(UPSTREAM_FAILED, "image_timeout", "the image model took too long");
       console.error("cover: could not reach OpenAI", err.message);
-      throw new UpstreamError(502, "image_unreachable", "could not reach the OpenAI API");
+      throw new UpstreamError(UPSTREAM_FAILED, "image_unreachable", "could not reach the OpenAI API");
     }
     if (up.meter) up.meter.reached = true;
     if (r.ok) {
       if (up.meter) up.meter.images += 1;
       const data = await r.json();
       const b64 = data.data?.[0]?.b64_json;
-      if (!b64) throw new UpstreamError(502, "image_failed", "the image model returned no image");
+      if (!b64) throw new UpstreamError(UPSTREAM_FAILED, "image_failed", "the image model returned no image");
       return Buffer.from(b64, "base64");
     }
     const body = await r.text();
     let e = {}; try { e = JSON.parse(body).error || {}; } catch {}
     const msg = String(e.message || "").slice(0, 200);
     console.error(`cover: openai ${r.status}`, body.slice(0, 500));
-    if (r.status === 401 || r.status === 403) throw new UpstreamError(502, "bad_image_key", "the OpenAI API key was rejected");
+    if (r.status === 401 || r.status === 403) throw new UpstreamError(UPSTREAM_FAILED, "bad_image_key", "the OpenAI API key was rejected");
     if (r.status === 429 && /quota|billing/i.test(`${e.code} ${e.type} ${msg}`)) throw new UpstreamError(402, "no_image_credit", "the OpenAI account is out of credit or quota");
     if (r.status === 429) throw new UpstreamError(429, "image_rate_limited", "OpenAI rate limited the request");
     if (r.status === 400 && /moderation|safety|content.?policy/i.test(`${e.code} ${e.type} ${msg}`)) throw new UpstreamError(422, "image_refused", "the image model declined the prompt", msg);
     if (r.status === 400 && background === "transparent" && /background|transparen/i.test(msg)) return null; // retry below
     if (r.status === 400 || r.status === 404) throw new UpstreamError(422, "image_request_rejected", "OpenAI rejected the request", msg);
-    throw new UpstreamError(502, "image_upstream_error", "the OpenAI API returned an error");
+    throw new UpstreamError(UPSTREAM_FAILED, "image_upstream_error", "the OpenAI API returned an error");
   };
   // Transparency is a preview feature on gpt-image-2: if the model turns it down, fall
   // back to a white background, which looks the same because covers sit on white.
@@ -1316,12 +1319,14 @@ function publicLookup(host, opts, cb) {
   });
 }
 const MAX_PAGE = 5 * 1024 * 1024;
+const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 function getOnce(u, signal) {
   const host = u.hostname.replace(/^\[|\]$/g, "");
   if (isIP(host) && PRIVATE_NETS.has(host)) return Promise.reject(new BlockedAddress(`${host} is a private address`)); // literals skip the lookup
   return new Promise((resolve, reject) => {
     const req = (u.protocol === "https:" ? https : http).request(u, {
-      headers: { "user-agent": "Mozilla/5.0 (compatible; Bourdain/1.0)", accept: "text/html,application/json" },
+      // A browser's user-agent: many recipe sites (WordPress security plugins, bot rules) refuse an unknown bot.
+      headers: { "user-agent": BROWSER_UA, accept: "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8", "accept-language": "en-AU,en;q=0.9" },
       lookup: publicLookup, signal, agent: false,
     }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) { res.resume(); return resolve({ redirect: res.headers.location }); }
@@ -1397,7 +1402,7 @@ app.post("/api/fetch", async (req, res) => {
   if (yt) {
     const text = await youtubeText(yt);
     logged(text ? "read" : "nothing came back");
-    if (!text) return res.status(502).json({ error: "nothing came back from YouTube", code: "fetch_failed" });
+    if (!text) return res.status(422).json({ error: "nothing came back from YouTube", code: "fetch_failed" });
     return res.json({ text, recipeJson: null, source: "youtube" });
   }
 
@@ -1405,13 +1410,13 @@ app.post("/api/fetch", async (req, res) => {
   // TikTok's public oEmbed endpoint returns the caption, which the page itself hides.
   if (/tiktok\.com/i.test(url)) targets.push(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`);
 
-  const parts = [];
+  const parts = [], seen = []; // seen: what each site answered, when it wasn't a page
   let recipeJson = null;
 
   for (const target of targets) {
     try {
       const r = await publicGet(target, AbortSignal.timeout(20000));
-      if (r.status < 200 || r.status >= 300) continue;
+      if (r.status < 200 || r.status >= 300) { seen.push(`${new URL(target).hostname} said ${r.status}`); continue; }
       const body = r.body;
 
       if (body.trim().startsWith("{")) {
@@ -1440,12 +1445,13 @@ app.post("/api/fetch", async (req, res) => {
         continue;
       }
       console.warn("fetch failed", target, "for", who, err.message);
+      seen.push(`${new URL(target).hostname}: ${err.message}`);
     }
   }
 
   const text = parts.join("\n\n---\n\n").trim();
-  logged(text || recipeJson ? (recipeJson ? "read, with the recipe" : "read") : "nothing came back");
-  if (!text && !recipeJson) return res.status(502).json({ error: "nothing came back", code: "fetch_failed" });
+  logged(text || recipeJson ? (recipeJson ? "read, with the recipe" : "read") : `nothing came back${seen.length ? ` (${seen.join(", ")})` : ""}`.slice(0, 200));
+  if (!text && !recipeJson) return res.status(422).json({ error: "nothing came back", code: "fetch_failed", detail: seen.join(", ") || undefined });
   res.json({ text, recipeJson });
 });
 
@@ -1503,6 +1509,11 @@ if (!columns("users").includes("disabled_at")) db.exec("ALTER TABLE users ADD CO
 runSweep();
 setInterval(runSweep, 86_400_000).unref();
 
-app.listen(PORT, "0.0.0.0", () => {
+const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`Bourdain ${VERSION} (${COMMIT}) on :${PORT}  data=${DATA_DIR} (data v${DATA_VERSION}, owner ${OWNER.email})  key=${API_KEY ? "set" : "MISSING"}  images=${OPENAI_KEY ? IMAGE_MODEL + "/" + IMAGE_QUALITY : "no OpenAI key"}`);
 });
+// cloudflared keeps idle connections to the app for 90s. Node closes them after 5s
+// by default, so a request sent just as Node closes one came back from Cloudflare
+// as a 502. Keep them open longer than the tunnel does (2.5.10).
+server.keepAliveTimeout = 120 * 1000;
+server.headersTimeout = 125 * 1000;

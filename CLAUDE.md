@@ -391,8 +391,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v44"`
-in `public/sw.js` → `v45`, `v46`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v45"`
+in `public/sw.js` → `v46`, `v47`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -463,6 +463,14 @@ When the answer isn't Bourdain's own JSON, `reachError(e)` (2.5.9) says which:
 nothing came back (offline, or the connection dropped), or something in between
 (Cloudflare) answered with its own status, shown as `http_<status>`. Never word
 that as "the server is down": the server may be fine, as its health page will say.
+**Never answer 502 or 504 from Bourdain (2.5.10).** Cloudflare replaces an origin's
+502/504 with its own HTML error page, so the phone gets `http_502` and none of the
+code. Upstream failures use `UPSTREAM_FAILED` (503); an unreadable page is 422
+`fetch_failed` (with `detail`: what each site answered, also in the activity log).
+`server.keepAliveTimeout` is 120s, longer than cloudflared's 90s idle connections;
+Node's 5s default made the tunnel send requests down connections Node was closing,
+which also came back as 502. The link fetcher sends a browser user-agent
+(`BROWSER_UA`), since many recipe sites refuse an unknown bot.
 
 **Server errors are JSON with a `code`.** Every `/api` failure goes through the
 error handler at the bottom of `server.js`, which maps it to

@@ -99,9 +99,10 @@ try {
   let msg = await fetchStatus();
   check("…and if nothing ever comes back, it says it couldn't get through, not that the server is down", /Couldn't get through to Bourdain/.test(msg) && !/server/i.test(msg), msg);
   await page.unroute("**/api/fetch");
-  await page.route("**/api/fetch", (r) => r.fulfill({ status: 524, contentType: "text/html", body: "<html>A timeout occurred</html>" }));
+  calls = 0;
+  await page.route("**/api/fetch", (r) => (++calls, r.fulfill({ status: 524, contentType: "text/html", body: "<html>A timeout occurred</html>" })));
   msg = await fetchStatus();
-  check("an error page from Cloudflare says so, with its number", /sent back an error \(524\)/.test(msg), msg);
+  check("an error page from Cloudflare is tried once more, then says so, with its number (2.5.10)", calls === 2 && /sent back an error \(524\)/.test(msg), `${calls} calls: ${msg}`);
   await page.unroute("**/api/fetch");
   await page.route("**/api/fetch", (r) => r.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "boom", code: "server_error" }) }));
   msg = await fetchStatus();
