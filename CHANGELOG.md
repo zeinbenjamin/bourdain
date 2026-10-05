@@ -6,6 +6,10 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.6.1 — 2026-10-05
+- Removed a cook by mistake? The "Removed" message now has an Undo button that puts it straight back.
+- The "+" on Recipes lists the ways to add a recipe in the order people use them most: import, then guess from a photo of a dish, then write one yourself.
+
 ## 2.6.0 — 2026-10-05
 - Add a cook you didn't log at the time: on a recipe, tap the stars and cook count, then "Add a date I cooked this". Pick any date up to today and the batch size. It shows in your Archives and savings like any other cook.
 - Recipes can be shown as a list as well as a grid: use the switch next to sort and filter. Your choice is remembered on this phone.

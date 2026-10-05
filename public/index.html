@@ -518,6 +518,8 @@ body.aslist .rcard .tags{display:none}
 .sheet-row{margin-top:12px}
 .toast{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:9px 14px;border-radius:var(--r);font-family:var(--sans);font-size:13px;z-index:30;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
+.toast.act{display:flex;align-items:center;gap:6px;padding:0 4px 0 14px;pointer-events:auto;white-space:nowrap}
+.toast-btn{min-height:44px;min-width:44px;padding:0 10px;border:0;background:none;color:var(--paper);font:inherit;font-weight:700;text-decoration:underline;text-underline-offset:3px}
 </style>
 </head>
 <body>
@@ -956,7 +958,10 @@ function fmtQty(q){ if(q==null||q==="") return ""; const n=Number(q); if(!isFini
   const fr={0.25:"¼",0.5:"½",0.75:"¾",0.33:"⅓",0.67:"⅔"}; const w=Math.floor(n), f=+(n-w).toFixed(2);
   const fs = fr[f]||""; if(fs) return (w?w:"")+fs; return String(+n.toFixed(2)); }
 function weekLabel(m){ const s=addDays(m,6); return `${m.getDate()} ${MONTHS[m.getMonth()]} – ${s.getDate()} ${MONTHS[s.getMonth()]}`; }
-function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"),Math.max(2200,msg.length*60)); } // long messages stay up long enough to read
+function toast(msg,action){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.toggle("act",!!action);
+  // 2.6.1: an optional button, like Undo; the toast stays up longer and can be tapped
+  if(action){ const b=document.createElement("button"); b.className="toast-btn"; b.textContent=action.label; b.onclick=()=>{ t.classList.remove("show","act"); clearTimeout(t._h); action.run(); }; t.append(b); }
+  t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show","act"),action?6000:Math.max(2200,msg.length*60)); } // long messages stay up long enough to read
 // Only http(s) links become links: a "javascript:" source link in someone else's recipe would run in your session.
 function webUrl(u){ return /^https?:\/\//i.test(String(u||"").trim()) ? String(u).trim() : ""; }
 function hostOf(u){ try{ return new URL(u).hostname.replace(/^www\./,""); }catch(e){ return ""; } }
@@ -1104,15 +1109,16 @@ function cardHtml(r,attrs,extra=""){
     <div class="body"><h3>${esc(r.title||"Untitled")}</h3>${extra}${r.rating?`<div class="cstars">${stars(r.rating)}</div>`:""}${meta?`<div class="meta">${esc(meta)}</div>`:""}
     <div class="tags">${(r.tags||[]).slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div></div></button>`;
 }
-// "+" asks how: import (link, text, screenshots, recording) or write one by hand.
+// "+" asks how, in order of how often it's used (2.6.1): import (link, text,
+// screenshots, recording), guess from a photo of a dish, or write one by hand.
 function addSheet(){
   const open=state.draft&&!state.editingId ? state.draft : null; // an import or new recipe not saved yet
   const name=open ? `“${esc(open.title||"Untitled")}”` : "";
   const s=openSheet(`<h3>Add a recipe</h3>
     ${open?`<button class="opt" data-act="resume">Carry on with ${name}<small>You haven't saved it yet</small></button>`:""}
     <button class="opt" data-act="import">Import a recipe<small>${open?`Replaces ${name}`:"From a link, pasted text, screenshots or a screen recording"}</small></button>
-    <button class="opt" data-act="manual">Write one yourself<small>${open?`Replaces ${name}`:"Start from a blank recipe"}</small></button>
-    <button class="opt" data-act="guess">Guess from a photo of a dish<small>${open?`Replaces ${name}`:"Bourdain suggests a recipe and says how sure it is"}</small></button>`);
+    <button class="opt" data-act="guess">Guess from a photo of a dish<small>${open?`Replaces ${name}`:"Bourdain suggests a recipe and says how sure it is"}</small></button>
+    <button class="opt" data-act="manual">Write one yourself<small>${open?`Replaces ${name}`:"Start from a blank recipe"}</small></button>`);
   sheetActions(s,{
     resume:()=>{ closeSheet(); show("import"); },
     import:()=>{ closeSheet(); state.editingId=null; state.draft=null; state.draftManual=false; show("import"); },
@@ -1685,7 +1691,14 @@ function historySheet(recipeId){
     done:closeSheet,
     add:()=>pastCookSheet(recipeId),
     rate:async b=>{ r.rating=+b.dataset.n; sh.querySelectorAll('[data-act="rate"]').forEach(o=>o.classList.toggle("on",+o.dataset.n===r.rating)); await save(r.rating?`Rated ${r.rating} Michelin star${r.rating===1?"":"s"}`:"Rated: no stars"); },
-    rm:async b=>{ const i=+b.dataset.i; const c=r.cooks[i]; r.cooks=r.cooks.filter((_,k)=>k!==i); await save(`Removed ${fmtDate(c.date)}`); historySheet(recipeId); },
+    // removing is instant; the toast's Undo puts it back (2.6.1)
+    rm:async b=>{ const i=+b.dataset.i; const c=r.cooks[i]; r.cooks=r.cooks.filter((_,k)=>k!==i);
+      r.updated_at=new Date().toISOString(); const ok=await store.put("recipes",recipeId,r); if(state.view==="detail") renderDetail(); historySheet(recipeId);
+      if(ok) toast(`Removed ${fmtDate(c.date)}`,{label:"Undo",run:async()=>{
+        const rr=state.recipes[recipeId]; if(!rr) return; addCook(rr,c); rr.updated_at=new Date().toISOString();
+        const back=await store.put("recipes",recipeId,rr); if(state.view==="detail") renderDetail();
+        if(document.querySelector("#sheet.open .cooks, #sheet.open #addPastCook")) historySheet(recipeId);
+        if(back) toast(`Put back ${fmtDate(c.date)}`); }}); },
   });
 }
 /* A cook that happened without Cook this (2.6.0): any date up to today. It's marked

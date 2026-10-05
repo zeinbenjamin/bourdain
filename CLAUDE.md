@@ -145,7 +145,9 @@ cooked this" in the cook-log sheet): any date up to today, a batch, stored with
 `added: true`. The server logs them as `cook_added` ("added a past cook of", with
 the date), never `cook_logged`, and the owner's view counts them apart
 (`cooks_added`), so the pilot's count of finished cooks stays honest (Zein,
-2026-10-05). Everywhere on the phone they count like any other cook. The cooking screen (`state.view ===
+2026-10-05). Everywhere on the phone they count like any other cook. Removing a cook (× in
+that sheet) is instant, and its toast has **Undo** (2.6.1), which puts it back with
+`addCook()`. The cooking screen (`state.view ===
 "cook"`, `renderCook`) toggles ticks in place instead of re-rendering, so the
 page never jumps while you cook. `wake` holds a Screen Wake Lock while it's open
 and releases it in `show()` for any other view.
@@ -179,8 +181,8 @@ wraps in full rather than truncating. Servings are not shown on the row; tapping
 the meal opens `slotSheet`, where they're changed.
 
 **Adding a recipe** (`addSheet`): the Recipes "+" (and the empty book's button)
-opens a sheet: **Import a recipe** (the import form, with "‹ Recipes" to go back)
-or **Write one yourself** (a blank review form; `state.draftManual` makes its Back
+opens a sheet, most used first (2.6.1): **Import a recipe** (the import form, with "‹ Recipes" to go back),
+**Guess from a photo of a dish**, or **Write one yourself** (a blank review form; `state.draftManual` makes its Back
 return to the list rather than the import form). If an import or new recipe is
 open and unsaved, the sheet first offers **Carry on with "…"**, and the other two
 say they replace it. The review form is headed "New recipe" either way (or "Edit
@@ -411,8 +413,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v46"`
-in `public/sw.js` → `v47`, `v48`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v47"`
+in `public/sw.js` → `v48`, `v49`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -647,7 +649,8 @@ never inline.
   `tests/layout.test.mjs`.
 - Plain DOM. No React, no jQuery, no state library.
 - Patterns already in the file: `render()` dispatches by `state.view`;
-  `esc()` on every interpolated string; `toast()` for feedback;
+  `esc()` on every interpolated string; `toast()` for feedback (`toast(msg,
+  {label, run})` adds a 44px button such as Undo and stays up 6s, 2.6.1);
   `openSheet`/`sheetActions` for modals.
 - Errors get a specific, human message that says what to do next. Not "an error
   occurred". Look at how the import statuses are worded and match that register.
