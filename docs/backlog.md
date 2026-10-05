@@ -47,6 +47,11 @@ Nothing open. Home cost vs eating out shipped in 2.5.0.
 | --- | --- |
 | Anyone on home Wi-Fi counts as Zein | Only when they open the NAS address directly (`192.168.1.109:8080`), not `bourdain.elevengrant.com`, which always asks Cloudflare who it is. While `TRUSTED_NETS` trusts Docker's gateway. Host networking, or a guest network, narrows it. |
 
+Decided 2026-10-06, not to be built: **icons for each ingredient**. A proof of
+concept (painted icons on the recipe page and in cook mode) was shown to a pilot
+user, who liked the vegetable avatars but found ingredient icons too cluttered
+alongside everything else the app does, and "too AI". Zein dropped it.
+
 Accepted 2026-10-02, not to be built: no cap on recipe count or writes per
 person (photos are capped); recipes of someone without a name are readable by
 id (ids are random); large uploads are processed on the NAS (fine for the pilot).
