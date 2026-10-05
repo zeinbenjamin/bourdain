@@ -83,6 +83,14 @@ try {
   await page.locator('#sheet [data-act="rm"]').first().click(); await sleep(400);
   r = await server("soup");
   check("removing a date keeps the other", r.cooks.length === 1 && (await page.locator("#sheet .cooks li").count()) === 1);
+  // 2.6.1: the toast offers Undo, which puts the cook back where it was
+  const gone = (await s.state()).recipes.soup.cooks.length;
+  const tb = await page.evaluate(() => { const b = document.querySelector("#toast.show .toast-btn"), r = b && b.getBoundingClientRect(); return b && { text: b.textContent, h: Math.round(r.height), w: Math.round(r.width), msg: document.querySelector("#toast").firstChild.textContent }; });
+  check("removing says so, with a 44px Undo", tb && tb.text === "Undo" && tb.h >= 44 && tb.w >= 44 && /^Removed /.test(tb.msg), JSON.stringify(tb));
+  await page.click("#toast .toast-btn"); await sleep(500);
+  r = await server("soup");
+  check("…Undo puts it back, in date order, and the sheet lists it again", r.cooks.length === gone + 1 && r.cooks.every((c, i, a) => !i || (a[i - 1].date + a[i - 1].at) <= (c.date + c.at)) && (await page.locator("#sheet .cooks li").count()) === 2 && /Put back/.test(await page.textContent("#toast")));
+  await page.locator('#sheet [data-act="rm"]').first().click(); await sleep(400); // take it off again for the checks below
   await page.click('#sheet [data-act="done"]');
   check("recipe page updated: 3 Michelin stars · Cooked once", (await page.locator("#cookStats .mstar").count()) === 3 && /Cooked once/.test(await page.textContent("#cookStats")));
 

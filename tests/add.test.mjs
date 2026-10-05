@@ -20,7 +20,7 @@ try {
   // --- "+" asks how
   await page.click("#btnManual");
   const opts = await page.$$eval("#sheet.open [data-act]", (bs) => bs.map((x) => x.dataset.act));
-  check("'+' opens a sheet: Import a recipe / Write one yourself / Guess from a photo", opts.join() === "import,manual,guess" && /Import a recipe/.test(await page.textContent("#sheet")) && /Write one yourself/.test(await page.textContent("#sheet")), opts.join());
+  check("'+' opens a sheet, most used first: Import a recipe / Guess from a photo / Write one yourself (2.6.1)", opts.join() === "import,guess,manual" && /Import a recipe/.test(await page.textContent("#sheet")) && /Write one yourself/.test(await page.textContent("#sheet")), opts.join());
 
   // --- import
   await page.click('#sheet [data-act="import"]');
@@ -49,7 +49,7 @@ try {
   await page.click('#tabs button[data-view="plan"]'); await page.click('#tabs button[data-view="recipes"]');
   await page.click("#btnManual");
   const acts2 = await page.$$eval("#sheet.open [data-act]", (bs) => bs.map((x) => x.dataset.act));
-  check("unsaved import: sheet offers to carry on with it first", acts2.join() === "resume,import,manual,guess" && (await page.textContent('#sheet [data-act="resume"]')).includes(title), await page.textContent("#sheet"));
+  check("unsaved import: sheet offers to carry on with it first", acts2.join() === "resume,import,guess,manual" && (await page.textContent('#sheet [data-act="resume"]')).includes(title), await page.textContent("#sheet"));
   check("the other choices say they replace it", (await page.textContent('#sheet [data-act="manual"]')).includes(`Replaces “${title}”`));
   await page.click('#sheet [data-act="resume"]');
   check("Carry on returns to the review screen", (await page.inputValue("#fTitle")) === title);
