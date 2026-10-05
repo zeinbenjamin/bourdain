@@ -77,9 +77,9 @@ Today the phone only learns about a limit when a job is refused (429 `ai_limit` 
   again. `cost` (background, 40 a day) isn't shown; reaching it just pauses the
   estimates.
 - **At the button, only when it's getting low:** a grey line under Read recipe,
-  Scan, Ideas and Make a new cover, such as "3 imports left today". Shown once
-  `left <= max(2, a quarter of the limit)`: covers at 2 or fewer, imports at 5,
-  scans at 2, ideas at 3. Never while there's plenty, so it doesn't nag.
+  Scan, Ideas and Make a new cover, such as "8 imports left today". Shown once
+  half or less is left (`left <= limit / 2`, Zein 2026-10-05): imports at 10,
+  ideas at 7, scans at 5, covers at 2. Never above half, so it doesn't nag.
 - **One toast when it first gets low**, after the job that crosses the line, once
   per group per day: "That's 2 covers left today. More tomorrow."
 - **The whole picture in one place:** "Your allowance" in the profile sheet, a
@@ -87,8 +87,11 @@ Today the phone only learns about a limit when a job is refused (429 `ai_limit` 
   of this month's AI allowance"), and photos ("120 MB of 500 MB"). Thin bars, ink
   only, `--flame` once something is low. It says when it resets: "Daily limits
   reset at midnight; the month resets on the 1st."
-- **The month as a percentage, not US$**, so nobody has to work out what a
-  dollar buys; warn at 80%: "You've used most of this month's AI allowance."
+- **Never prices, only how much is used** (Zein 2026-10-05): the month is a
+  percentage, and `/api/me` sends pilot users `month_pct` only, never
+  `monthly_usd` or what anything costs. The same half rule applies: the month
+  line turns `--flame` at 50% used, with one toast then ("You've used half of
+  this month's AI allowance").
 - **The owner** sees "No limits (owner)" instead.
 - **Tests:** the numbers in `/api/me` and in each AI reply; the low line appears
   only at the threshold; the toast comes only once; exempt owner; the profile
