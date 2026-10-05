@@ -56,7 +56,7 @@ try {
   s.setMode({}); s.clearLog();
   const ok = await s.post("/api/ai", { kind: "import", material: { text: "x" } });
   check("Claude ok -> parsed JSON", ok.json && ok.json.title === "Mock donburi");
-  check("max_tokens is 16000", /MOCK_CLAUDE_REQ \{"model":"claude-sonnet-4-6","max_tokens":16000\}/.test(s.log()));
+  check("max_tokens is 16000", /MOCK_CLAUDE_REQ \{"model":"claude-sonnet-4-6","max_tokens":16000[,}]/.test(s.log()));
 
   // --- cover pipeline
   s.clearLog();

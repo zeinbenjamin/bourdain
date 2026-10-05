@@ -420,7 +420,7 @@ As planned, with these decisions made while building it:
 
 As planned, with these decisions made while building it:
 
-- **The jobs:** `import` (url + text, up to 4 images), `scan` (up to 6
+- **The jobs:** `import` (url + text, up to 4 images; 10 since 2.5.8), `scan` (up to 6
   images), `ideas` (the pantry list) and `write` (the chosen idea, the pantry
   list and what's missing). The server clips each piece of text. A `prompt`
   field from the phone is ignored, and `/api/claude` is gone (JSON 404).

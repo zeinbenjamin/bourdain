@@ -642,7 +642,7 @@ const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov
 const state = {
   recipes:{}, plan:{}, shop:{}, pantry:{}, ideas:null,
   week:mondayOf(new Date()), view:"recipes", query:"", tag:null,
-  detailId:null, mult:1, draft:null, editingId:null, images:[], imgMax:4,
+  detailId:null, mult:1, draft:null, editingId:null, images:[], imgMax:10,
 };
 
 /* ---------- persistence (server API) ---------- */
@@ -2047,9 +2047,19 @@ async function forReading(file){
   catch(e){ console.warn("couldn't shrink image, sending original",e); return file; }
 }
 
-/* Screen recording -> contact sheets of distinct frames (all on-device) */
+/* Screen recording -> contact sheets of distinct frames (all on-device).
+   Recipe reels flash each ingredient up as a small caption for a second or so, so
+   the frames have to be big enough to read and the right ones have to be picked:
+   - three frames per sheet, side by side (stacked for a landscape video), so each
+     frame keeps about a third of the reader's 1568px instead of a sixth;
+   - change is measured per block of a 120px-wide greyscale copy, so a caption that
+     changes one corner counts even when the rest of the frame barely moves;
+   - when there are more distinct frames than room, the most repetitive ones go
+     first, and a frame that stayed on screen longer counts for more.
+   Only the small copies are kept while scanning; the picked frames are drawn full
+   size in a second pass, so a long recording doesn't fill the phone's memory. */
 function videoToSheets(file,maxSheets,onProgress){
-  const PER=6, COLS=2, ROWS=3;
+  const PER=3, TW=120, BL=6;
   return new Promise((resolve,reject)=>{
     const v=document.createElement("video"); v.muted=true; v.playsInline=true; v.preload="auto"; v.setAttribute("playsinline","");
     const url=URL.createObjectURL(file); v.src=url;
@@ -2060,38 +2070,58 @@ function videoToSheets(file,maxSheets,onProgress){
       loaded=true;
       try{
         const dur=v.duration; if(!isFinite(dur)||dur<=0) return fail();
-        const W=v.videoWidth||720, H=v.videoHeight||1280;
-        const fw=540, fh=Math.round(fw*H/W);
-        const full=document.createElement("canvas"); full.width=fw; full.height=fh; const fc=full.getContext("2d");
-        const tiny=document.createElement("canvas"); tiny.width=48; tiny.height=Math.max(1,Math.round(48*H/W)); const tc=tiny.getContext("2d");
+        const W=v.videoWidth||720, H=v.videoHeight||1280, tall=H>=W;
+        // Portrait: 3 across, ~1566px wide. Landscape: 3 stacked, ~1566px tall.
+        const fw=tall?522:Math.round(522*W/H), fh=tall?Math.round(522*H/W):522;
+        const th=Math.max(BL,Math.round(TW*H/W));
+        const tiny=document.createElement("canvas"); tiny.width=TW; tiny.height=th; const tc=tiny.getContext("2d",{willReadFrequently:true});
+        const grey=()=>{ tc.drawImage(v,0,0,TW,th); const d=tc.getImageData(0,0,TW,th).data, g=new Uint8Array(TW*th);
+          for(let k=0,j=0;k<d.length;k+=4,j++) g[j]=(d[k]*77+d[k+1]*150+d[k+2]*29)>>8; return g; };
+        // The most any one block changed between two small copies (0-255).
+        const bx=Math.ceil(TW/BL), by=Math.ceil(th/BL);
+        const change=(a,b)=>{ const sums=new Float64Array(bx*by), n=new Uint16Array(bx*by);
+          for(let y=0;y<th;y++) for(let x=0;x<TW;x++){ const j=y*TW+x, q=Math.floor(y/BL)*bx+Math.floor(x/BL); sums[q]+=Math.abs(a[j]-b[j]); n[q]++; }
+          let m=0; for(let q=0;q<sums.length;q++) if(n[q]) m=Math.max(m,sums[q]/n[q]); return m; };
         // Some iOS recordings never fire "seeked" for certain times; give each seek 3s, then move on.
         let stuck=0;
         const seek=t=>new Promise(res=>{ const done=ok=>{ clearTimeout(tm); v.removeEventListener("seeked",onSeeked); if(!ok) stuck++; res(); };
           const onSeeked=()=>done(true); const tm=setTimeout(()=>done(false),3000);
           v.addEventListener("seeked",onSeeked); v.currentTime=Math.min(t,dur-0.05); });
-        const steps=Math.min(90,Math.max(12,Math.round(dur*2)));
-        const kept=[]; let last=null;
+        const steps=Math.min(120,Math.max(12,Math.round(dur*3)));
+        const seen=[]; // {t, g, w}: samples that differ from the last one kept, w = how many samples it stands for
         for(let i=0;i<steps;i++){
-          await seek(dur*i/steps);
+          const t=dur*i/steps; await seek(t);
           if(stuck>=5) throw new Error("video seeking stalled"); // this recording won't seek; stop rather than crawl
-          tc.drawImage(v,0,0,tiny.width,tiny.height);
-          const px=tc.getImageData(0,0,tiny.width,tiny.height).data;
-          let diff=0; if(last){ for(let k=0;k<px.length;k+=4) diff+=Math.abs(px[k]-last[k])+Math.abs(px[k+1]-last[k+1])+Math.abs(px[k+2]-last[k+2]); diff/= (px.length/4)*3; }
-          if(!last||diff>6){ fc.drawImage(v,0,0,fw,fh); kept.push(fc.getImageData(0,0,fw,fh)); last=px; }
-          if(onProgress&&i%3===0) onProgress(Math.round(i/steps*100));
+          const g=grey(), last=seen[seen.length-1]; if(!last||change(g,last.g)>8) seen.push({t,g,w:1}); else last.w++;
+          if(onProgress&&i%3===0) onProgress(Math.round(i/steps*85));
         }
-        URL.revokeObjectURL(url);
-        const want=Math.min(kept.length,PER*maxSheets);
-        const pick=[]; for(let i=0;i<want;i++) pick.push(kept[Math.round(i*(kept.length-1)/Math.max(1,want-1))]);
-        const sheets=[];
+        // Too many? Repeatedly drop the frame that's most like a neighbour, counting a
+        // frame that stayed on screen longer (a caption held still) as worth more, until
+        // they fit. Dropping one hands its time to the neighbour it was most like.
+        const want=PER*maxSheets;
+        const gap=seen.slice(1).map((s,i)=>change(seen[i].g,s.g)); // gap[i]: seen[i] vs seen[i+1]
+        while(seen.length>want){
+          let best=-1, bc=Infinity;
+          for(let i=0;i<seen.length;i++){ const d=Math.min(i>0?gap[i-1]:Infinity,i<gap.length?gap[i]:Infinity); if(d*seen[i].w<bc){ bc=d*seen[i].w; best=i; } }
+          const i=best, toLeft=i>0&&(i===gap.length||gap[i-1]<=gap[i]);
+          seen[toLeft?i-1:i+1].w+=seen[i].w;
+          if(i>0&&i<gap.length) gap.splice(i-1,2,change(seen[i-1].g,seen[i+1].g)); else gap.splice(i>0?i-1:0,1);
+          seen.splice(i,1);
+        }
+        const pick=seen;
+        const sheets=[], frame=document.createElement("canvas"); frame.width=fw; frame.height=fh; const fc=frame.getContext("2d");
         for(let sIx=0;sIx<pick.length;sIx+=PER){
           const grp=pick.slice(sIx,sIx+PER);
-          const sheet=document.createElement("canvas"); sheet.width=fw*COLS; sheet.height=fh*ROWS; const sc=sheet.getContext("2d");
+          const sheet=document.createElement("canvas"); sheet.width=tall?fw*grp.length:fw; sheet.height=tall?fh:fh*grp.length; const sc=sheet.getContext("2d");
           sc.fillStyle="#000"; sc.fillRect(0,0,sheet.width,sheet.height);
-          const tmp=document.createElement("canvas"); tmp.width=fw; tmp.height=fh; const tmc=tmp.getContext("2d");
-          grp.forEach((img,i)=>{ tmc.putImageData(img,0,0); sc.drawImage(tmp,(i%COLS)*fw,Math.floor(i/COLS)*fh); });
+          for(let i=0;i<grp.length;i++){
+            await seek(grp[i].t); fc.drawImage(v,0,0,fw,fh);
+            sc.drawImage(frame,tall?i*fw:0,tall?0:i*fh);
+          }
           const blob=await new Promise(r=>sheet.toBlob(r,"image/jpeg",.85)); if(blob) sheets.push(blob);
+          if(onProgress) onProgress(85+Math.round((sIx+PER)/pick.length*15));
         }
+        URL.revokeObjectURL(url);
         resolve(sheets);
       }catch(e){ fail(e); }
     };

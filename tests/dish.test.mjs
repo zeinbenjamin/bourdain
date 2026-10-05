@@ -68,6 +68,7 @@ try {
   s.setMode({ youtube: "nodesc" });
   const nd = await s.post("/api/fetch", { url: "https://youtu.be/abcdefghijk" });
   check("…with no description, just the title", nd.status === 200 && /Easy beef rendang/.test(nd.text) && !/beef chuck/.test(nd.text));
+  check("…and the page's own description, with its entities decoded (2.5.8)", nd.text.includes('Short meta \u{1f957} it\u2019s "quick"'), nd.text);
   s.setMode({});
 
   await page.evaluate(() => { state.draft = null; }); await page.click('#tabs button[data-view="recipes"]'); await page.click("#btnManual"); await page.click('#sheet [data-act="import"]');
