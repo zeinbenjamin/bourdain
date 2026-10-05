@@ -26,7 +26,7 @@ try {
   const d = db();
   d.prepare("INSERT INTO users (id, email, name, created_at) VALUES ('sam', 'sam@example.com', NULL, datetime())").run(); // not named yet
   const ins = d.prepare("INSERT INTO recipes (owner, id, doc, updated_at) VALUES (?, ?, ?, datetime())");
-  ins.run("sam", "katsu", JSON.stringify({ title: "Chicken katsu curry", rating: 3, servings: 2, tags: ["japanese"], description: "Crisp panko chicken.", ingredients: [{ item: "panko", quantity: 80, unit: "g" }, { item: "chicken thigh", quantity: 2, unit: "whole" }], steps: ["Bread the chicken.", "Fry for 6 minutes."], photos: [], cooks: [ago(0), ago(3)] }));
+  ins.run("sam", "katsu", JSON.stringify({ title: "Chicken katsu curry", rating: 3, cover: "c".repeat(32), covers: ["c".repeat(32), "d".repeat(32)], servings: 2, tags: ["japanese"], description: "Crisp panko chicken.", ingredients: [{ item: "panko", quantity: 80, unit: "g" }, { item: "chicken thigh", quantity: 2, unit: "whole" }], steps: ["Bread the chicken.", "Fry for 6 minutes."], photos: [], cooks: [ago(0), ago(3)] }));
   ins.run("sam", "dal", JSON.stringify({ title: "Tarka dal", rating: 1, ingredients: [{ item: "red lentils" }], steps: ["Simmer."], photos: [], cooks: [ago(2)] }));
   d.close();
 
@@ -57,6 +57,7 @@ try {
   check("copy: 201, a new recipe of mine", c1.status === 201 && c1.j.id && !c1.j.already, JSON.stringify(c1.j).slice(0, 200));
   const mineNow = (await s.state()).recipes[c1.j.id];
   check("copy: its own rating and cook log start empty, and it remembers where it came from", mineNow && mineNow.rating === undefined && mineNow.cooks.length === 0 && mineNow.copied_from.owner === "sam" && mineNow.copied_from.id === "katsu" && mineNow.copied_from.name === "Sam" && mineNow.ingredients.length === 2);
+  check("copy: takes the cover Sam chose, not the ones Sam passed over (2.6.0)", mineNow.cover === "c".repeat(32) && mineNow.covers === undefined);
   check("copy: Sam's original is untouched", (await api("/api/people/sam/recipes/katsu")).j.recipe.rating === 3 && (await api("/api/people/sam/recipes/katsu")).j.recipe.cooks.length === 2);
   const c2 = await post("/api/copy", { owner: "sam", id: "katsu" });
   check("copy again: the same copy, not a second one", c2.status === 200 && c2.j.already && c2.j.id === c1.j.id && Object.values((await s.state()).recipes).filter((r) => r.copied_from?.id === "katsu").length === 1);

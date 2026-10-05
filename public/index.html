@@ -129,6 +129,18 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .chip.on{background:var(--ink); color:var(--paper); border-color:var(--ink)}
 .rlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
 .rlist .empty{grid-column:1/-1}
+/* List view (2.6.0): one recipe per row, the picture small on the left, no tags.
+   It's a per-phone choice (listPrefs.view) and applies to every recipe list. */
+body.aslist .rlist{grid-template-columns:1fr;gap:0}
+body.aslist .rcard{flex-direction:row;align-items:center;gap:12px;padding:8px 0;min-height:72px}
+body.aslist .rcard .thumb{width:56px;height:56px;flex:none;margin:0;font-size:24px}
+body.aslist .rcard .body{padding:0}
+body.aslist .rcard h3{font-size:17px;-webkit-line-clamp:2;margin-bottom:2px}
+body.aslist .rcard .tags{display:none}
+.viewtog{display:flex;flex:none;border:1px solid var(--line);border-radius:999px;padding:0}
+.viewtog button{width:44px;min-height:44px;border:0;background:none;border-radius:999px;color:var(--ink-3);display:flex;align-items:center;justify-content:center}
+.viewtog button.on{background:var(--ink);color:var(--paper)}
+.viewtog svg{width:18px;height:18px}
 .rcard{
   display:flex; flex-direction:column; text-align:left; width:100%;
   background:none; border:0; border-top:1px solid var(--line); padding:0 0 6px;
@@ -415,6 +427,25 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .rcard .thumb.cover{background:var(--paper)}
 .rcard .thumb.cover img{object-fit:contain}
 .hero.cover{aspect-ratio:1/1;object-fit:contain;background:var(--paper);max-width:420px;margin:8px auto 0}
+.allow{font-family:var(--sans);font-size:12px;color:var(--ink-3);margin:6px 0 0}
+.allow.none{color:var(--flame)}
+.allowbox{border-top:1px solid var(--line);padding-top:12px;margin:4px 0 14px}
+.allowbox .sec-h{font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin:0 0 8px}
+.arow{margin:0 0 10px}
+.arow-t{display:flex;justify-content:space-between;font-family:var(--sans);font-size:13px;color:var(--ink-2);margin-bottom:4px}
+.abar{height:4px;background:var(--steel);border-radius:2px;overflow:hidden}
+.abar i{display:block;height:100%;background:var(--ink)}
+.arow.low .abar i{background:var(--flame)}
+.arow.low .arow-t span:last-child{color:var(--flame)}
+.coverpick{display:block;margin:4px auto 0;min-height:44px;border:0;background:none;font-family:var(--sans);font-size:13px;color:var(--ink-2);text-decoration:underline;text-underline-offset:3px}
+.hero.cover{cursor:pointer}
+.coverchoices{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:4px 0 4px}
+.cc{position:relative}
+.ccpick{display:block;width:100%;aspect-ratio:1/1;padding:4px;border:2px solid var(--line);border-radius:10px;background:var(--paper)}
+.ccpick.on{border-color:var(--flame)}
+.ccpick img{width:100%;height:100%;object-fit:contain;display:block}
+.cc .x{position:absolute;top:0;right:0;width:44px;height:44px;border:0;background:none;padding:3px;display:flex;align-items:flex-start;justify-content:flex-end}
+.cc .x span{width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:15px;line-height:24px;text-align:center}
 .coverbox{display:flex;align-items:center;gap:12px;margin:6px 0 4px}
 .coverbox img{width:112px;height:112px;object-fit:contain;background:var(--paper);border:1px solid var(--line);border-radius:var(--r)}
 /* Reorder */
@@ -450,7 +481,7 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .mstar{width:1.15em;height:1.15em;display:block}
 .rcard .cstars{margin:2px 0 3px;line-height:1}
 .rcard .cstars .mstars{font-size:15px;vertical-align:0}
-.listctl{display:flex;gap:8px;margin:0 0 10px}
+.listctl{display:flex;gap:8px;margin:0 0 10px;align-items:center}
 .listctl select{flex:1;min-height:44px;font-size:14px}
 .tmrs{display:flex;flex-wrap:wrap;gap:6px;padding:0 0 12px 36px}
 .tmr{border:1px solid var(--flame);color:var(--flame);background:var(--paper);border-radius:999px;padding:0 14px;min-height:40px;font-family:var(--sans);font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
@@ -482,6 +513,9 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
 .cooks{list-style:none;padding:0;margin:8px 0 0}
 .cooks li{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding:6px 0;font-family:var(--sans);font-size:14px}
 .cooks .x{border:0;background:none;color:var(--ink-3);font-size:18px;min-width:44px;min-height:44px}
+.sheet-lead{margin:0 0 6px}
+.sheet-sub{margin:16px 0 0}
+.sheet-row{margin-top:12px}
 .toast{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:9px 14px;border-radius:var(--r);font-family:var(--sans);font-size:13px;z-index:30;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
 </style>
@@ -520,6 +554,10 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
         <option value="all">All recipes</option><option value="s1">1 star or more</option><option value="s2">2 stars or more</option>
         <option value="s3">3 stars</option><option value="unrated">Not rated yet</option><option value="never">Never cooked</option>
       </select>
+      <div class="viewtog" role="group" aria-label="Show recipes as">
+        <button data-as="grid" aria-label="Show as a grid"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2" width="5.5" height="5.5"/><rect x="10.5" y="2" width="5.5" height="5.5"/><rect x="2" y="10.5" width="5.5" height="5.5"/><rect x="10.5" y="10.5" width="5.5" height="5.5"/></svg></button>
+        <button data-as="list" aria-label="Show as a list"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2.5" width="4" height="4"/><rect x="2" y="11.5" width="4" height="4"/><path d="M9 4.5h7M9 13.5h7"/></svg></button>
+      </div>
     </div>
     <div class="chips" id="tagChips"></div>
     <div class="rlist" id="rlist"></div>
@@ -571,6 +609,7 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
     </div>
     <p class="hint">Separate several with commas. Salt, pepper, oil and water are assumed.</p>
     <div class="actions"><button class="btn primary" id="cookFrom">Cook from what I have</button><button class="btn" id="pantryScan">Scan fridge or pantry</button></div>
+    <p class="allow" data-allow="ideas" hidden></p><p class="allow" data-allow="scan" hidden></p>
     <div id="ideas"></div>
     <div id="pantryList"></div>
   </section>
@@ -605,6 +644,7 @@ textarea.input{min-height:120px;resize:vertical;line-height:1.4}
         <button class="btn primary" id="btnParse">Read recipe</button>
         <button class="btn ghost" id="btnClear">Clear</button>
       </div>
+      <p class="allow" data-allow="import" hidden></p>
       <div class="status" id="importStatus"></div>
     </div>
     <div class="review" id="review" hidden></div>
@@ -653,6 +693,7 @@ async function api(path, opts={}){
   if(!res.ok){ let e; try{ e=await res.json(); }catch(_){ e={}; }
     const err=new Error(e.error||res.statusText); err.code=e.code||("http_"+res.status); err.status=res.status; err.detail=e.detail; err.kind=e.kind; err.limit=e.limit; err.seen=e.seen;
     if(NEEDS_SIGNIN.includes(err.code)) signin.lost(err.code, err.seen);
+    if(err.code==="ai_limit"&&err.kind&&err.limit) allowance.full(err.kind,err.limit);
     throw err; }
   if(signin.out) signin.back();
   return res.status===204? null : res.json();
@@ -752,7 +793,7 @@ const store = {
     this.paint();
     this.flush();
     window.addEventListener("online",()=>this.sync());
-    document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") this.sync(); });
+    document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible"){ this.sync(); if(this.me) allowance.refresh(); } });
     setInterval(()=>{ if(this.outbox.length||photoQueue.pending||!this.fromServer) this.sync(); },30000);
   },
   /* Who's signed in. On the first open after 2.0, this is also where the plain 1.x
@@ -886,6 +927,7 @@ const store = {
       for(const f of images){ body.images.push({ media_type:f.type||"image/jpeg", data:await toBase64(f) }); }
     }
     const out=await api("/api/ai",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal});
+    allowance.took(out&&out.allowance);
     return out.json;
   },
   async fetchUrl(url){ return api("/api/fetch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url})}); },
@@ -950,6 +992,61 @@ function show(view){
 document.getElementById("tabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(b) show(b.dataset.view); });
 
 /* ---------- render ---------- */
+/* How much of the AI allowance is left (2.6.0). The server sends counts and a
+   percentage (never prices) in /api/me and with every AI reply. Nothing shows while
+   more than half is left; from half, a grey line under the button ("8 imports left
+   today") and one toast that day. The month works the same way from 50% used. The
+   profile sheet shows all of it. The owner, while exempt, sees "No limits". */
+const allowance={
+  WORDS:{ import:["import","imports"], scan:["fridge scan","fridge scans"], ideas:["recipe idea","recipe ideas"], cover:["cover","covers"] },
+  get(){ return store.me&&store.me.allowance||null; },
+  left(g){ const a=this.get(); const t=a&&!a.exempt&&a.today&&a.today[g]; return t ? Math.max(0,(t.limit||0)-(t.used||0)) : null; },
+  low(g){ const a=this.get(), n=this.left(g); return n!==null && n<=a.today[g].limit/2; },
+  line(g){
+    if(!this.low(g)) return "";
+    const n=this.left(g), [one,many]=this.WORDS[g]||["request","requests"];
+    return n ? `${n} ${n===1?one:many} left today` : `No ${many} left today. More tomorrow.`;
+  },
+  paint(){ document.querySelectorAll("[data-allow]").forEach(el=>{ const g=el.dataset.allow, t=this.line(g); el.textContent=t; el.hidden=!t; el.classList.toggle("none",this.left(g)===0); }); },
+  seenKey(){ return store.key("bourdain.allowanceSeen"); },
+  seen(){ try{ return JSON.parse(localStorage.getItem(this.seenKey())||"{}"); }catch(_){ return {}; } },
+  // one toast per group per day when it first gets to half, and one per month at 50%
+  nudge(g){
+    const a=this.get(); if(!a||a.exempt) return;
+    const day=iso(new Date()), seen=this.seen(); if(seen.day!==day){ seen.day=day; seen.groups=[]; }
+    let msg="";
+    if(g&&this.low(g)&&!seen.groups.includes(g)){ seen.groups.push(g); const n=this.left(g), [one,many]=this.WORDS[g];
+      msg=n ? `That's ${n} ${n===1?one:many} left today. More tomorrow.` : `That's all your ${many} for today. More tomorrow.`; }
+    else if((a.month_pct||0)>=50&&seen.month!==day.slice(0,7)){ seen.month=day.slice(0,7); msg="You've used half of this month's AI allowance."; }
+    try{ localStorage.setItem(this.seenKey(),JSON.stringify(seen)); }catch(_){}
+    if(msg) setTimeout(()=>toast(msg),2600); // after the job's own "Saved" or "Cover added"
+  },
+  // the reply to an AI job carries the new count for its group
+  took(u){
+    if(!u||!store.me) return;
+    if(u.exempt){ store.me.allowance={exempt:true}; return; }
+    const a=store.me.allowance&&!store.me.allowance.exempt ? store.me.allowance : {exempt:false,today:{}};
+    if(u.group) a.today={...(a.today||{}),[u.group]:{used:u.used,limit:u.limit}};
+    if(typeof u.month_pct==="number") a.month_pct=u.month_pct;
+    store.me.allowance=a; this.paint(); this.nudge(u.group);
+  },
+  full(g,limit){ const a=this.get(); if(!a||a.exempt||!a.today) return; a.today[g]={used:limit,limit}; this.paint(); },
+  async refresh(){ try{ const me=await api("/api/me",{signal:timeout(10000)}); if(store.me&&me&&me.id===store.me.id){ store.me.allowance=me.allowance; this.paint(); } }catch(_){} },
+  sectionHtml(){
+    const a=this.get(); if(!a) return "";
+    if(a.exempt) return `<div class="allowbox" id="pfAllow"><p class="sec-h">Your allowance</p><p class="muted small">No limits (owner).</p></div>`;
+    const bar=(used,limit,label,lowNow)=>{ const pct=limit>0?Math.min(100,Math.round(used/limit*100)):100;
+      return `<div class="arow${lowNow?" low":""}"><div class="arow-t"><span>${esc(label)}</span><span>${esc(used)} of ${esc(limit)}</span></div><div class="abar"><i style="width:${pct}%"></i></div></div>`; };
+    const names={import:"Imports and photo guesses",scan:"Fridge scans",ideas:"Recipe ideas",cover:"Covers"};
+    const rows=Object.keys(names).filter(g=>a.today&&a.today[g]).map(g=>bar(a.today[g].used,a.today[g].limit,names[g]+" today",this.low(g))).join("");
+    const m=a.month_pct||0, st=a.storage||{};
+    return `<div class="allowbox" id="pfAllow"><p class="sec-h">Your allowance</p>${rows}
+      <div class="arow${m>=50?" low":""}"><div class="arow-t"><span>AI this month</span><span>${esc(m)}% used</span></div><div class="abar"><i style="width:${Math.min(100,m)}%"></i></div></div>
+      ${st.limit_mb?bar(st.used_mb||0,st.limit_mb,"Photos (MB)",(st.used_mb||0)>=st.limit_mb/2):""}
+      <p class="muted small">Daily limits reset at midnight; the month resets on the 1st.</p></div>`;
+  },
+};
+
 function render(){
   if (state.view==="recipes") renderRecipes();
   if (state.view==="detail") renderDetail();
@@ -962,6 +1059,7 @@ function render(){
   if (state.view==="admin") renderAdmin();
   if (state.view==="import") renderImport();
   if (state.view==="cook") renderCook();
+  allowance.paint();
 }
 
 function allTags(){ const c={}; Object.values(state.recipes).forEach(r=>(r.tags||[]).forEach(t=>c[t]=(c[t]||0)+1)); return Object.entries(c).sort((a,b)=>b[1]-a[1]).map(x=>x[0]); }
@@ -1083,7 +1181,9 @@ function renderDetail(){
     ${from?`<button class="fromline" id="fromLine" data-owner="${esc(from.owner||"")}" data-rid="${esc(from.id||"")}">From ${esc(from.name||"someone")}'s recipes ›</button>`:""}
     <button class="cookstats" id="cookStats" aria-label="Rating and cooking history">${cookStatsHtml(r)}</button>
     ${recipeMediaHtml(r)}
+    ${coversOf(r).length>1?`<button class="coverpick" id="pickCover">Choose from your ${coversOf(r).length} covers ›</button>`:""}
     <div class="actions quad"><button class="btn primary" id="cookThis">${cooking.get()?.recipeId===state.detailId?"Continue cooking":"Cook this"}</button><button class="btn" id="addPlan">Add to the week</button><button class="btn" id="addPhoto">Add photo</button><button class="btn" id="makeCover">${r.cover?"New cover":"Make cover"}</button></div>
+    <p class="allow" data-allow="cover" hidden></p>
     ${recipeMethodHtml(r)}`;
   wireIngredients(el,r);
   const fl=el.querySelector("#fromLine"); if(fl) fl.onclick=()=>openTheirs(fl.dataset.owner,fl.dataset.rid,"detail");
@@ -1106,6 +1206,7 @@ function renderDetail(){
   el.querySelector("#cookStats").onclick=()=>historySheet(state.detailId);
   const rid=state.detailId;
   el.querySelector("#makeCover").onclick=()=>makeCover(r, id=>applyCover(rid,id));
+  const pc=el.querySelector("#pickCover"); if(pc){ pc.onclick=()=>coverPicker(rid,r.cover); const hero=el.querySelector(".hero.cover"); if(hero) hero.onclick=pc.onclick; }
   const ap=el.querySelector("#addPhoto"); if(ap) ap.onclick=async()=>{ const files=await pickPhotos(); if(!files.length) return; toast("Uploading…"); const ids=await uploadPhotos(files); if(!ids.length) return; r.photos=[...(r.photos||[]),...ids]; r.updated_at=new Date().toISOString(); await store.put("recipes",state.detailId,r); renderDetail(); };
 }
 
@@ -1288,10 +1389,12 @@ function profileSheet(first){
       <p class="muted small">Just for fun. Only the picture is saved, not your type.</p>
     </div>
     <div class="field"><label for="pfName">Name</label><input class="input" id="pfName" maxlength="40" autocomplete="nickname" value="${esc(draft.name)}"></div>
+    ${first?"":allowance.sectionHtml()}
     <div class="row"><button class="btn primary" data-act="save">Save</button><button class="btn ghost" data-act="later">${first?"Later":"Cancel"}</button></div>`);
   const paint=()=>{ draft.name=sh.querySelector("#pfName").value; sh.querySelector("#pfAv").innerHTML=avatar(draft,"lg");
     sh.querySelectorAll(".vegpick").forEach(b=>b.classList.toggle("on",draft.photo==="veg:"+b.dataset.v)); };
   sh.querySelector("#pfName").oninput=paint;
+  if(!first) allowance.refresh().then(()=>{ const box=sh.querySelector("#pfAllow"); if(box&&sh.isConnected) box.outerHTML=allowance.sectionHtml(); });
   sheetActions(sh,{
     later:closeSheet,
     nophoto:b=>{ draft.photo=null; paint(); b.remove(); sh.querySelector("#pfPhoto").textContent="Add photo"; },
@@ -1363,7 +1466,8 @@ function stars(n){ n=Math.max(0,Math.min(3,Math.round(Number(n))||0)); // someon
 const listPrefs={
   KEY:"bourdain.listPrefs",
   get(){
-    let p; try{ p={sort:"new",filter:"all",...JSON.parse(localStorage.getItem(this.KEY)||"{}")}; }catch(_){ p={sort:"new",filter:"all"}; }
+    let p; try{ p={sort:"new",filter:"all",view:"grid",...JSON.parse(localStorage.getItem(this.KEY)||"{}")}; }catch(_){ p={sort:"new",filter:"all",view:"grid"}; }
+    if(!["grid","list"].includes(p.view)) p.view="grid";
     // a choice that's since been removed (like "30 minutes or less") falls back to the default
     const ok=(id,v)=>[...document.getElementById(id).options].some(o=>o.value===v);
     if(!ok("sortBy",p.sort)) p.sort="new"; if(!ok("filterBy",p.filter)) p.filter="all";
@@ -1390,7 +1494,10 @@ function sortRecipes(a,b,by){
   if(by==="quick") return (totalMin(a)||1e9)-(totalMin(b)||1e9) || title; // no time given goes last
   return (b.created_at||"").localeCompare(a.created_at||"");
 }
-function syncListCtl(){ const p=listPrefs.get(); document.getElementById("sortBy").value=p.sort; document.getElementById("filterBy").value=p.filter; }
+function syncListCtl(){ const p=listPrefs.get(); document.getElementById("sortBy").value=p.sort; document.getElementById("filterBy").value=p.filter;
+  document.body.classList.toggle("aslist",p.view==="list");
+  document.querySelectorAll(".viewtog [data-as]").forEach(b=>{ const on=b.dataset.as===p.view; b.classList.toggle("on",on); b.setAttribute("aria-pressed",String(on)); }); }
+document.querySelector(".viewtog").onclick=e=>{ const b=e.target.closest("[data-as]"); if(b) listPrefs.set({...listPrefs.get(),view:b.dataset.as}); };
 document.getElementById("sortBy").onchange=e=>{ listPrefs.set({...listPrefs.get(),sort:e.target.value}); renderRecipes(); };
 document.getElementById("filterBy").onchange=e=>{ listPrefs.set({...listPrefs.get(),filter:e.target.value}); renderRecipes(); };
 syncListCtl();
@@ -1554,7 +1661,7 @@ function finishSheet(recipeId){
     save:async()=>{
       closeSheet();
       const c=cooking.get(); const now=new Date();
-      r.cooks=[...(r.cooks||[]), {date:iso(now), at:now.toISOString(), mult:(c&&c.recipeId===recipeId&&c.mult)||1}];
+      addCook(r,{date:iso(now), at:now.toISOString(), mult:(c&&c.recipeId===recipeId&&c.mult)||1});
       if(picked!==null) r.rating=picked;
       r.updated_at=now.toISOString();
       cooking.clear(); state.detailId=recipeId;
@@ -1568,16 +1675,46 @@ function finishSheet(recipeId){
 function historySheet(recipeId){
   const r=state.recipes[recipeId]; if(!r) return;
   const cooks=(r.cooks||[]).map((c,i)=>({...c,i})).reverse();
-  const sh=openSheet(`<h3>${esc(r.title)}</h3><p class="muted small" style="margin:0 0 6px">Michelin rating</p>
+  const sh=openSheet(`<h3>${esc(r.title)}</h3><p class="muted small sheet-lead">Michelin rating</p>
     ${ratingOpts(r.rating??null)}
-    <p class="muted small" style="margin:16px 0 0">${cooks.length?`Cooked ${cooks.length===1?"once":cooks.length+" times"}`:"Not cooked yet. Tap Cook this on the recipe to start."}</p>
-    ${cooks.length?`<ul class="cooks">${cooks.map(c=>`<li><span>${esc(fmtDate(c.date))}${c.mult&&c.mult!==1?` · ${esc(c.mult)}× batch`:""}</span><button class="x" data-act="rm" data-i="${c.i}" aria-label="Remove this date">×</button></li>`).join("")}</ul>`:""}
-    <div class="row" style="margin-top:12px"><button class="btn ghost" data-act="done">Done</button></div>`);
+    <p class="muted small sheet-sub">${cooks.length?`Cooked ${cooks.length===1?"once":cooks.length+" times"}`:"Not cooked yet. Tap Cook this on the recipe to start, or add a time you've already made it."}</p>
+    ${cooks.length?`<ul class="cooks">${cooks.map(c=>`<li><span>${esc(fmtDate(c.date))}${c.mult&&c.mult!==1?` · ${esc(c.mult)}× batch`:""}${c.added?` <span class="muted">· added later</span>`:""}</span><button class="x" data-act="rm" data-i="${c.i}" aria-label="Remove this date">×</button></li>`).join("")}</ul>`:""}
+    <div class="row sheet-row"><button class="btn" data-act="add" id="addPastCook">Add a date I cooked this</button><button class="btn ghost" data-act="done">Done</button></div>`);
   const save=async msg=>{ r.updated_at=new Date().toISOString(); const ok=await store.put("recipes",recipeId,r); if(state.view==="detail") renderDetail(); if(ok&&msg) toast(msg); };
   sheetActions(sh,{
     done:closeSheet,
+    add:()=>pastCookSheet(recipeId),
     rate:async b=>{ r.rating=+b.dataset.n; sh.querySelectorAll('[data-act="rate"]').forEach(o=>o.classList.toggle("on",+o.dataset.n===r.rating)); await save(r.rating?`Rated ${r.rating} Michelin star${r.rating===1?"":"s"}`:"Rated: no stars"); },
     rm:async b=>{ const i=+b.dataset.i; const c=r.cooks[i]; r.cooks=r.cooks.filter((_,k)=>k!==i); await save(`Removed ${fmtDate(c.date)}`); historySheet(recipeId); },
+  });
+}
+/* A cook that happened without Cook this (2.6.0): any date up to today. It's marked
+   `added`, so the server logs it as "cook added later" and the pilot's count of
+   finished cooks stays honest; everywhere on the phone it counts like any other.
+   Cooks are kept in date order, because "last cooked" reads the last one. */
+const PAST_MULTS=[0.5,1,1.5,2,3,4];
+function addCook(r,c){ r.cooks=[...(r.cooks||[]),c].sort((a,b)=>(a.date+(a.at||"")).localeCompare(b.date+(b.at||""))); }
+function pastCookSheet(recipeId){
+  const r=state.recipes[recipeId]; if(!r) return;
+  const today=iso(new Date());
+  const sh=openSheet(`<h3>When did you cook it?</h3><p class="muted small sheet-lead">${esc(r.title)}</p>
+    <div class="field"><label for="pcDate">Date</label><input class="input" type="date" id="pcDate" max="${today}" value="${today}"></div>
+    <div class="field"><label for="pcMult">Batch</label><select class="input" id="pcMult">${PAST_MULTS.map(m=>`<option value="${m}"${m===1?" selected":""}>${m===1?"1× (as written)":fmtQty(m)+"×"}</option>`).join("")}</select></div>
+    <p class="status" id="pcStatus"></p>
+    <div class="row sheet-row"><button class="btn primary" data-act="save">Add this cook</button><button class="btn ghost" data-act="back">Back</button></div>`);
+  sheetActions(sh,{
+    back:()=>historySheet(recipeId),
+    save:async()=>{
+      const date=sh.querySelector("#pcDate").value, mult=+sh.querySelector("#pcMult").value||1, st=sh.querySelector("#pcStatus");
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ st.className="status err"; st.textContent="Pick the date you cooked it."; return; }
+      if(date>today){ st.className="status err"; st.textContent="That's in the future. Pick today or an earlier day."; return; }
+      addCook(r,{date, at:new Date(date+"T12:00").toISOString(), mult, added:true});
+      r.updated_at=new Date().toISOString();
+      const ok=await store.put("recipes",recipeId,r);
+      if(state.view==="detail") renderDetail();
+      historySheet(recipeId);
+      if(ok) toast(`Added ${fmtDate(date)}`);
+    },
   });
 }
 
@@ -2309,6 +2446,7 @@ async function makeCover(recipe, onDone){
     ingredients:(recipe.ingredients||[]).map(i=>({item:i.item, raw_text:i.raw_text})) };
   try{
     const out=await api("/api/cover",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({recipe:input}),signal:ctl.signal});
+    allowance.took(out&&out.allowance);
     if(mine()) closeSheet();
     await onDone(out.id);
   }catch(e){
@@ -2320,12 +2458,43 @@ async function makeCover(recipe, onDone){
     else toast(msg);
   }
 }
+/* Every cover made for a recipe is kept (2.6.0), newest first, up to COVERS_MAX, in
+   `covers`; `cover` is the one shown. A new cover is used straight away (as before),
+   then, if there are others, the picker opens with it chosen, so an earlier one is
+   one tap away. Recipes from before 2.6.0 have no `covers`: their list is [cover].
+   The server's cover sweep spares every id in `covers`. */
+const COVERS_MAX=6;
+function coversOf(r){
+  const l=(r&&Array.isArray(r.covers)?r.covers:[]).filter(x=>typeof x==="string"&&/^[a-f0-9]{32}$/.test(x));
+  if(r&&r.cover&&!l.includes(r.cover)) l.unshift(r.cover);
+  return [...new Set(l)];
+}
+function withCover(r,id){ r.covers=[id,...coversOf(r).filter(x=>x!==id)].slice(0,COVERS_MAX); r.cover=id; return r; }
 async function applyCover(recipeId,coverId){
   const r=state.recipes[recipeId]; if(!r) return;
-  r.cover=coverId; r.updated_at=new Date().toISOString();
-  if(await store.put("recipes",recipeId,r)) toast("Cover added");
-  if(state.view==="detail"&&state.detailId===recipeId) renderDetail();
-  else if(state.view==="recipes") renderRecipes();
+  withCover(r,coverId); r.updated_at=new Date().toISOString();
+  const ok=await store.put("recipes",recipeId,r);
+  const here=state.view==="detail"&&state.detailId===recipeId;
+  if(here) renderDetail(); else if(state.view==="recipes") renderRecipes();
+  // offer the others only when nothing else is on screen in a sheet
+  if(here&&coversOf(r).length>1&&!document.querySelector("#sheet.open")) coverPicker(recipeId,coverId,ok);
+  else if(ok) toast("Cover added");
+}
+function coverPicker(recipeId,chosen,justMade){
+  const r=state.recipes[recipeId]; if(!r) return;
+  const list=coversOf(r); let pick=list.includes(chosen)?chosen:r.cover;
+  const sh=openSheet(`<h3>${justMade?"New cover added":"Choose a cover"}</h3>
+    <p class="muted small sheet-lead">${list.length} covers made for ${esc(r.title||"this recipe")}, newest first. Keep the new one, or pick one you liked better.</p>
+    <div class="coverchoices">${list.map((id,i)=>`<div class="cc"><button class="ccpick${id===pick?" on":""}" data-act="pick" data-id="${esc(id)}" aria-pressed="${id===pick}" aria-label="Cover ${i+1}${id===r.cover?", in use":""}"><img src="${coverUrl(id)}" alt=""></button>${id!==r.cover?`<button class="x" data-act="drop" data-id="${esc(id)}" aria-label="Remove cover ${i+1}"><span>×</span></button>`:""}</div>`).join("")}</div>
+    <div class="row sheet-row"><button class="btn primary" data-act="use">Use this cover</button><button class="btn ghost" data-act="close">Close</button></div>`);
+  const save=async()=>{ r.updated_at=new Date().toISOString(); const ok=await store.put("recipes",recipeId,r); if(state.view==="detail"&&state.detailId===recipeId) renderDetail(); return ok; };
+  sheetActions(sh,{
+    close:closeSheet,
+    pick:b=>{ pick=b.dataset.id; sh.querySelectorAll(".ccpick").forEach(x=>{ const on=x.dataset.id===pick; x.classList.toggle("on",on); x.setAttribute("aria-pressed",String(on)); }); },
+    use:async()=>{ closeSheet(); if(pick===r.cover) return; r.cover=pick; if(await save()) toast("Cover changed"); },
+    drop:async b=>{ r.covers=coversOf(r).filter(x=>x!==b.dataset.id); const ok=await save(); if(ok) toast("Cover removed");
+      if(coversOf(r).length>1) coverPicker(recipeId,pick===b.dataset.id?r.cover:pick); else closeSheet(); },
+  });
 }
 function pickPhotos(){ return new Promise(res=>{ const i=document.createElement("input"); i.type="file"; i.accept="image/*"; i.multiple=true; i.onchange=()=>res([...i.files]); i.click(); }); }
 function photosHtml(ids,editable){
@@ -2445,7 +2614,7 @@ function renderReview(){
     <div class="field"><label>Tags (comma separated)</label><input class="input" id="fTags" value="${esc((d.tags||[]).join(", "))}"></div>
     <h3>Cover</h3>
     <div class="coverbox">${d.cover?`<img src="${coverUrl(d.cover)}" alt="Cover">`:""}
-      <div class="row"><button class="btn small" id="revCover">${d.cover?"New cover":"Make cover"}</button>${d.cover?`<button class="btn small ghost" id="revCoverRm">Remove</button>`:""}</div></div>
+      <div class="row"><button class="btn small" id="revCover">${d.cover?"New cover":"Make cover"}</button>${d.cover?`<button class="btn small ghost" id="revCoverRm">Remove</button>`:""}</div><p class="allow" data-allow="cover" hidden></p></div>
     <h3>Photos</h3>
     <div id="revPhotos">${photosHtml(d.photos,true)}</div>
     <h3>Ingredients</h3>
@@ -2477,7 +2646,7 @@ function renderReview(){
   };
   state.reviewCollect=collect; // the cover can finish after a re-render; it must fold into the latest form
   el.querySelector("#revCover").onclick=()=>makeCover(collect(), id=>{
-    if(state.draft){ state.draft=state.reviewCollect(); state.draft.cover=id; renderReview(); toast("Cover added"); }
+    if(state.draft){ state.draft=withCover(state.reviewCollect(),id); renderReview(); toast(coversOf(state.draft).length>1?"Cover added. Your earlier ones are kept: choose between them on the recipe page.":"Cover added"); }
     else if(state.lastSavedId) applyCover(state.lastSavedId,id); // saved while it was painting
   });
   const rmc=el.querySelector("#revCoverRm"); if(rmc) rmc.onclick=()=>{ state.draft=collect(); delete state.draft.cover; renderReview(); };
@@ -2519,7 +2688,7 @@ function renderReview(){
    used, what is AI costing, who's using it, what happened lately. Detail is one
    tap down: a person, AI usage and limits, all activity, the audit log, errors.
    Health shows only what the server can check; the rest says "Not monitored". */
-const ACT_WORDS={ recipe_added:"added", recipe_edited:"edited", recipe_deleted:"deleted", cook_logged:"cooked", recipe_copied:"copied",
+const ACT_WORDS={ recipe_added:"added", recipe_edited:"edited", recipe_deleted:"deleted", cook_logged:"cooked", cook_added:"added a past cook of", recipe_copied:"copied",
   plan_changed:"changed the plan for", pantry_changed:"pantry:", pantry_removed:"took off the pantry:", profile_changed:"set their name to",
   ai_import:"imported a recipe with AI", ai_scan:"scanned the fridge", ai_ideas:"asked for recipe ideas", ai_write:"had a recipe written", ai_cover:"painted a cover", ai_dish:"guessed a recipe from a photo",
   signed_in:"signed in via", link_fetched:"fetched a link from" };
@@ -2653,7 +2822,7 @@ function adminPersonHtml({sum}){
   return `<div class="adm-kicker">Person</div>
     <div class="adm-top">${avatar(p,"md")}<div class="adm-who"><h2 class="adm-title">${esc(p.name||"No name yet")}${p.is_admin?" · You":""}</h2><span>${esc(p.email)}</span></div></div>
     <p class="adm-meta">Joined ${esc(whenShort(p.created_at))} · last seen ${esc(whenShort(p.last_seen))}${p.paused?` · <span class="paused">Paused ${esc(whenShort(p.paused_at))}</span>`:""}</p>
-    <div class="adm-metrics four"><div class="adm-m"><b>${p.recipes}</b><span>Recipes</span></div><div class="adm-m"><b>${p.cooks}</b><span>Cooks</span></div><div class="adm-m"><b>${p.copies}</b><span>Copies</span></div><div class="adm-m"><b>${esc(fmtMB(p.storage_bytes))}</b><span>Photos${exempt?"":` of ${p.limits.storage_mb} MB`}</span></div></div>
+    <div class="adm-metrics four"><div class="adm-m"><b>${p.recipes}</b><span>Recipes</span></div><div class="adm-m"><b>${p.cooks}</b><span>Cooks${p.cooks_added?` · ${esc(p.cooks_added)} added later`:""}</span></div><div class="adm-m"><b>${p.copies}</b><span>Copies</span></div><div class="adm-m"><b>${esc(fmtMB(p.storage_bytes))}</b><span>Photos${exempt?"":` of ${p.limits.storage_mb} MB`}</span></div></div>
     ${secHead("AI today"+(exempt?" · no limits":""))}<div class="adm-use">${use}</div>
     ${secHead("AI this month")}
     <p class="adm-sum">${plural(p.ai.month_calls,"call")} · ${usd(p.ai.month_usd)}${exempt?"":` of ${usd(p.limits.monthly_usd)} allowance (${pct(p.ai.month_usd,p.limits.monthly_usd)}%)`}</p>${feats}

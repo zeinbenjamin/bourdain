@@ -188,6 +188,21 @@ try {
       rows: new Set([...ul.querySelectorAll("li")].map((l) => Math.round(l.getBoundingClientRect().top))).size, over: document.documentElement.scrollWidth - document.documentElement.clientWidth }; });
   check("import: under the link box, where links can come from, with an icon each", src.names.join() === "Recipe sites,Instagram,TikTok,YouTube" && src.icons.every((w) => w === 20) && src.gap >= 2 && src.gap <= 12, JSON.stringify(src));
   check("…on one line at phone width, no sideways scroll", src.rows === 1 && src.right <= src.vw && src.over <= 0, JSON.stringify(src));
+  // --- 2.6.0: the recipe list as a list, measured at phone width
+  await page.evaluate(() => { state.view = "recipes"; show("recipes"); });
+  await page.click('.viewtog [data-as="list"]');
+  const lv = await page.evaluate(() => {
+    const ctl = document.querySelector(".listctl").getBoundingClientRect();
+    return { toggles: [...document.querySelectorAll(".viewtog button")].map((x) => { const r = x.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; }),
+      selects: [...document.querySelectorAll(".listctl select")].map((x) => Math.round(x.getBoundingClientRect().width)), ctlRight: Math.round(ctl.right), vw: document.documentElement.clientWidth,
+      rows: [...document.querySelectorAll("#rlist .rcard")].map((c) => { const r = c.getBoundingClientRect(), t = c.querySelector(".thumb").getBoundingClientRect(), h = c.querySelector("h3").getBoundingClientRect();
+        return { h: Math.round(r.height), w: Math.round(r.width), thumb: [Math.round(t.width), Math.round(t.height)], gap: Math.round(h.left - t.right) }; }),
+      over: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+  });
+  check("list view: the grid/list switch is two 44px buttons, beside sort and filter on one line", lv.toggles.every(([w, h]) => w >= 44 && h >= 44) && lv.selects.every((w) => w >= 110) && lv.ctlRight <= lv.vw, JSON.stringify(lv));
+  check("list view: rows are full width, at least 56px tall, with a 56px picture and 12px before the title", lv.rows.length > 0 && lv.rows.every((r) => r.h >= 56 && r.w >= lv.vw - 40 && r.thumb[0] === 56 && r.thumb[1] === 56 && r.gap === 12), JSON.stringify(lv.rows));
+  check("list view: no sideways scroll", lv.over <= 0, String(lv.over));
+  await page.click('.viewtog [data-as="grid"]');
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
 } catch (e) { finish(e); } finally { await b?.browser.close(); await s?.cleanup(); }

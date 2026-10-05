@@ -6,7 +6,7 @@ Priorities follow `docs/strategy.md`: reliability first, then the core loop.
 
 ## From pilot users
 
-Nothing open. YouTube links and Guess from a photo shipped in 2.5.0.
+Nothing open. Past cooks and the list view shipped in 2.6.0.
 
 ## Requested by Zein
 

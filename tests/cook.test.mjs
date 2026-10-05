@@ -120,6 +120,39 @@ try {
   await page.fill("#fTitle", "Leek & potato soup"); await page.click("#revSave"); await sleep(500);
   r = await server("soup");
   check("editing keeps cooks and rating", r.title === "Leek & potato soup" && r.cooks.length === 1 && r.rating === 3);
+  // --- 2.6.0: adding a cook from an earlier day
+  const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+  const actBefore = (await (await fetch(s.url + "/api/admin/activity?cat=content&limit=200")).json()).filter((a) => a.action === "cook_logged").length;
+  await page.evaluate(() => { state.detailId = "soup"; show("detail"); });
+  await page.click("#cookStats"); await page.waitForSelector("#sheet.open #addPastCook");
+  await page.click("#addPastCook"); await page.waitForSelector("#sheet.open #pcDate");
+  check("past cook: the date opens on today and can't go past it", (await page.inputValue("#pcDate")) === today && (await page.getAttribute("#pcDate", "max")) === today);
+  const tomorrow = daysAgo(-1);
+  await page.fill("#pcDate", tomorrow); await page.click('#sheet [data-act="save"]'); await sleep(300);
+  check("…a future date is refused, nothing saved", /in the future/.test(await page.textContent("#pcStatus")) && (await server("soup")).cooks.length === 1);
+  const d40 = daysAgo(40);
+  await page.fill("#pcDate", d40); await page.selectOption("#pcMult", "2"); await page.click('#sheet [data-act="save"]');
+  await page.waitForSelector("#sheet.open #addPastCook"); await sleep(400);
+  r = await server("soup");
+  const added = r.cooks.find((c) => c.date === d40);
+  check("…a cook 40 days ago is saved, marked as added, at the batch picked", r.cooks.length === 2 && added && added.added === true && added.mult === 2 && new Date(added.at).getHours() === 12, JSON.stringify(r.cooks));
+  check("…kept in date order, so 'last cooked' is still today", r.cooks[r.cooks.length - 1].date === today && (await page.textContent("#cookStats")).includes(await page.evaluate((t) => fmtDate(t), today)), await page.textContent("#cookStats"));
+  check("…the history sheet lists it as added later", /added later/.test(await page.textContent("#sheet .cooks")) && (await page.locator("#sheet .cooks li").count()) === 2);
+  const d400 = daysAgo(400);
+  await page.click("#addPastCook"); await page.waitForSelector("#sheet.open #pcDate"); await page.fill("#pcDate", d400); await page.click('#sheet [data-act="save"]');
+  await page.waitForSelector("#sheet.open #addPastCook"); await sleep(400);
+  r = await server("soup");
+  check("…any date works, over a year back too, and goes first", r.cooks.length === 3 && r.cooks[0].date === d400 && r.cooks[1].date === d40);
+  check("…the Archives count it like any other cook", await page.evaluate(() => timelineEntries().filter((e) => e.recipeId === "soup").length) === 3);
+  const acts = await (await fetch(s.url + "/api/admin/activity?cat=content&limit=200")).json();
+  check("…logged as a cook added later, with its date, not as a finished cook (the pilot count)",
+    acts.some((a) => a.action === "cook_added" && a.target?.includes(d40)) && acts.some((a) => a.action === "cook_added" && a.target?.includes(d400)) && acts.filter((a) => a.action === "cook_logged").length === actBefore,
+    JSON.stringify(acts.slice(0, 4)));
+  const summary = await (await fetch(s.url + "/api/admin/summary")).json();
+  const all = Object.values((await s.state()).recipes).flatMap((x) => x.cooks || []);
+  check("…and the owner's view counts it apart", summary.people[0].cooks === all.filter((c) => !c.added).length && summary.people[0].cooks_added === 2, JSON.stringify({ cooks: summary.people[0].cooks, added: summary.people[0].cooks_added }));
+  await page.click('#sheet [data-act="done"]');
+
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
 } catch (e) { finish(e); } finally { await b?.browser.close(); await s?.cleanup(); }
