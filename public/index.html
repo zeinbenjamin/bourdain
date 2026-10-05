@@ -47,6 +47,8 @@ h1,h2,h3{font-family:var(--serif);font-weight:700;letter-spacing:-.01em;margin:0
 .kicker{font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--ink-2)}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
+/* A quick second tap is a tap, not a zoom (2.6.3); pinch zoom still works. */
+button,a,input,select,textarea,label,.ck,.slot,.rcard{touch-action:manipulation}
 a{color:inherit}
 :focus-visible{outline:2px solid var(--flame);outline-offset:2px}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
@@ -71,7 +73,7 @@ a{color:inherit}
 .top .sub{font-family:var(--sans);color:var(--ink-3);font-size:11px;font-weight:500;letter-spacing:.02em}
 .top .sync{color:var(--ink);font-weight:700}
 
-main{flex:1; padding:0 0 84px}
+main{flex:1; padding:0 0 calc(84px + env(safe-area-inset-bottom,0px))} /* clear the tab bar, home bar included (2.6.3) */
 .signinbar{display:block;width:100%;min-height:48px;border:0;border-bottom:1px solid var(--rule);background:var(--flame);color:var(--paper);font-family:var(--sans);font-size:14px;font-weight:600;padding:10px 18px;text-align:left}
 .signinbar[hidden]{display:none}
 section.view{display:none; padding:16px 18px 24px; max-width:760px; margin:0 auto; width:100%}
@@ -142,10 +144,9 @@ body.aslist .rcard .thumb{width:56px;height:56px;flex:none;margin:0;font-size:24
 body.aslist .rcard .body{padding:0}
 body.aslist .rcard h3{font-size:17px;-webkit-line-clamp:2;margin-bottom:2px}
 body.aslist .rcard .tags{display:none}
-.viewtog{display:flex;flex:none;border:1px solid var(--line);border-radius:999px;padding:0}
-.viewtog button{width:44px;min-height:44px;border:0;background:none;border-radius:999px;color:var(--ink-3);display:flex;align-items:center;justify-content:center}
-.viewtog button.on{background:var(--ink);color:var(--paper)}
-.viewtog svg{width:18px;height:18px}
+.viewtog{flex:none;width:44px;height:44px;border:1px solid var(--line);border-radius:999px;background:none;color:var(--ink-2);display:flex;align-items:center;justify-content:center;padding:0}
+.viewtog svg{width:18px;height:18px;display:block}
+.viewtog[data-as="list"] .vt-grid,.viewtog[data-as="grid"] .vt-list{display:none}
 .rcard{
   display:flex; flex-direction:column; text-align:left; width:100%;
   background:none; border:0; border-top:1px solid var(--line); padding:0 0 6px;
@@ -405,11 +406,12 @@ body.aslist .rcard .tags{display:none}
 .status{margin-top:12px;font-family:var(--sans);font-size:13px;color:var(--ink-2)}
 .status.err{color:var(--red)}
 /* each ingredient is its own grey card, so rows read apart on a phone */
-.ingrow{display:grid;grid-template-columns:22px 64px 80px 1fr 32px;gap:6px;margin-bottom:10px;align-items:center;background:var(--steel);border:1px solid var(--line);border-radius:6px;padding:8px 6px 8px 2px}
+.ingrow{display:grid;grid-template-columns:22px 68px 80px 1fr 32px;gap:6px;margin-bottom:10px;align-items:center;background:var(--steel);border:1px solid var(--line);border-radius:6px;padding:8px 6px 8px 2px}
 .ingrow .h{color:var(--ink-3);font-size:18px;text-align:center;white-space:nowrap;letter-spacing:-3px;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;grid-row:1/3;align-self:center}
 .ingrow.dragging{opacity:.55;outline:2px solid var(--flame);outline-offset:-2px}
-.ingrow .input{padding:8px 8px;font-size:14px}
+.ingrow .input{padding:8px 8px;font-size:16px} /* 16px: iPhone Safari zooms in on any smaller field (2.6.3) */
 .ingrow .aisle-sel{grid-column:2/4}
+.ingrow .input[data-f=quantity]{padding-left:6px;padding-right:6px}
 .ingrow .x{border:0;background:none;color:var(--ink-3);font-size:20px;width:44px;height:44px;padding:0;margin:-5px -6px;justify-self:center}
 .ingrow.two{grid-template-columns:1fr 1fr 28px}
 .review h2{font-size:28px;margin-bottom:12px}
@@ -487,7 +489,7 @@ body.aslist .rcard .tags{display:none}
 .rcard .cstars{margin:2px 0 3px;line-height:1}
 .rcard .cstars .mstars{font-size:15px;vertical-align:0}
 .listctl{display:flex;gap:8px;margin:0 0 10px;align-items:center}
-.listctl select{flex:1;min-height:44px;font-size:14px}
+.listctl select{flex:1;min-width:0;min-height:44px;font-size:16px;padding-left:10px;padding-right:6px}
 .tmrs{display:flex;flex-wrap:wrap;gap:6px;padding:0 0 12px 36px}
 .tmr{border:1px solid var(--flame);color:var(--flame);background:var(--paper);border-radius:999px;padding:0 14px;min-height:40px;font-family:var(--sans);font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
 .tmr.run{background:var(--flame);color:var(--flame-ink)}
@@ -554,17 +556,15 @@ body.aslist .rcard .tags{display:none}
     <div id="cookBanner"></div>
     <div class="listctl">
       <select class="input" id="sortBy" aria-label="Sort recipes">
-        <option value="new">Newest first</option><option value="az">A to Z</option><option value="stars">Most Michelin stars</option>
-        <option value="most">Most cooked</option><option value="recent">Recently cooked</option><option value="quick">Quickest</option>
+        <option value="new">Newest first</option><option value="az">A to Z</option><option value="stars">Most stars</option>
+        <option value="most">Most cooked</option><option value="recent">Last cooked</option><option value="quick">Quickest</option>
       </select>
       <select class="input" id="filterBy" aria-label="Filter recipes">
         <option value="all">All recipes</option><option value="s1">1 star or more</option><option value="s2">2 stars or more</option>
         <option value="s3">3 stars</option><option value="unrated">Not rated yet</option><option value="never">Never cooked</option>
       </select>
-      <div class="viewtog" role="group" aria-label="Show recipes as">
-        <button data-as="grid" aria-label="Show as a grid"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2" width="5.5" height="5.5"/><rect x="10.5" y="2" width="5.5" height="5.5"/><rect x="2" y="10.5" width="5.5" height="5.5"/><rect x="10.5" y="10.5" width="5.5" height="5.5"/></svg></button>
-        <button data-as="list" aria-label="Show as a list"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2.5" width="4" height="4"/><rect x="2" y="11.5" width="4" height="4"/><path d="M9 4.5h7M9 13.5h7"/></svg></button>
-      </div>
+      <!-- One button (2.6.3), so sort and filter have room for 16px text; it shows the view it switches to. -->
+      <button class="viewtog" id="viewTog" data-as="list" data-view="grid" aria-label="Show as a list"><span class="vt-grid"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2" width="5.5" height="5.5"/><rect x="10.5" y="2" width="5.5" height="5.5"/><rect x="2" y="10.5" width="5.5" height="5.5"/><rect x="10.5" y="10.5" width="5.5" height="5.5"/></svg></span><span class="vt-list"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2.5" width="4" height="4"/><rect x="2" y="11.5" width="4" height="4"/><path d="M9 4.5h7M9 13.5h7"/></svg></span></button>
     </div>
     <div class="chips" id="tagChips"></div>
     <div class="rlist" id="rlist"></div>
@@ -1109,8 +1109,8 @@ function cardHtml(r,attrs,extra=""){
   const t=(r.prep_min||0)+(r.cook_min||0);
   const meta=[t?`${t} min`:null, r.servings?`${r.servings} serves`:null, r.source_type&&r.source_type!=="manual"?r.source_type:null].filter(Boolean).join(" · ");
   return `<button class="rcard" ${attrs}>
-    ${r.cover?`<div class="thumb cover"><img src="${coverUrl(r.cover)}" alt=""></div>`
-      :`<div class="thumb">${r.photos&&r.photos.length?`<img src="${photoUrl(r.photos[0])}" alt="">`:esc((r.title||"?").trim()[0]||"?").toUpperCase()}</div>`}
+    ${r.cover?`<div class="thumb cover"><img loading="lazy" decoding="async" src="${coverUrl(r.cover)}" alt=""></div>`
+      :`<div class="thumb">${r.photos&&r.photos.length?`<img loading="lazy" decoding="async" src="${photoUrl(r.photos[0])}" alt="">`:esc((r.title||"?").trim()[0]||"?").toUpperCase()}</div>`}
     <div class="body"><h3>${esc(r.title||"Untitled")}</h3>${extra}${r.rating?`<div class="cstars">${stars(r.rating)}</div>`:""}${meta?`<div class="meta">${esc(meta)}</div>`:""}
     <div class="tags">${(r.tags||[]).slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div></div></button>`;
 }
@@ -1507,8 +1507,9 @@ function sortRecipes(a,b,by){
 }
 function syncListCtl(){ const p=listPrefs.get(); document.getElementById("sortBy").value=p.sort; document.getElementById("filterBy").value=p.filter;
   document.body.classList.toggle("aslist",p.view==="list");
-  document.querySelectorAll(".viewtog [data-as]").forEach(b=>{ const on=b.dataset.as===p.view; b.classList.toggle("on",on); b.setAttribute("aria-pressed",String(on)); }); }
-document.querySelector(".viewtog").onclick=e=>{ const b=e.target.closest("[data-as]"); if(b) listPrefs.set({...listPrefs.get(),view:b.dataset.as}); };
+  const vt=document.getElementById("viewTog"), to=p.view==="list"?"grid":"list";
+  vt.dataset.view=p.view; vt.dataset.as=to; vt.setAttribute("aria-label",to==="list"?"Show as a list":"Show as a grid"); }
+document.getElementById("viewTog").onclick=e=>listPrefs.set({...listPrefs.get(),view:e.currentTarget.dataset.as});
 document.getElementById("sortBy").onchange=e=>{ listPrefs.set({...listPrefs.get(),sort:e.target.value}); renderRecipes(); };
 document.getElementById("filterBy").onchange=e=>{ listPrefs.set({...listPrefs.get(),filter:e.target.value}); renderRecipes(); };
 syncListCtl();
@@ -1742,8 +1743,8 @@ async function savePlanDay(dateISO,day){ if(day.entries.length){ state.plan[date
 
 // Small version of the recipe card's picture: cover whole on white, else first photo, else the first letter.
 function miniThumb(r){
-  if(r&&r.cover) return `<span class="mini cover"><img src="${coverUrl(r.cover)}" alt=""></span>`;
-  if(r&&r.photos&&r.photos.length) return `<span class="mini"><img src="${photoUrl(r.photos[0])}" alt=""></span>`;
+  if(r&&r.cover) return `<span class="mini cover"><img loading="lazy" decoding="async" src="${coverUrl(r.cover)}" alt=""></span>`;
+  if(r&&r.photos&&r.photos.length) return `<span class="mini"><img loading="lazy" decoding="async" src="${photoUrl(r.photos[0])}" alt=""></span>`;
   return `<span class="mini">${esc(((r&&r.title)||"?").trim()[0]||"?").toUpperCase()}</span>`;
 }
 function renderPlan(){
@@ -2517,7 +2518,7 @@ function coverPicker(recipeId,chosen,justMade){
 }
 function pickPhotos(){ return new Promise(res=>{ const i=document.createElement("input"); i.type="file"; i.accept="image/*"; i.multiple=true; i.onchange=()=>res([...i.files]); i.click(); }); }
 function photosHtml(ids,editable){
-  return `<div class="photos">${(ids||[]).map(id=>`<div class="ph"><img src="${photoUrl(id)}" alt="">${editable?`<button class="x" data-rmp="${esc(id)}" aria-label="Remove photo"><span>×</span></button>`:""}</div>`).join("")}${editable?`<button class="add" data-addp>+ Photo</button>`:""}</div>`;
+  return `<div class="photos">${(ids||[]).map(id=>`<div class="ph"><img loading="lazy" decoding="async" src="${photoUrl(id)}" alt="">${editable?`<button class="x" data-rmp="${esc(id)}" aria-label="Remove photo"><span>×</span></button>`:""}</div>`).join("")}${editable?`<button class="add" data-addp>+ Photo</button>`:""}</div>`;
 }
 
 /* ---------- cost: home vs eating out (2.5) ----------

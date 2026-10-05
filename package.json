@@ -1,6 +1,6 @@
 {
   "name": "bourdain",
-  "version": "2.6.2",
+  "version": "2.6.3",
   "private": true,
   "type": "module",
   "description": "Self-hosted recipe importer, meal planner and pantry",

@@ -190,10 +190,10 @@ try {
   check("…on one line at phone width, no sideways scroll", src.rows === 1 && src.right <= src.vw && src.over <= 0, JSON.stringify(src));
   // --- 2.6.0: the recipe list as a list, measured at phone width
   await page.evaluate(() => { state.view = "recipes"; show("recipes"); });
-  await page.click('.viewtog [data-as="list"]');
+  await page.click('#viewTog[data-as="list"]');
   const lv = await page.evaluate(() => {
     const ctl = document.querySelector(".listctl").getBoundingClientRect();
-    return { toggles: [...document.querySelectorAll(".viewtog button")].map((x) => { const r = x.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; }),
+    return { toggles: [document.getElementById("viewTog")].map((x) => { const r = x.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; }),
       selects: [...document.querySelectorAll(".listctl select")].map((x) => Math.round(x.getBoundingClientRect().width)), ctlRight: Math.round(ctl.right), vw: document.documentElement.clientWidth,
       rows: [...document.querySelectorAll("#rlist .rcard")].map((c) => { const r = c.getBoundingClientRect(), t = c.querySelector(".thumb").getBoundingClientRect(), h = c.querySelector("h3").getBoundingClientRect();
         return { h: Math.round(r.height), w: Math.round(r.width), thumb: [Math.round(t.width), Math.round(t.height)], gap: Math.round(h.left - t.right) }; }),
@@ -202,7 +202,7 @@ try {
   check("list view: the grid/list switch is two 44px buttons, beside sort and filter on one line", lv.toggles.every(([w, h]) => w >= 44 && h >= 44) && lv.selects.every((w) => w >= 110) && lv.ctlRight <= lv.vw, JSON.stringify(lv));
   check("list view: rows are full width, at least 56px tall, with a 56px picture and 12px before the title", lv.rows.length > 0 && lv.rows.every((r) => r.h >= 56 && r.w >= lv.vw - 40 && r.thumb[0] === 56 && r.thumb[1] === 56 && r.gap === 12), JSON.stringify(lv.rows));
   check("list view: no sideways scroll", lv.over <= 0, String(lv.over));
-  await page.click('.viewtog [data-as="grid"]');
+  await page.click('#viewTog[data-as="grid"]');
   // --- 2.6.2: the page itself scrolls, not an inner box (iPhone Safari sometimes
   // dragged the fixed-height page instead, and it bounced back)
   await page.evaluate(() => { for (let i = 0; i < 14; i++) state.recipes["many" + i] = { title: "Long list recipe " + i, ingredients: [], steps: [], photos: [], tags: [] }; state.view = "recipes"; show("recipes"); });
@@ -221,6 +221,22 @@ try {
   await page.click('.rcard:has-text("Long list recipe 0")'); await page.waitForSelector("#view-detail.active");
   check("…a new screen starts at the top", await page.evaluate(() => scrollY) === 0);
   await page.evaluate(() => { for (let i = 0; i < 14; i++) delete state.recipes["many" + i]; show("recipes"); });
+
+  // --- 2.6.3: nothing that makes iPhone Safari zoom, room for the home bar, lazy pictures
+  const fields = async () => page.evaluate(() => [...document.querySelectorAll(".view.active input:not([type=checkbox]):not([type=file]), .view.active select, .view.active textarea, .top input, .top select")]
+    .filter((e) => e.offsetParent).map((e) => ({ id: e.id || e.className || e.tagName, px: parseFloat(getComputedStyle(e).fontSize) })));
+  await page.evaluate(() => { state.view = "recipes"; show("recipes"); });
+  let small = (await fields()).filter((f) => f.px < 16);
+  await page.click('.rcard:has-text("Leek soup")'); await page.click("#edit"); await page.waitForSelector(".ingrow");
+  small = small.concat((await fields()).filter((f) => f.px < 16));
+  check("no field under 16px (Recipes, the edit form): iPhone Safari zooms in on those", small.length === 0, JSON.stringify(small));
+  const ta = await page.evaluate(() => [...document.querySelectorAll("button, .ck, .rcard")].filter((e) => e.offsetParent).map((e) => getComputedStyle(e).touchAction));
+  check("…a quick double tap on a button is a tap, not a zoom", ta.length > 0 && ta.every((t) => t === "manipulation"), [...new Set(ta)].join());
+  await page.evaluate(() => { state.draft = null; state.editingId = null; state.view = "recipes"; show("recipes"); });
+  const pad = await page.evaluate(() => [...document.styleSheets].flatMap((sh) => { try { return [...sh.cssRules]; } catch { return []; } }).find((r) => r.selectorText === "main")?.cssText || "");
+  check("…the space under a page includes the iPhone's home bar", /safe-area-inset-bottom/.test(pad), pad);
+  const lazy = await page.evaluate(() => { const r = { cover: "c".repeat(32), photos: ["d".repeat(32)] }; return [cardHtml(r, ""), cardHtml({ photos: ["d".repeat(32)] }, ""), miniThumb(r), miniThumb({ photos: ["d".repeat(32)] }), photosHtml(["d".repeat(32)], false)].map((h) => /loading="lazy"/.test(h)); });
+  check("…pictures in lists load as they scroll into view", lazy.every(Boolean), JSON.stringify(lazy));
 
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();

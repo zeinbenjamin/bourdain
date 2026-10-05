@@ -311,9 +311,11 @@ are remembered per phone in `localStorage["bourdain.listPrefs"]`. A saved sort o
 filter that is no longer an option falls back to the default in `listPrefs.get()`. A recipe card
 reads top to bottom: title, a `.cstars` row with the Michelin stars (omitted
 entirely when the recipe has none), the `.meta` row (time · serves · source), and
-tags. Cards deliberately don't show the cook count; that is only on the recipe
+tags. Pictures in lists (`cardHtml`, `miniThumb`, `photosHtml`) are `loading="lazy"`
+(2.6.3). Cards deliberately don't show the cook count; that is only on the recipe
 page. **Grid or list** (2.6.0): `listPrefs.view` (`grid` | `list`), the
-`.viewtog` switch beside sort and filter. List view is `body.aslist`, CSS only, so
+`#viewTog` button beside sort and filter (one button since 2.6.3, showing the view it
+switches to, so the 16px sort and filter labels fit). List view is `body.aslist`, CSS only, so
 every `.rlist` follows it (other people's books, search hits, profiles): one card a
 row, a 56px picture, no tags.
 
@@ -413,8 +415,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v48"`
-in `public/sw.js` → `v49`, `v50`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v49"`
+in `public/sw.js` → `v50`, `v51`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -452,6 +454,13 @@ bounced and the list wouldn't move. Now the document scrolls, `.top` is sticky a
 `.tabs` fixed; reset with `window.scrollTo(0,0)`, not `main.scrollTop`. An open
 sheet sets `html.sheet-open` (`overflow:hidden`) so the page behind stays put.
 Don't give `<main>` or `body` a fixed height or `overflow` again.
+
+**Nothing that makes iPhone Safari zoom (2.6.3).** Every input, select and textarea
+is at least 16px: Safari zooms in on a smaller field when it's tapped and doesn't
+zoom back. Buttons, cards and checklist rows have `touch-action: manipulation`, so a
+quick second tap isn't a double-tap zoom (pinch zoom still works). `<main>`'s
+bottom padding includes `env(safe-area-inset-bottom)` so the last thing on a page
+clears the tab bar above the home bar. The layout suite checks all three.
 
 **No `confirm()` or `alert()`.** The app runs in a sandboxed frame in some
 contexts where those are silently blocked and return false — a delete button

@@ -6,6 +6,13 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.6.3 — 2026-10-06
+- Tapping the sort or filter boxes, or an ingredient on the edit form, no longer zooms the page in on iPhone.
+- Tapping a button twice quickly no longer zooms the page.
+- On iPhones with a home bar, the bottom of each page is no longer hidden behind the tabs.
+- Long lists of recipes load faster on mobile data: pictures load as you scroll to them.
+- The grid/list switch is now a single button, and two sort options have shorter names ("Most stars", "Last cooked") so everything fits.
+
 ## 2.6.2 — 2026-10-06
 - Fixed: on iPhone, a page sometimes wouldn't scroll (especially after zooming in or out) and bounced back to the top, so you couldn't reach the rest of someone's recipes. Pages now scroll the way websites normally do.
 - Tapping the very top of the iPhone screen now scrolls back to the top.
