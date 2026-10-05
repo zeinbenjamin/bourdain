@@ -6,8 +6,8 @@ Priorities follow `docs/strategy.md`: reliability first, then the core loop.
 
 ## Planned for 2.6.0
 
-Reviewed 2026-10-05, not built yet. One minor release, in this order. All three
-only add fields, so no data migration and no data version bump.
+Reviewed 2026-10-05, not built yet. One minor release, in this order. None of
+them changes stored data shape (fields are only added), so no data migration and no data version bump.
 
 ### 1. Add a past cook (pilot request)
 
@@ -63,6 +63,36 @@ only add fields, so no data migration and no data version bump.
   may mean more covers get made; the daily limit (5) still caps it. Covers aren't
   counted in anyone's `storage_mb`: 6 WebPs of a few hundred KB each per recipe is
   small, but at scale that would need counting.
+
+### 4. See how much of your allowance is left (Zein)
+
+Today the phone only learns about a limit when a job is refused (429 `ai_limit` /
+`ai_budget`). Proposed:
+
+- **Server:** `/api/me` gains `allowance`: for each group (`import`, `scan`, `ideas`,
+  `cover`) `{used, limit}` for today, `month_pct` (share of `monthly_usd` spent),
+  `storage: {used_mb, limit_mb}`, and `exempt: true` for the owner while
+  `admin_exempt`. Every successful `/api/ai` and `/api/cover` reply also carries
+  the new `{used, limit}` for its group, so the phone stays current without asking
+  again. `cost` (background, 40 a day) isn't shown; reaching it just pauses the
+  estimates.
+- **At the button, only when it's getting low:** a grey line under Read recipe,
+  Scan, Ideas and Make a new cover, such as "3 imports left today". Shown once
+  `left <= max(2, a quarter of the limit)`: covers at 2 or fewer, imports at 5,
+  scans at 2, ideas at 3. Never while there's plenty, so it doesn't nag.
+- **One toast when it first gets low**, after the job that crosses the line, once
+  per group per day: "That's 2 covers left today. More tomorrow."
+- **The whole picture in one place:** "Your allowance" in the profile sheet, a
+  short row per group ("Imports 14 of 20 today"), the month as a percentage ("38%
+  of this month's AI allowance"), and photos ("120 MB of 500 MB"). Thin bars, ink
+  only, `--flame` once something is low. It says when it resets: "Daily limits
+  reset at midnight; the month resets on the 1st."
+- **The month as a percentage, not US$**, so nobody has to work out what a
+  dollar buys; warn at 80%: "You've used most of this month's AI allowance."
+- **The owner** sees "No limits (owner)" instead.
+- **Tests:** the numbers in `/api/me` and in each AI reply; the low line appears
+  only at the threshold; the toast comes only once; exempt owner; the profile
+  section at phone width.
 
 ## From pilot users
 
