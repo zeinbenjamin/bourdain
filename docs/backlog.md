@@ -50,8 +50,13 @@ Archives are. The current tab sits on a soft grey pill, its icon drawn bolder an
 its label in ink; the others are grey. Chosen 2026-10-06 from three mock-ups (icons
 only in grey, icons with labels, icons only in red).
 
+- **On an iPad** the pill is capped at about 500px wide and centred
+  (`max-width` with `margin: 0 auto`), so it sits under the content column like a
+  dock rather than stretching edge to edge. On a phone the cap never applies.
+  (Today's full-width bar spreads four tabs about 250px apart on an iPad.)
 - `<main>`'s bottom padding grows so the last thing on a page clears the pill.
-- The layout suite measures the pill: inside the screen at phone width, 44px+ tap
+- The layout suite measures the pill: inside the screen at phone width, centred
+  and no wider than the cap at iPad width (both orientations), 44px+ tap
   targets, labels not cut off with five tabs, the last card clear of it, nothing
   hidden behind it on any tab.
 - Check on an iPhone before release: Safari draws the blur differently from
@@ -73,6 +78,7 @@ the home bar gap and lazy pictures; these are left, most useful first.
 | "Share to Bourdain" on Android | A `share_target` in the web app manifest puts Bourdain in the share menu of Instagram, TikTok and Chrome. Android only; iPhone doesn't allow it for web apps. Small to medium. |
 | Toasts sit over sheet content | e.g. the Undo toast covers a row of the cook log for 6s. Raise it above the sheet, or into the sheet's own space. Small. |
 | Check the keyboard with the tab bar | On some iOS versions the fixed tab bar rides up over the keyboard and can cover the field being typed in. Needs checking on a real iPhone (edit form, pantry box) before deciding on a fix. |
+| Wider screens (iPad) | Content is capped at 760px, but rows inside it still run the full width: on the Plan a day's name sits far from its "+", and a few other screens look the same. Only worth doing if the pilot uses iPads. The tab bar's iPad cap is in 2.7.0. |
 
 ## Requested by Zein
 
