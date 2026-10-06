@@ -217,6 +217,10 @@ try {
       fills: Math.abs(m.top - hdr.bottom) <= 1 && Math.abs(m.bottom - innerHeight) <= 1, before, after, lastBottom: Math.round(last.bottom) };
   });
   check("scrolling: the page itself never scrolls; the content area does, from under the header to the bottom of the screen", sc.overflow === "auto" && sc.pageLocked && sc.overscroll === "none" && sc.pageY === 0 && sc.scrolled && sc.fills, JSON.stringify(sc));
+  const pin = await page.evaluate(() => { const cs = getComputedStyle(document.body), r = document.body.getBoundingClientRect();
+    return { position: cs.position, top: cs.top, bottom: cs.bottom, left: cs.left, right: cs.right, h: Math.round(r.height), vh: innerHeight }; });
+  check("2.7.1: the page is pinned to all four edges of the screen (on an iPhone home-screen app, height:100% stopped short of the home bar and cut the page off under the tab bar)",
+    pin.position === "fixed" && [pin.top, pin.bottom, pin.left, pin.right].every((v) => v === "0px") && pin.h === pin.vh, JSON.stringify(pin));
   check("…the header and tab bar don't move while it scrolls, and the last recipe clears the tab bar", sc.before.tabs === sc.after.tabs && sc.before.header === sc.after.header && sc.after.header === 0 && sc.lastBottom <= sc.after.tabs, JSON.stringify(sc));
   await page.click("#btnManual"); await page.waitForSelector("#sheet.open");
   const locked = await page.evaluate(() => getComputedStyle(document.getElementById("main")).overflowY);
