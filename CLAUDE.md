@@ -189,7 +189,7 @@ shopping list, restored from the hidden 1.x code. Nothing on it is stored except
 what the person did: it is built from the Plan each time, for the Plan's own week
 (`state.week`, so the two tabs move together; the Shop has its own ‹ › and dates,
 `[data-week]`). For the current week only today onwards (`shopDays()`); other weeks
-in full. Items merge by item and unit family (`item|fam`, the key ticks are stored
+in full (there's no line saying so, since 2.7.3). Items merge by item and unit family (`item|fam`, the key ticks are stored
 under) and show in the recipe's own unit when every line uses the same unit
 (`shopAmount`), else in g/kg or ml/L. Pantry items (an `itemKey` match) stay in
 their aisle, ticked, with a `.ptag` "from pantry" (inline-block, so the
@@ -247,8 +247,12 @@ people (see **Other people** below).
 - **The server** (`/api/people`, `/api/people/:id[/recipes/:rid]`,
   `/api/copy`, `/api/search`, `/api/feed`, `PUT /api/me`) lets everyone read
   everyone's recipes and cooks, and write only their own.
-- **Archives.** The People row and **Everyone / Just me** (per phone,
-  `bourdain.archivesWho`) appear only once someone else has a name. Your cooks
+- **The People row** (`peopleRowHtml`) is at the top of Recipes since 2.7.3 (it was
+  on the Archives), only once someone else has a name. A profile opened from it
+  (`openPerson`, `state.personFrom`) says "‹ Recipes" and keeps Recipes lit; one
+  opened from a recipe in the feed goes back to the Archives.
+- **Archives.** **Everyone / Just me** (per phone,
+  `bourdain.archivesWho`) appears only once someone else has a name. Your cooks
   come from the phone's copy; everyone else's from `/api/feed`. `people.stale()`
   and `feed.stale()` stop re-fetching within a minute, which is what stops the
   Archives re-rendering in a loop. Keep it that way. The People row shows
@@ -258,7 +262,10 @@ people (see **Other people** below).
   and `copied_from`. `myCopyOf()` finds an existing copy. `view-detail` and
   `view-theirs` share element ids (`#ingList`, `#multAmt`…), so each clears the
   other when it renders.
-- **Search.** The Recipes search also asks `/api/search` after a 300ms pause and
+- **Search.** Every word typed must be somewhere in the recipe (title,
+  description, tags, ingredients), in any order (`recipeMatches`, and the same in
+  `/api/search`). Since 2.7.3 that's how tags are found: there's no row of tag
+  buttons. The Recipes search also asks `/api/search` after a 300ms pause and
   lists hits in `#others` ("In other people's books"). It shows nothing when
   offline.
 - **The welcome.** `maybeWelcome()` opens `profileSheet(true)` once per visit
@@ -444,8 +451,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v54"`
-in `public/sw.js` → `v55`, `v56`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v55"`
+in `public/sw.js` → `v56`, `v57`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after

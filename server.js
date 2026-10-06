@@ -402,15 +402,15 @@ app.post("/api/copy", (req, res) => {
 app.get("/api/search", (req, res) => {
   const q = String(req.query.q || "").trim().toLowerCase();
   if (q.length < 2) return res.status(400).json({ error: "type at least 2 letters", code: "short_query" });
-  const copies = copiesOf(req.user.id), hits = [];
+  const copies = copiesOf(req.user.id), hits = [], words = q.split(/\s+/).filter(Boolean);
   for (const u of named()) {
     if (u.id === req.user.id) continue;
     for (const [id, r] of Object.entries(recipesOf(u.id))) {
       if (!r) continue;
       const title = str(r.title).toLowerCase();
       const hay = [title, str(r.description), ...(Array.isArray(r.tags) ? r.tags : []), ...(Array.isArray(r.ingredients) ? r.ingredients : []).map((i) => i && (i.item || i.raw_text))].join(" ").toLowerCase();
-      if (!hay.includes(q)) continue;
-      hits.push({ rank: title.includes(q) ? 0 : 1, owner: u.id, name: u.name, photo: u.photo || null, id, title: str(r.title), cover: assetId(r.cover),
+      if (!words.every((w) => hay.includes(w))) continue; // every word, anywhere, like the phone's own search (2.7.3)
+      hits.push({ rank: words.every((w) => title.includes(w)) ? 0 : 1, owner: u.id, name: u.name, photo: u.photo || null, id, title: str(r.title), cover: assetId(r.cover),
         firstPhoto: assetId((Array.isArray(r.photos) && r.photos[0]) || null), rating: ratingOf(r.rating), prep_min: Number(r.prep_min) || 0, cook_min: Number(r.cook_min) || 0, servings: Number(r.servings) || null,
         copied: copies.get(`${u.id}/${id}`) || null });
     }

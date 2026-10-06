@@ -212,7 +212,7 @@ try {
   await fitsPhone("overview");
 
   // a person
-  await page.click(`[data-person="${owner}"]`); await page.waitForSelector("#view-admin .adm-top");
+  await page.click(`#view-admin [data-person="${owner}"]`); await page.waitForSelector("#view-admin .adm-top");
   adm = await admText();
   check("a person: email, counts, AI today and this month, limits, recent activity", /owner@example\.com/.test(adm) && /AI today · no limits/.test(adm) && /AI this month/.test(adm) && /Imports a day/.test(adm) && (await page.locator("#view-admin .adm-act").count()) > 0, adm.slice(0, 300));
   check("…back says ‹ Admin, and your own account has no Pause", (await page.textContent("#aBack")).trim() === "‹ Admin" && !(await page.$('[data-admin="pause"]')));
@@ -233,7 +233,7 @@ try {
   check("Save limits saves everyone's limits, the cover price and the exemption", sum.defaults.import === 7 && sum.prices.image_usd === 0.06 && sum.defaults.admin_exempt === false, JSON.stringify(sum.defaults));
   await page.waitForFunction(() => state.admin && state.admin.sum && state.admin.sum.defaults.import === 7);
   check("…and stays on the AI screen", await page.isVisible("#limSave"));
-  await page.click("#aBack"); await page.click(`[data-person="${owner}"]`); await page.waitForSelector("#view-admin .adm-use");
+  await page.click("#aBack"); await page.click(`#view-admin [data-person="${owner}"]`); await page.waitForSelector("#view-admin .adm-use");
   check("…the person shows usage against the new limits", /\/ 7\s*Imports/.test(await admText()));
 
   await page.click(`[data-lim="${owner}"]`); await page.waitForSelector("#sheet.open #lim_scan");
@@ -249,8 +249,8 @@ try {
   check("…and Use everyone's clears them", (await get("/api/admin/summary")).people[0].overrides === null);
 
   // pausing someone, from their screen
-  await page.click("#aBack"); await page.waitForSelector('[data-person="sam"]');
-  await page.click('[data-person="sam"]'); await page.waitForSelector('[data-admin="pause"]');
+  await page.click("#aBack"); await page.waitForSelector(`#view-admin [data-person="sam"]`);
+  await page.click(`#view-admin [data-person="sam"]`); await page.waitForSelector('[data-admin="pause"]');
   await page.click('[data-admin="pause"]'); await page.waitForSelector("#sheet.open");
   check("Pause asks first, and says nothing is deleted", /Pause Sam's account\?/.test(await page.textContent("#sheet")) && /Nothing is deleted/.test(await page.textContent("#sheet")));
   await page.click('#sheet [data-act="close"]');

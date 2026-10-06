@@ -56,9 +56,15 @@ try {
   check("a phone that had '30 minutes or less' saved shows All recipes", (await page.inputValue("#filterBy")) === "all" && (await page.inputValue("#sortBy")) === "az" && (await order()) === "ABCDE", `${await page.inputValue("#filterBy")} ${await order()}`);
 
   // combines with tags and search
-  await filter("all"); await page.click('.chip:has-text("weeknight")');
-  check("tag chip still narrows the list", (await order()) === "D");
-  await page.click('.chip:has-text("weeknight")');
+  await filter("all");
+  check("2.7.3: no row of tag buttons; the search box says it finds tags", !(await page.$("#tagChips, #view-recipes .chips")) && /tags/.test(await page.getAttribute("#search", "placeholder")));
+  await page.fill("#search", "weeknight");
+  check("…typing a tag finds its recipes", (await order()) === "D", await order());
+  await page.fill("#search", "salad caesar");
+  check("…every word counts, in any order and any field (the 'salad' tag and 'Caesar' in the title)", (await order()) === "C", await order());
+  await page.fill("#search", "dessert dal");
+  check("…and a recipe needs all of them", (await order()) === "", await order());
+  await page.fill("#search", "");
   await page.fill("#search", "e"); await filter("s2");
   check("search + filter combine", (await order()) === "AE", await order());
   await page.fill("#search", "");
