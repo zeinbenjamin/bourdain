@@ -6,6 +6,9 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.7.1 — 2026-10-06
+- Fixed: on iPhone, recipes were cut off in a straight line just under the tab bar. They now scroll all the way to the bottom of the screen, behind the tab bar.
+
 ## 2.7.0 — 2026-10-06
 - New Shop tab: your shopping list, built from the meals on the Plan. It's grouped by aisle, and under each item it says which recipes it's for.
 - The Shop shows the same week as the Plan. For this week it lists only what you need from today on; other weeks are in full.

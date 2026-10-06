@@ -8,7 +8,7 @@ Priorities follow `docs/strategy.md`: reliability first, then the core loop.
 
 Nothing open. Past cooks and the list view shipped in 2.6.0.
 
-## Planned for 2.7.1
+## Planned for 2.7.2
 
 Keeping an unsaved import or edit through an app restart, and back navigation
 (both in the UI review table below). The Shop tab, the new tab order and the
@@ -25,8 +25,8 @@ the home bar gap and lazy pictures; these are left, most useful first.
 
 | Item | Notes |
 | --- | --- |
-| Keep an unsaved import or edit through an app restart | `state.draft` lives only in memory, and iPhone often closes a home-screen app in the background, as happens when switching to Instagram mid-import. Keep the draft on the phone (per user) until it's saved or discarded; show it under "Carry on with …". Small to medium; planned as 2.7.1. |
-| Back gesture and back button | Screens don't use the browser's history, so Android's back closes the app from anywhere and iPhone Safari's swipe back leaves it. Push a history entry per screen and handle `popstate`; keep the in-app Back buttons. Medium; planned as 2.7.1. |
+| Keep an unsaved import or edit through an app restart | `state.draft` lives only in memory, and iPhone often closes a home-screen app in the background, as happens when switching to Instagram mid-import. Keep the draft on the phone (per user) until it's saved or discarded; show it under "Carry on with …". Small to medium; planned as 2.7.2. |
+| Back gesture and back button | Screens don't use the browser's history, so Android's back closes the app from anywhere and iPhone Safari's swipe back leaves it. Push a history entry per screen and handle `popstate`; keep the in-app Back buttons. Medium; planned as 2.7.2. |
 | "Paste link" button on the import form | Reads the clipboard into the link box: one tap instead of press-and-hold, Paste. Small. |
 | "Share to Bourdain" on Android | A `share_target` in the web app manifest puts Bourdain in the share menu of Instagram, TikTok and Chrome. Android only; iPhone doesn't allow it for web apps. Small to medium. |
 | Toasts sit over sheet content | e.g. the Undo toast covers a row of the cook log for 6s. Raise it above the sheet, or into the sheet's own space. Small. |

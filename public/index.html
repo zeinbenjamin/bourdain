@@ -38,6 +38,10 @@ html{scroll-padding-top:env(safe-area-inset-top,0px)}
    header then drifted with the content during a fast swipe. Now the page is held
    still (overflow hidden, no overscroll), so neither can happen. */
 html,body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none}
+/* 2.7.1: the body is pinned to the screen like the tab bar is. On an iPhone home-screen
+   app, height:100% stopped short of the home bar, so the page was cut off in a hard
+   line under the floating tab bar; fixed to all four edges, it reaches the bottom. */
+body{position:fixed;inset:0;height:auto}
 html.sheet-open main{overflow:hidden}
 body{
   background:var(--paper); color:var(--ink);

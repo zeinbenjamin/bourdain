@@ -441,8 +441,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v52"`
-in `public/sw.js` → `v53`, `v54`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v53"`
+in `public/sw.js` → `v54`, `v55`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -479,7 +479,9 @@ are `overflow: hidden` with `overscroll-behavior: none`; `<main>` is the scrolle
 `<main>` scrolled but the page could still rubber-band, so after a zoom iPhone
 dragged the page and the list wouldn't move; 2.6.2 made the page scroll instead,
 and then on some iPhones the fixed tab bar and sticky header drifted with the
-content during a fast swipe. Locking the page fixes both. Reset with `toTop()`
+content during a fast swipe. Locking the page fixes both. Since 2.7.1 `body` is also
+`position: fixed; inset: 0`: in an iPhone home-screen app `height: 100%` stopped
+short of the home bar, so the page ended in a hard line under the floating tab bar. Reset with `toTop()`
 (`main.scrollTop = 0`), never `window.scrollTo`. An open sheet sets
 `html.sheet-open`, which stops `<main>` scrolling behind it. Desktop Chromium
 can't show the drift, so check a layout change on an iPhone too.
