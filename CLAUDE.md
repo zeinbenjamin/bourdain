@@ -677,8 +677,11 @@ Four routes in, most to least reliable:
    caption the page itself hides. **Instagram links** (2.7.4, `instagramCode`,
    `instagramText`): the post's own page is a login wall for a server, so the
    caption comes from its embed page (`/p/<code>/embed/captioned/`, the `.Caption`
-   block, else the post's JSON). No caption is a 422 `fetch_failed` with
-   `source: "instagram"`, logged "no caption", never "read". **YouTube links** (2.5, `youtubeId`,
+   block, else the post's JSON, unescaped a level at a time since it can sit as
+   JSON inside a string inside a script; `/reel/` first, then `/p/`). No caption is a
+   422 `fetch_failed` with `source: "instagram"`, logged "no caption (…)" with what
+   came back (`instagramSeen`: status, size, login page?), never "read". The last 10
+   caption-less pages are kept in `DATA_DIR/debug/` (`keepInstagramPage`) for a look. **YouTube links** (2.5, `youtubeId`,
    `youtubeText`): oEmbed for the title and channel, plus `shortDescription`
    from the watch page (sent with a consent cookie). Only the description is
    read, so a recipe that's only spoken needs a screen recording.

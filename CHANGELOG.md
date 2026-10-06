@@ -6,6 +6,10 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.7.6 — 2026-10-06
+- Fixed: some Instagram reels came back with "no caption" even though the caption was there. Instagram sends some posts' captions in a different form, which Bourdain now reads. It also tries the post's other address when the first has nothing.
+- When Instagram still sends no caption, the owner's activity view says what came back, so it's clearer whether the problem is on Instagram's side.
+
 ## 2.7.5 — 2026-10-06
 - Fixed: opening a friend's recipe from their profile lit up the Archives tab. It now stays on Recipes, where you came from.
 
