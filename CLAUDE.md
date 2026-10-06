@@ -423,12 +423,33 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   zip), `cost` (estimates, savings in the Archives, re-estimating), `dish`
   (Guess from a photo, YouTube links), `allowance` (what's left of the AI
   allowance, 2.6.0), `shop` (the Shop tab, 2.7.0), `back` (the phone's back
-  gesture and drafts kept through a restart, 2.7.4), `scan`, `video`.
+  gesture and drafts kept through a restart, 2.7.4), `preview` (the preview in
+  Claude still builds and runs, `tools/preview`), `scan`, `video`.
 - `slowProxy` delays: `shell` (index.html), `state` (`/api/state`), `write`
   (PUT/DELETE).
 
 Timing checks (for example "shows in about 3s") have some slack but assume an
 unloaded machine.
+
+## Preview first (Zein, 2026-10-07)
+
+**A new feature is built in the preview before it's built on the branch.** The preview
+is the real front end in a Claude artifact on demo data (`tools/preview/`, README there;
+https://claude.ai/artifact/GXP3kbY5VKKrM2dKU3WEAo). The order:
+
+1. Make the change in a scratch worktree, not on the working branch:
+   `git worktree add <scratchpad>/wt-<feature> -b preview/<feature>` (local only, never
+   pushed). Front-end changes go in its `public/index.html`; anything the server would
+   do goes in `tools/preview/mock.js` there, as a stand-in.
+2. `node <worktree>/tools/preview/build.mjs <out>` (its own copy, so its `mock.js` is used) and publish to the preview's URL, with
+   a `label` naming the feature. Tell Zein what to try.
+3. Iterate there until Zein says to build it. Only then build it properly on the working
+   branch: tests, version, CHANGELOG, service worker bump, as below. Republish the
+   preview from the branch afterwards so it matches what ships.
+
+A bug fix with no new behaviour goes straight to the branch unless Zein asks to see it
+first. The worktree is lost with the session; the published page holds the whole
+front end, so an unfinished preview can be recovered with `action: "read"`.
 
 ## Deploy loop
 
