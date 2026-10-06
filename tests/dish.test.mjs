@@ -142,14 +142,20 @@ try {
   s.setMode({ instagram: "preview-only" });
   ig = await s.post("/api/fetch", { url: "https://www.instagram.com/reels/Dct0lIPyvQJ/" });
   check("…and when that's refused too, the link preview Instagram gives apps quotes it", ig.status === 200 && /^by iramsfoodstory\n\nCrispy chipotle beef tacos chipotle lime crema \u{1f32e}\n\n2 lb ground beef\n1 tbsp taco seasoning$/u.test(ig.text), JSON.stringify(ig.text));
+  check("…and the preview is asked first, as what got through from the NAS (2.7.8)", /^MOCK_INSTAGRAM GET https:\/\/www\.instagram\.com\/p\/Dct0lIPyvQJ\/$/m.test((s.log().match(/MOCK_INSTAGRAM .*/g) || []).slice(-1)[0] ? s.log().split("\n").filter((l) => l.startsWith("MOCK_INSTAGRAM")).slice(-1)[0] : ""), s.log().split("\n").filter((l) => l.startsWith("MOCK_INSTAGRAM")).slice(-4).join(" | "));
+  s.setMode({ instagram: "preview-cut" });
+  ig = await s.post("/api/fetch", { url: "https://www.instagram.com/reels/Dct0lIPyvQJ/" });
+  check("…a preview that looks cut short ('…') is used only when nothing better comes back, and says so", ig.status === 200 && /2 lb ground beef\n1 tbsp taco…$/.test(ig.text), JSON.stringify(ig.text));
   let viaLog = await (await fetch(s.url + "/api/admin/activity?cat=links&limit=5")).json();
+  check("…the log calls it 'maybe cut short'", viaLog.some((r) => r.target === "instagram.com · read the caption (preview, maybe cut short)"), JSON.stringify(viaLog.map((r) => r.target)));
+  viaLog = await (await fetch(s.url + "/api/admin/activity?cat=links&limit=8")).json();
   check("…the activity log says which way worked", viaLog.some((r) => r.target === "instagram.com · read the caption (preview)") && viaLog.some((r) => r.target === "instagram.com · read the caption (query)"), JSON.stringify(viaLog.map((r) => r.target)));
   s.setMode({ instagram: "nocaption" });
   ig = await s.post("/api/fetch", { url: IG });
-  check("…with no caption: what each way got is said, and the pages are kept in the data folder to look at", /^instagram\.com sent no caption \(embed: 200, 0 KB; query: 401; preview: 200, 0 KB, its error page; embed-browser: 200, 0 KB\)$/.test(ig.detail) && existsSync(path.join(s.data, "debug", "instagram-DdR9Szhy_wE-embed.html")) && existsSync(path.join(s.data, "debug", "instagram-DdR9Szhy_wE-preview.html")), ig.detail);
+  check("…with no caption: what each way got is said, and the pages are kept in the data folder to look at", /^instagram\.com sent no caption \(preview: 200, 0 KB, its error page; embed: 200, 0 KB; query: 401; embed-browser: 200, 0 KB\)$/.test(ig.detail) && existsSync(path.join(s.data, "debug", "instagram-DdR9Szhy_wE-embed.html")) && existsSync(path.join(s.data, "debug", "instagram-DdR9Szhy_wE-preview.html")), ig.detail);
   check("…no caption is a failed fetch, not 'read' (2.7.3 logged a login wall as read)", ig.status === 422 && ig.code === "fetch_failed" && ig.source === "instagram", JSON.stringify(ig));
   const links = await (await fetch(s.url + "/api/admin/activity?cat=links&limit=20")).json();
-  check("…and the owner's activity says so: 'no caption', and 'read the caption' when there was one", links.some((r) => /^instagram\.com · no caption \(instagram\.com sent no caption \(embed: /.test(r.target)) && links.some((r) => r.target === "instagram.com · read the caption (embed)") && !links.some((r) => /^instagram\.com · read$/.test(r.target)), JSON.stringify(links.map((r) => r.target).slice(0, 6)));
+  check("…and the owner's activity says so: 'no caption', and 'read the caption' when there was one", links.some((r) => /^instagram\.com · no caption \(instagram\.com sent no caption \(preview: /.test(r.target)) && links.some((r) => r.target === "instagram.com · read the caption (embed)") && !links.some((r) => /^instagram\.com · read$/.test(r.target)), JSON.stringify(links.map((r) => r.target).slice(0, 6)));
   // in the app: an earlier link's text is cleared, and the message says what to do
   await page.evaluate(() => { const st = document.querySelector("#importStatus"); st.className = "status"; st.textContent = ""; document.getElementById("srcText").value = ""; });
   s.setMode({});

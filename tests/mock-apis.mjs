@@ -83,11 +83,13 @@ globalThis.fetch = async (url, opts = {}) => {
       return json(401, { message: "Please wait a few minutes before you try again.", status: "fail" });
     }
     if (!u.includes("/embed/")) { // the post's own page
+      if (m.instagram === "preview-cut" && /facebookexternalhit/.test(opts.headers?.["user-agent"] || ""))
+        return new Response(`<html><head><meta property="og:description" content="12 likes - iramsfoodstory on September 12, 2026: &quot;Crispy chipotle beef tacos&#10;&#10;2 lb ground beef&#10;1 tbsp taco…&quot;. " /></head></html>`, { status: 200, headers: { "content-type": "text/html" } });
       if (m.instagram === "preview-only" && /facebookexternalhit/.test(opts.headers?.["user-agent"] || ""))
         return new Response(`<html><head><meta property="og:description" content="1,619,905 likes, 1,399 comments - iramsfoodstory on September 12, 2026: &quot;Crispy chipotle beef tacos chipotle lime crema &#x1f32e;&#10;&#10;2 lb ground beef&#10;1 tbsp taco seasoning&quot;. " /></head><body></body></html>`, { status: 200, headers: { "content-type": "text/html" } });
       return errorPage();
     }
-    if (m.instagram === "blocked-embed" || m.instagram === "preview-only") return errorPage();
+    if (["blocked-embed", "preview-only", "preview-cut"].includes(m.instagram)) return errorPage();
     if (m.instagram === "reel404" && u.includes("/reel/")) return new Response("Not found", { status: 404 });
     if (m.instagram === "escaped") { // 2.7.6: the caption block as a string inside a script, drawn by the page's own JS (as Instagram sent for Dct0lIPyvQJ)
       const block = '<div class="Caption"><span>iramsfoodstory</span><br/><br/>Crispy chipotle beef tacos chipotle lime crema \u{1f32e} <br/><br/>Ingredients <br/><br/>For the taco seasoning:<br/><br/>1 tbsp red chili powder <br/>2 tbsp garlic powder <br/><br/>Method:<br/>Mix it all.<div class="CaptionComments"><a href="#">View all 1,399 comments</a></div></div>';

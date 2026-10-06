@@ -677,13 +677,16 @@ Four routes in, most to least reliable:
    caption the page itself hides. **Instagram links** (2.7.4, `instagramCode`,
    `instagramText`): the post's own page is a login wall for a server, and (2.7.7)
    Instagram sends the NAS its error page (`PolarisErrorRoute`) for the embed page a
-   browser gets fine. So `igAttempts` tries in turn: the embed page asked plainly
+   browser gets fine. So `igAttempts` tries in turn: the link preview it gives
+   `facebookexternalhit` (`igPreview`, og:description; first since 2.7.8, as it's
+   what got through from the NAS); the embed page asked plainly
    (`/p/<code>/embed/captioned/`; `instagramCaption` reads the `.Caption` block, also
    when it's a string inside a script, else the post's JSON); the post query
    Instagram's own page makes (`/graphql/query`, `IG_DOC_ID`, overridable with
-   `INSTAGRAM_DOC_ID` when Instagram changes it); the link preview it gives
-   `facebookexternalhit` (`igPreview`, og:description); the embed with full browser
-   headers. The log says which worked ("read the caption (query)") or what each got
+   `INSTAGRAM_DOC_ID` when Instagram changes it); the embed with full browser
+   headers. A caption ending in "…" may be cut short: it's kept, the rest are
+   still tried, and it's used only if nothing else comes back ("(preview, maybe
+   cut short)"). The log says which worked ("read the caption (query)") or what each got
    (`instagramSeen`). No caption is a 422 `fetch_failed` with `source: "instagram"`,
    never "read". The last 10 caption-less pages are kept in `DATA_DIR/debug/`
    (`keepInstagramPage`) for a look. **YouTube links** (2.5, `youtubeId`,
