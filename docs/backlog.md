@@ -8,6 +8,39 @@ Priorities follow `docs/strategy.md`: reliability first, then the core loop.
 
 Nothing open. Past cooks and the list view shipped in 2.6.0.
 
+## Planned for 2.7.0
+
+Agreed with Zein on 2026-10-06; not built yet. Waiting on Nicole's answers about
+the shopping list before starting. Mock-ups were made in a test browser, not in
+the app.
+
+### 1. Shopping list as its own tab (pilot request, Nicole)
+
+- **Option B:** a Shop tab, with the hidden code restored (`buildList`, `renderShop`,
+  the `shop` collection). A week switcher like the Plan's, kept in step with it.
+- **From today:** for the current week, only today onwards; other weeks in full.
+- **Amounts in the recipe's own unit** when every recipe uses the same one (3 tbsp,
+  4 cup). The old `fromBase` turned them into ml and L ("45 ml curry paste").
+- **Pantry items stay in their aisle**, ticked from the start, with a small grey
+  "from pantry" tag that isn't crossed out (matched with `itemKey`, exact names
+  only). Unticking one puts it back on the list. Clear ticked clears only what
+  you ticked yourself.
+- Grouped by aisle; each item says which recipes it's for; manual "Add something
+  else"; **Share list** (Web Share, copy as a fallback) and **Clear ticked** at the
+  bottom, under the add box.
+- Check Nicole's answers first: from today vs the whole week, whether the recipe
+  names help, and whether she'd share it.
+
+### 2. Tabs in a new order (Zein)
+
+**Plan, Pantry, Recipes, Shop, Archives**: Recipes in the middle as the main
+screen, with the others either side. The app still opens on Recipes. Five tabs:
+`.tabs` becomes `repeat(5,1fr)`. Update the `add` suite's tab check and the
+layout checks at phone width.
+
+The UI review's two bigger items below (keeping a draft through a restart, and
+back navigation) move to 2.7.1.
+
 ## From the UI review (2026-10-06)
 
 Found while reviewing how smooth the app is on a phone. 2.6.3 fixed the zooming,
@@ -15,8 +48,8 @@ the home bar gap and lazy pictures; these are left, most useful first.
 
 | Item | Notes |
 | --- | --- |
-| Keep an unsaved import or edit through an app restart | `state.draft` lives only in memory, and iPhone often closes a home-screen app in the background, as happens when switching to Instagram mid-import. Keep the draft on the phone (per user) until it's saved or discarded; show it under "Carry on with …". Small to medium; planned as 2.7.0. |
-| Back gesture and back button | Screens don't use the browser's history, so Android's back closes the app from anywhere and iPhone Safari's swipe back leaves it. Push a history entry per screen and handle `popstate`; keep the in-app Back buttons. Medium; planned as 2.7.0. |
+| Keep an unsaved import or edit through an app restart | `state.draft` lives only in memory, and iPhone often closes a home-screen app in the background, as happens when switching to Instagram mid-import. Keep the draft on the phone (per user) until it's saved or discarded; show it under "Carry on with …". Small to medium; planned as 2.7.1. |
+| Back gesture and back button | Screens don't use the browser's history, so Android's back closes the app from anywhere and iPhone Safari's swipe back leaves it. Push a history entry per screen and handle `popstate`; keep the in-app Back buttons. Medium; planned as 2.7.1. |
 | "Paste link" button on the import form | Reads the clipboard into the link box: one tap instead of press-and-hold, Paste. Small. |
 | "Share to Bourdain" on Android | A `share_target` in the web app manifest puts Bourdain in the share menu of Instagram, TikTok and Chrome. Android only; iPhone doesn't allow it for web apps. Small to medium. |
 | Toasts sit over sheet content | e.g. the Undo toast covers a row of the cook log for 6s. Raise it above the sheet, or into the sheet's own space. Small. |

@@ -203,23 +203,27 @@ try {
   check("list view: rows are full width, at least 56px tall, with a 56px picture and 12px before the title", lv.rows.length > 0 && lv.rows.every((r) => r.h >= 56 && r.w >= lv.vw - 40 && r.thumb[0] === 56 && r.thumb[1] === 56 && r.gap === 12), JSON.stringify(lv.rows));
   check("list view: no sideways scroll", lv.over <= 0, String(lv.over));
   await page.click('#viewTog[data-as="grid"]');
-  // --- 2.6.2: the page itself scrolls, not an inner box (iPhone Safari sometimes
-  // dragged the fixed-height page instead, and it bounced back)
+  // --- 2.6.5: the page never scrolls; <main> does and fills the screen under the
+  // header, so the tab bar and header can't drift with a swipe (2.6.2 scrolled the
+  // page, and on some iPhones they did), and a swipe can't land on the page (2.6.1)
   await page.evaluate(() => { for (let i = 0; i < 14; i++) state.recipes["many" + i] = { title: "Long list recipe " + i, ingredients: [], steps: [], photos: [], tags: [] }; state.view = "recipes"; show("recipes"); });
   const sc = await page.evaluate(async () => {
-    const main = getComputedStyle(document.getElementById("main")).overflowY, tall = document.scrollingElement.scrollHeight > innerHeight + 200;
-    window.scrollTo(0, document.scrollingElement.scrollHeight); await new Promise((r) => setTimeout(r, 100));
-    const cards = [...document.querySelectorAll("#rlist .rcard")], last = cards.at(-1).getBoundingClientRect(), tabs = document.getElementById("tabs").getBoundingClientRect(), top = document.querySelector(".top").getBoundingClientRect();
-    return { main, tall, y: Math.round(scrollY), lastBottom: Math.round(last.bottom), tabsTop: Math.round(tabs.top), headerTop: Math.round(top.top), vh: innerHeight };
+    const main = document.getElementById("main"), cs = getComputedStyle(main), html = getComputedStyle(document.documentElement), body = getComputedStyle(document.body);
+    const box = () => ({ tabs: Math.round(document.getElementById("tabs").getBoundingClientRect().top), header: Math.round(document.querySelector(".top").getBoundingClientRect().top) });
+    const before = box(); window.scrollTo(0, 2000); const pageY = scrollY;
+    main.scrollTop = main.scrollHeight; await new Promise((r) => setTimeout(r, 100)); const after = box();
+    const m = main.getBoundingClientRect(), hdr = document.querySelector(".top").getBoundingClientRect(), last = [...document.querySelectorAll("#rlist .rcard")].at(-1).getBoundingClientRect();
+    return { overflow: cs.overflowY, pageLocked: html.overflowY === "hidden" && body.overflowY === "hidden", overscroll: html.overscrollBehaviorY, pageY, scrolled: main.scrollTop > 0,
+      fills: Math.abs(m.top - hdr.bottom) <= 1 && Math.abs(m.bottom - innerHeight) <= 1, before, after, lastBottom: Math.round(last.bottom) };
   });
-  check("scrolling: the page scrolls, not an inner box", sc.main === "visible" && sc.tall && sc.y > 0, JSON.stringify(sc));
-  check("…at the bottom the last recipe clears the tab bar, and the header stays at the top", sc.lastBottom <= sc.tabsTop && sc.headerTop === 0, JSON.stringify(sc));
+  check("scrolling: the page itself never scrolls; the content area does, from under the header to the bottom of the screen", sc.overflow === "auto" && sc.pageLocked && sc.overscroll === "none" && sc.pageY === 0 && sc.scrolled && sc.fills, JSON.stringify(sc));
+  check("…the header and tab bar don't move while it scrolls, and the last recipe clears the tab bar", sc.before.tabs === sc.after.tabs && sc.before.header === sc.after.header && sc.after.header === 0 && sc.lastBottom <= sc.after.tabs, JSON.stringify(sc));
   await page.click("#btnManual"); await page.waitForSelector("#sheet.open");
-  const locked = await page.evaluate(() => getComputedStyle(document.documentElement).overflowY);
+  const locked = await page.evaluate(() => getComputedStyle(document.getElementById("main")).overflowY);
   await page.evaluate(() => closeSheet());
-  check("…a sheet holds the page still behind it, and lets go when closed", locked === "hidden" && (await page.evaluate(() => getComputedStyle(document.documentElement).overflowY)) !== "hidden", locked);
+  check("…a sheet holds the content still behind it, and lets go when closed", locked === "hidden" && (await page.evaluate(() => getComputedStyle(document.getElementById("main")).overflowY)) === "auto", locked);
   await page.click('.rcard:has-text("Long list recipe 0")'); await page.waitForSelector("#view-detail.active");
-  check("…a new screen starts at the top", await page.evaluate(() => scrollY) === 0);
+  check("…a new screen starts at the top", await page.evaluate(() => document.getElementById("main").scrollTop) === 0);
   await page.evaluate(() => { for (let i = 0; i < 14; i++) delete state.recipes["many" + i]; show("recipes"); });
 
   // --- 2.6.3: nothing that makes iPhone Safari zoom, room for the home bar, lazy pictures
@@ -260,6 +264,23 @@ try {
   const changed = await page.evaluate(() => { const first = document.querySelector("#rlist .rcard"); state.recipes.lzNew = { title: "Brand new", photos: [], ingredients: [], steps: [], tags: [], created_at: "2026-12-31" }; renderRecipes(); return document.querySelector("#rlist .rcard") !== first && /Brand new/.test(document.querySelector("#rlist").textContent); });
   check("…but a real change still shows straight away", changed);
   await page.evaluate(() => { for (const k of Object.keys(state.recipes)) if (/^lz/.test(k)) delete state.recipes[k]; renderRecipes(); });
+
+  // --- 2.6.5: a meal is on a day once; serves are changed on the meal itself
+  const kd = await page.evaluate(() => { const k = iso(new Date()); state.recipes.dup = { title: "Baked mac and cheese", servings: 6, ingredients: [], steps: [], photos: [], tags: [] };
+    state.plan[k] = { date: k, entries: [{ recipeId: "dup", servings: 2 }, { recipeId: "a", servings: 4 }, { recipeId: "dup", servings: 6 }, { recipeId: "dup", servings: 4 }] };
+    state.week = mondayOf(new Date()); state.view = "plan"; show("plan"); return k; });
+  await page.waitForTimeout(600);
+  const merged = await page.evaluate((k) => state.plan[k].entries, kd);
+  const onServer = ((await s.state()).plan[kd] || {}).entries || [];
+  check("plan: a meal added to a day more than once (before 2.6.5) shows once, keeping the larger serves, and the server has it merged",
+    merged.length === 2 && merged.filter((e) => e.recipeId === "dup").length === 1 && merged.find((e) => e.recipeId === "dup").servings === 6 && onServer.length === 2, JSON.stringify({ merged, onServer }));
+  await page.evaluate((k) => pickRecipe(k), kd); await page.waitForSelector("#sheet.open #pickList");
+  check("…the picker marks it 'Already on this day'", /Already on this day/.test(await page.textContent('#sheet [data-id="dup"]')));
+  await page.click('#sheet [data-id="dup"]'); await page.waitForTimeout(300);
+  check("…and picking it again doesn't add it twice; it says how to change the serves", (await page.evaluate((k) => state.plan[k].entries.length, kd)) === 2 && /Already on .*change the serves/.test(await page.textContent("#toast")), await page.textContent("#toast"));
+  await page.evaluate(() => { state.detailId = "dup"; show("detail"); }); await page.click("#addPlan"); await page.waitForSelector("#sheet.open");
+  await page.click(`#sheet [data-k="${kd}"]`); await page.waitForTimeout(300);
+  check("…nor from the recipe's 'Add to the week'", (await page.evaluate((k) => state.plan[k].entries.length, kd)) === 2 && /Already on/.test(await page.textContent("#toast")));
 
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
