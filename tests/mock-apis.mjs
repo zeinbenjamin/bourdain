@@ -1,6 +1,6 @@
 // Test-only stand-ins for api.anthropic.com and api.openai.com, loaded into the server
 // with `node --import tests/mock-apis.mjs`. The mode is read from MOCK_FILE on every call
-// ({"claude": "...", "image": "...", "scan": "...", "claudeDelay": ms, "imageDelay": ms, "cfCerts": "down", "cost": "junk", "dish": "nofood"|"unsure", "youtube": "nodesc"}), so one
+// ({"claude": "...", "image": "...", "scan": "...", "claudeDelay": ms, "imageDelay": ms, "cfCerts": "down", "cost": "junk", "dish": "nofood"|"unsure", "youtube": "nodesc", "instagram": "nocaption"|"json"|"403"}), so one
 // server can be driven through every failure. Requests are logged as MOCK_CLAUDE_REQ,
 // MOCK_SCAN and MOCK_IMG_REQ so tests can check exactly what was sent.
 import { readFileSync } from "node:fs";
@@ -73,6 +73,14 @@ globalThis.fetch = async (url, opts = {}) => {
     if (u.includes("/oembed")) return json(200, { title: "Easy beef rendang", author_name: "Kitchen Channel" });
     const desc = m.youtube === "nodesc" ? "" : "Beef rendang\n\n1kg beef chuck\n400ml coconut milk\n2 stalks lemongrass\n\nBrown the beef, add the paste and coconut milk, simmer 2 hours.";
     return new Response(`<html><head><meta name="description" content="Short meta &#x1f957; it&rsquo;s &quot;quick&quot;"></head><body><script>var ytInitialPlayerResponse = {"videoDetails":{"videoId":"abcdefghijk","shortDescription":${JSON.stringify(desc)}}};</script></body></html>`, { status: 200, headers: { "content-type": "text/html" } });
+  }
+  if (u.startsWith("https://www.instagram.com/")) { // 2.7.4: a post's embed page, shaped like the real one
+    console.log("MOCK_INSTAGRAM " + u.slice(0, 90));
+    if (m.instagram === "403") return new Response("<html>Please wait a few minutes</html>", { status: 403, headers: { "content-type": "text/html" } });
+    const head = `<html><body><div class="Header"><span class="UsernameText">iramsfoodstory</span></div>`;
+    if (m.instagram === "nocaption") return new Response(head + `<div class="Embed">View this post on Instagram</div></body></html>`, { status: 200, headers: { "content-type": "text/html" } });
+    if (m.instagram === "json") return new Response(head + `<script>window.__additionalDataLoaded("extra",{"shortcode_media":{"owner":{"id":"1","username":"iramsfoodstory"},"edge_media_to_caption":{"edges":[{"node":{"text":"Garlic rolls \\ud83c\\udf2f\\n\\n2 lb chicken breast\\n1 tbsp butter"}}]}}});</script></body></html>`, { status: 200, headers: { "content-type": "text/html" } });
+    return new Response(head + `<div class="Caption"><a class="CaptionUsername" href="https://www.instagram.com/iramsfoodstory/" target="_blank">iramsfoodstory</a><br/><br/>Crispy garlic parmesan chicken rolls &#x1f32f; <br/><br/>Ingredients <br/><br/>2 lb boneless chicken breast<br/>1 tbsp butter<br/>1 1/2 cup heavy cream<br/><br/>Method:<br/>Cook the chicken. Make the sauce &amp; roll.<br/><br/><a href="/explore/tags/recipe/">#recipe</a><div class="CaptionComments"><a class="CaptionCommentsExpand" href="#">View all 883 comments</a></div></div></body></html>`, { status: 200, headers: { "content-type": "text/html" } });
   }
   if (u.startsWith("https://api.openai.com")) {
     const body = JSON.parse(opts.body);

@@ -6,6 +6,13 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.7.4 — 2026-10-06
+- Instagram links work again: Fetch & read now gets the post's caption. If the recipe isn't written in the caption, it says so, and screenshots or a screen recording are still the way in.
+- When a recipe site turns Bourdain away (some block apps from reading their pages), it now names the site and says how to get the recipe in: copy it from your browser and paste it, or add screenshots. Bourdain also asks for pages more like a browser does, so fewer sites turn it away.
+- Fetching a new link clears what an earlier link brought back, so another page's text is never left in the box. Anything you typed yourself stays.
+- A recipe you're importing, writing or editing is kept if the app closes before you save it, for example when you switch to Instagram to copy a caption. Reopen Bourdain and tap Carry on (or + then Carry on).
+- The phone's back gesture and back button now work inside the app: back closes a sheet, leaves a recipe, or goes back to Recipes. Going back from a recipe you haven't saved asks first.
+
 ## 2.7.3 — 2026-10-06
 - The row of people (You, and everyone else in the pilot) has moved from the Archives to the top of Recipes. Tap someone to see their recipes. Everyone / Just me stays on the Archives.
 - The row of tag buttons on Recipes is gone. Type a tag in the search box instead ("chinese", "curry") and its recipes come up.

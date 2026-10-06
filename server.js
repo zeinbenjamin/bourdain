@@ -7,7 +7,7 @@ import { BlockList, isIP } from "node:net";
 import { lookup as dnsLookup } from "node:dns";
 import http from "node:http";
 import https from "node:https";
-import { crc32 } from "node:zlib";
+import { crc32, createGunzip, createInflate, createBrotliDecompress } from "node:zlib";
 import { mkdirSync, existsSync, createReadStream, readFileSync, constants as fsConstants } from "node:fs";
 import { writeFile, readdir, stat, unlink, access, statfs } from "node:fs/promises";
 import path from "node:path";
@@ -1349,20 +1349,39 @@ function publicLookup(host, opts, cb) {
 }
 const MAX_PAGE = 5 * 1024 * 1024;
 const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+/* 2.7.4: ask the way a browser opening the page does. Sites behind bot rules (Cloudflare,
+   WordPress security plugins) refused Bourdain's bare request with 403; a browser always
+   says what it accepts, including compression, and that it's navigating to a page. */
+const BROWSER_HEADERS = {
+  "user-agent": BROWSER_UA, accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+  "accept-language": "en-AU,en;q=0.9", "accept-encoding": "gzip, deflate, br", "cache-control": "no-cache", pragma: "no-cache",
+  "upgrade-insecure-requests": "1", "sec-fetch-dest": "document", "sec-fetch-mode": "navigate", "sec-fetch-site": "none", "sec-fetch-user": "?1",
+  "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"', "sec-ch-ua-mobile": "?0", "sec-ch-ua-platform": '"Windows"',
+};
+// The body as text, unpacked if it came compressed, and never more than MAX_PAGE once unpacked.
+function readBody(res, onTooLarge) {
+  const enc = String(res.headers["content-encoding"] || "").trim().toLowerCase();
+  const unpack = enc === "gzip" || enc === "x-gzip" ? createGunzip() : enc === "deflate" ? createInflate() : enc === "br" ? createBrotliDecompress() : null;
+  const src = unpack ? res.pipe(unpack) : res;
+  return new Promise((resolve, reject) => {
+    const chunks = []; let size = 0;
+    src.on("data", (c) => { size += c.length; if (size > MAX_PAGE) { onTooLarge(); src.destroy(); reject(new Error("page too large")); return; } chunks.push(c); });
+    src.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    src.on("error", reject);
+    if (unpack) res.on("error", reject);
+  });
+}
 function getOnce(u, signal) {
   const host = u.hostname.replace(/^\[|\]$/g, "");
   if (isIP(host) && PRIVATE_NETS.has(host)) return Promise.reject(new BlockedAddress(`${host} is a private address`)); // literals skip the lookup
   return new Promise((resolve, reject) => {
     const req = (u.protocol === "https:" ? https : http).request(u, {
       // A browser's user-agent: many recipe sites (WordPress security plugins, bot rules) refuse an unknown bot.
-      headers: { "user-agent": BROWSER_UA, accept: "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8", "accept-language": "en-AU,en;q=0.9" },
-      lookup: publicLookup, signal, agent: false,
+      headers: BROWSER_HEADERS, lookup: publicLookup, signal, agent: false,
     }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) { res.resume(); return resolve({ redirect: res.headers.location }); }
-      const chunks = []; let size = 0;
-      res.on("data", (c) => { size += c.length; if (size > MAX_PAGE) { req.destroy(new Error("page too large")); return; } chunks.push(c); });
-      res.on("end", () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString("utf8") }));
-      res.on("error", reject);
+      const challenge = res.headers["cf-mitigated"] === "challenge"; // Cloudflare's "checking your browser" page
+      readBody(res, () => req.destroy()).then((body) => resolve({ status: res.statusCode, body, challenge }), reject);
     });
     req.on("error", (err) => reject(err instanceof BlockedAddress || err.cause instanceof BlockedAddress ? new BlockedAddress(err.message) : err));
     req.end();
@@ -1400,6 +1419,39 @@ const decodeEntities = (t) => t.replace(/&(#x[0-9a-f]{1,6}|#\d{1,7}|[a-z][a-z0-9
   const n = e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
   return n > 0 && n <= 0x10ffff && !(n >= 0xd800 && n <= 0xdfff) ? String.fromCodePoint(n) : all;
 });
+/* Instagram (2.7.4). A post's own page, fetched by a server, is a login wall with no
+   caption, which 2.7.3 logged as "read". The embed page (what a blog shows when it
+   embeds a post) still carries the caption in full. Only instagram.com is fetched,
+   built from the post's code, so this path can't be pointed anywhere else. */
+function instagramCode(link) {
+  try {
+    const u = new URL(link), h = u.hostname.toLowerCase().replace(/^(www\.|m\.)/, "");
+    if (h !== "instagram.com" && h !== "instagr.am") return null;
+    const m = u.pathname.match(/^\/(?:[\w.]+\/)?(?:p|reel|reels|tv)\/([\w-]{5,40})/);
+    return m ? m[1] : null;
+  } catch { return null; }
+}
+const htmlToText = (h) => decodeEntities(String(h).replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "")).replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+function instagramCaption(html) {
+  // 1. The caption block the embed page draws: <div class="Caption"><a class="CaptionUsername">name</a><br><br>text<div class="CaptionComments">
+  const block = html.match(/<div class="Caption"[^>]*>([\s\S]*?)(?:<div class="CaptionComments"|<\/div>)/i)?.[1];
+  if (block) { const t = htmlToText(block.replace(/<a[^>]*class="CaptionUsername"[^>]*>[\s\S]*?<\/a>/i, "")); if (t) return t; }
+  // 2. The post's data, which the page also carries as JSON (sometimes JSON inside a JSON string)
+  for (const src of [html, html.replace(/\\"/g, '"').replace(/\\\\/g, "\\")]) {
+    const m = src.match(/"edge_media_to_caption":\{"edges":\[\{"node":\{"text":"((?:[^"\\]|\\.)*)"/) || src.match(/"caption":\{[^{}]*?"text":"((?:[^"\\]|\\.)*)"/);
+    if (m) { try { const t = JSON.parse(`"${m[1]}"`).trim(); if (t) return t; } catch {} }
+  }
+  return "";
+}
+async function instagramText(code) {
+  try {
+    const r = await fetch(`https://www.instagram.com/p/${code}/embed/captioned/`, { signal: AbortSignal.timeout(15000), headers: { ...BROWSER_HEADERS, "accept-encoding": "gzip, deflate, br", "sec-fetch-dest": "iframe", "sec-fetch-site": "cross-site" } });
+    if (!r.ok) return { text: "", seen: `instagram.com said ${r.status}` };
+    const html = await r.text(), caption = instagramCaption(html);
+    const who = html.match(/class="UsernameText"[^>]*>([^<]+)</)?.[1] || html.match(/"owner":\{[^{}]*?"username":"([\w.]+)"/)?.[1] || "";
+    return { text: caption ? [who && `by ${decodeEntities(who)}`, caption].filter(Boolean).join("\n\n").slice(0, 20000) : "", seen: caption ? "" : "instagram.com sent no caption" };
+  } catch (err) { console.warn("instagram embed failed", code, err.message); return { text: "", seen: `instagram.com: ${err.message}` }; }
+}
 async function youtubeText(id) {
   const watch = `https://www.youtube.com/watch?v=${id}`, parts = [];
   try {
@@ -1435,17 +1487,26 @@ app.post("/api/fetch", async (req, res) => {
     return res.json({ text, recipeJson: null, source: "youtube" });
   }
 
+  const ig = instagramCode(url);
+  if (ig) {
+    const { text, seen } = await instagramText(ig);
+    logged(text ? "read the caption" : `no caption (${seen})`.slice(0, 200));
+    if (!text) return res.status(422).json({ error: "Instagram sent no caption", code: "fetch_failed", detail: seen, source: "instagram" });
+    return res.json({ text, recipeJson: null, source: "instagram" });
+  }
+
   const targets = [url];
   // TikTok's public oEmbed endpoint returns the caption, which the page itself hides.
   if (/tiktok\.com/i.test(url)) targets.push(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`);
 
   const parts = [], seen = []; // seen: what each site answered, when it wasn't a page
+  let blocked = false; // the site itself refused us (403 and friends), as opposed to an empty page
   let recipeJson = null;
 
   for (const target of targets) {
     try {
       const r = await publicGet(target, AbortSignal.timeout(20000));
-      if (r.status < 200 || r.status >= 300) { seen.push(`${new URL(target).hostname} said ${r.status}`); continue; }
+      if (r.status < 200 || r.status >= 300) { seen.push(`${new URL(target).hostname} said ${r.status}${r.challenge ? " (a bot check)" : ""}`); if (target === url) blocked = r.status === 401 || r.status === 403 || r.status === 429 || r.challenge; continue; }
       const body = r.body;
 
       if (body.trim().startsWith("{")) {
@@ -1480,7 +1541,7 @@ app.post("/api/fetch", async (req, res) => {
 
   const text = parts.join("\n\n---\n\n").trim();
   logged(text || recipeJson ? (recipeJson ? "read, with the recipe" : "read") : `nothing came back${seen.length ? ` (${seen.join(", ")})` : ""}`.slice(0, 200));
-  if (!text && !recipeJson) return res.status(422).json({ error: "nothing came back", code: "fetch_failed", detail: seen.join(", ") || undefined });
+  if (!text && !recipeJson) return res.status(422).json({ error: "nothing came back", code: "fetch_failed", detail: seen.join(", ") || undefined, blocked: blocked || undefined, site });
   res.json({ text, recipeJson });
 });
 

@@ -218,6 +218,22 @@ recipe" for an existing one), with one neutral hint to check it before saving, s
 it reads the same after an import as when writing from scratch. Tests reach both through `addRecipe(page, "import"|"manual")`
 in `tests/lib.mjs`.
 
+**Back, and drafts that outlive the app (2.7.4)** (`nav`, `drafts` in `index.html`):
+- **The phone's back.** Whenever there's somewhere to go back to (a sheet, any view
+  but Recipes), one `{bourdain:1}` history entry sits on top; `nav.sync()` (from
+  `show()`, `openSheet()`, `closeSheet()`) adds or quietly removes it. On `popstate`
+  `nav.back()` closes the sheet, or clicks the screen's own Back button (`#revBack`,
+  `#impBack`, `#cookBack`, `#back`, `#tBack`, `#pBack`, `#aBack`), or shows
+  Recipes. An unsaved review form asks first (`leaveReview`); the in-app Back
+  still discards straight away. A new screen with a Back button needs adding to
+  that list.
+- **Drafts.** `drafts` keeps `state.draft`, `editingId`, `draftManual` and the
+  import form's link and text in `localStorage["bourdain.draft:<userId>"]`, saved
+  on typing (400ms), every review re-render and when the app is hidden; cleared on
+  save, Cancel/Back and Clear. On boot `drafts.restore()` puts it back and toasts
+  with **Carry on**; it's also under the "+" sheet's Carry on. Screenshots aren't
+  kept.
+
 **Buttons that are easy to hit.** Every `.detail-head` button (Back, Edit,
 Delete, Cancel, Save) is 44px tall at one text size. The recipe page's four
 actions sit in a 2×2 grid (`.actions.quad`) so none wraps onto a line alone.
@@ -372,9 +388,9 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   start without one), `slowProxy` (fake slow Wi-Fi), `openBrowser`, and the `suite`
   PASS/FAIL collector.
 - `tests/mock-apis.mjs`: fake Claude and OpenAI, loaded with `--import`. It is
-  driven per call by `setMode({claude, image, scan, claudeDelay, imageDelay, cost, dish, youtube})`
+  driven per call by `setMode({claude, image, scan, claudeDelay, imageDelay, cost, dish, youtube, instagram})`
   and logs what was sent (`MOCK_CLAUDE_REQ`, `MOCK_IMG_REQ`, `MOCK_SCAN`, `MOCK_COST`, `MOCK_DISH`).
-  It also fakes YouTube's oEmbed and watch page.
+  It also fakes YouTube's oEmbed and watch page, and Instagram's embed page.
   Nothing in the tests calls a real API or needs a key.
 - `CF_ENV`, `viaCf(email)` and `cfToken(email, opts)` in `tests/lib.mjs` sign
   requests in the way Cloudflare does (see **Signing in** under Gotchas).
@@ -399,7 +415,8 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   conversion, refusing to start, Cloudflare refused, `/api/me`, the export
   zip), `cost` (estimates, savings in the Archives, re-estimating), `dish`
   (Guess from a photo, YouTube links), `allowance` (what's left of the AI
-  allowance, 2.6.0), `shop` (the Shop tab, 2.7.0), `scan`, `video`.
+  allowance, 2.6.0), `shop` (the Shop tab, 2.7.0), `back` (the phone's back
+  gesture and drafts kept through a restart, 2.7.4), `scan`, `video`.
 - `slowProxy` delays: `shell` (index.html), `state` (`/api/state`), `write`
   (PUT/DELETE).
 
@@ -451,8 +468,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v55"`
-in `public/sw.js` → `v56`, `v57`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v56"`
+in `public/sw.js` → `v57`, `v58`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -557,8 +574,14 @@ code. Upstream failures use `UPSTREAM_FAILED` (503); an unreadable page is 422
 `fetch_failed` (with `detail`: what each site answered, also in the activity log).
 `server.keepAliveTimeout` is 120s, longer than cloudflared's 90s idle connections;
 Node's 5s default made the tunnel send requests down connections Node was closing,
-which also came back as 502. The link fetcher sends a browser user-agent
-(`BROWSER_UA`), since many recipe sites refuse an unknown bot.
+which also came back as 502. The link fetcher sends a browser's headers
+(`BROWSER_HEADERS`, 2.7.4: user-agent, accept, compression, `sec-fetch-*`), since
+many recipe sites refuse an unknown bot, and unpacks gzip/deflate/br itself
+(`readBody`, still capped at `MAX_PAGE`). A site that still refuses (401, 403, 429,
+or Cloudflare's `cf-mitigated: challenge`) comes back with `blocked: true`, and the
+phone names the site and says to paste or screenshot the recipe. Fetching a new
+link clears text an earlier fetch put in the box (`state.fetchedText`), never
+what was typed.
 
 **Server errors are JSON with a `code`.** Every `/api` failure goes through the
 error handler at the bottom of `server.js`, which maps it to
@@ -650,7 +673,11 @@ Four routes in, most to least reliable:
 1. **Recipe site link** — server parses embedded schema.org `Recipe` data, then
    hands that clean text to the model only to structure quantities. Accurate.
 2. **TikTok link** — server also hits TikTok's public oEmbed endpoint for the
-   caption the page itself hides. **YouTube links** (2.5, `youtubeId`,
+   caption the page itself hides. **Instagram links** (2.7.4, `instagramCode`,
+   `instagramText`): the post's own page is a login wall for a server, so the
+   caption comes from its embed page (`/p/<code>/embed/captioned/`, the `.Caption`
+   block, else the post's JSON). No caption is a 422 `fetch_failed` with
+   `source: "instagram"`, logged "no caption", never "read". **YouTube links** (2.5, `youtubeId`,
    `youtubeText`): oEmbed for the title and channel, plus `shortDescription`
    from the watch page (sent with a consent cookie). Only the description is
    read, so a recipe that's only spoken needs a screen recording.
