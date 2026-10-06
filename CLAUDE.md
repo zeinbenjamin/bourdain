@@ -178,7 +178,10 @@ button). Tapping it jumps back to the current week. A planned meal
 separate things) shows `miniThumb(r)` (the recipe card's picture rule at 40px: cover whole
 on white, else first photo cropped, else the first letter), then the title, which
 wraps in full rather than truncating. Servings are not shown on the row; tapping
-the meal opens `slotSheet`, where they're changed.
+the meal opens `slotSheet`, where they're changed. A recipe is on a day at most
+once (2.6.5): the picker and "Add to the week" say "Already on …" instead of
+adding it again, and `mergeDay()` folds older duplicates into one (larger serves)
+when the Plan shows that week.
 
 **Adding a recipe** (`addSheet`): the Recipes "+" (and the empty book's button)
 opens a sheet, most used first (2.6.1): **Import a recipe** (the import form, with "‹ Recipes" to go back),
@@ -416,8 +419,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v50"`
-in `public/sw.js` → `v51`, `v52`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v51"`
+in `public/sw.js` → `v52`, `v53`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -448,13 +451,16 @@ Docker's gateway, so `TRUSTED_NETS` could never match a real device.
 API key replaced by placeholders. If you change the YAML in TrueNAS, change this
 file to match. The live setup uses datasets under `/mnt/sonic/builds_/bourdain/`.
 
-**The page itself scrolls, never an inner box (2.6.2).** Until 2.6.1, `html` and
-`body` were fixed at the screen height and only `<main>` scrolled. iPhone Safari
-sometimes sent a swipe to the page instead (often after a pinch zoom), so the page
-bounced and the list wouldn't move. Now the document scrolls, `.top` is sticky and
-`.tabs` fixed; reset with `window.scrollTo(0,0)`, not `main.scrollTop`. An open
-sheet sets `html.sheet-open` (`overflow:hidden`) so the page behind stays put.
-Don't give `<main>` or `body` a fixed height or `overflow` again.
+**The app shell: the page never scrolls, `<main>` does (2.6.5).** `html` and `body`
+are `overflow: hidden` with `overscroll-behavior: none`; `<main>` is the scroller
+(`overflow-y: auto`) and fills the screen under the header. History: until 2.6.1
+`<main>` scrolled but the page could still rubber-band, so after a zoom iPhone
+dragged the page and the list wouldn't move; 2.6.2 made the page scroll instead,
+and then on some iPhones the fixed tab bar and sticky header drifted with the
+content during a fast swipe. Locking the page fixes both. Reset with `toTop()`
+(`main.scrollTop = 0`), never `window.scrollTo`. An open sheet sets
+`html.sheet-open`, which stops `<main>` scrolling behind it. Desktop Chromium
+can't show the drift, so check a layout change on an iPhone too.
 
 **Nothing that makes iPhone Safari zoom (2.6.3).** Every input, select and textarea
 is at least 16px: Safari zooms in on a smaller field when it's tapped and doesn't

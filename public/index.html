@@ -31,12 +31,14 @@
 }
 *{box-sizing:border-box}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
-/* The page itself scrolls (2.6.2), not an inner box: iPhone Safari sometimes sent a
-   swipe to the fixed-height page instead of the inner box, especially after a pinch
-   zoom, and the page just bounced. The header is sticky, the tabs are fixed. */
-html{height:100%}
-body{margin:0;min-height:100%}
-html.sheet-open{overflow:hidden}
+/* The app shell (2.6.5). The page never scrolls; <main> does, and it fills the
+   screen between the header and the tab bar. 2.6.1 had this but let the page
+   rubber-band, so after a zoom iPhone dragged the page instead of <main>. 2.6.2
+   scrolled the page instead, and on some iPhones the fixed tab bar and sticky
+   header then drifted with the content during a fast swipe. Now the page is held
+   still (overflow hidden, no overscroll), so neither can happen. */
+html,body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none}
+html.sheet-open main{overflow:hidden}
 body{
   background:var(--paper); color:var(--ink);
   font-family:var(--serif);
@@ -73,7 +75,7 @@ a{color:inherit}
 .top .sub{font-family:var(--sans);color:var(--ink-3);font-size:11px;font-weight:500;letter-spacing:.02em}
 .top .sync{color:var(--ink);font-weight:700}
 
-main{flex:1; padding:0 0 calc(84px + env(safe-area-inset-bottom,0px))} /* clear the tab bar, home bar included (2.6.3) */
+main{flex:1; min-height:0; overflow-y:auto; overscroll-behavior-y:contain; -webkit-overflow-scrolling:touch; padding:0 0 calc(84px + env(safe-area-inset-bottom,0px))} /* clear the tab bar, home bar included (2.6.3) */
 .signinbar{display:block;width:100%;min-height:48px;border:0;border-bottom:1px solid var(--rule);background:var(--flame);color:var(--paper);font-family:var(--sans);font-size:14px;font-weight:600;padding:10px 18px;text-align:left}
 .signinbar[hidden]{display:none}
 section.view{display:none; padding:16px 18px 24px; max-width:760px; margin:0 auto; width:100%}
@@ -144,6 +146,7 @@ body.aslist .rcard .thumb{width:56px;height:56px;flex:none;margin:0;font-size:24
 body.aslist .rcard .body{padding:0}
 body.aslist .rcard h3{font-size:17px;-webkit-line-clamp:2;margin-bottom:2px}
 body.aslist .rcard .tags{display:none}
+.opt.planned{color:var(--ink-3)}
 .viewtog{flex:none;width:44px;height:44px;border:1px solid var(--line);border-radius:999px;background:none;color:var(--ink-2);display:flex;align-items:center;justify-content:center;padding:0}
 .viewtog svg{width:18px;height:18px;display:block}
 .viewtog[data-as="list"] .vt-grid,.viewtog[data-as="grid"] .vt-list{display:none}
@@ -984,6 +987,8 @@ function lowerIngredients(r){
 }
 
 /* ---------- navigation ---------- */
+// Back to the top of the content (it's <main> that scrolls, never the page; 2.6.5)
+const toTop=()=>{ const m=document.getElementById("main"); if(m) m.scrollTop=0; };
 function show(view){
   state.view=view;
   if(view!=="detail"&&view!=="cook") state.detailFrom=null; // set by the Timeline so the recipe's Back returns there
@@ -995,7 +1000,7 @@ function show(view){
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.view===tab));
   const sub=document.getElementById("topSub");
   const now=new Date(); sub.textContent = `${DAYS[(now.getDay()+6)%7]} ${now.getDate()} ${MONTHS[now.getMonth()]}`;
-  window.scrollTo(0,0);
+  toTop();
   if(view!=="cook") wake.release();
   render();
 }
@@ -1764,6 +1769,7 @@ function renderPlan(){
   const today=iso(new Date());
   document.querySelector("#view-plan .weeknav").classList.toggle("current", iso(state.week)===iso(mondayOf(new Date())));
   const el=document.getElementById("days");
+  for(let i=0;i<7;i++){ const k=iso(addDays(state.week,i)), m=mergeDay(planDay(k)); if(m){ state.plan[k]=m; savePlanDay(k,m); } } // duplicates from before 2.6.5
   setHtml(el,DAYS.map((n,i)=>{
     const d=addDays(state.week,i), k=iso(d), day=planDay(k);
     const slots=day.entries.map((e,ix)=>{
@@ -1912,14 +1918,26 @@ function sheetActions(s,acts){ s._acts=acts; }
 function closeSheet(){ document.getElementById("sheet").classList.remove("open"); document.getElementById("sheetBg").classList.remove("open"); document.documentElement.classList.remove("sheet-open"); }
 document.getElementById("sheetBg").onclick=closeSheet;
 
+/* A recipe is on a day at most once (2.6.5): its serves are changed on the meal
+   itself. Adding it again says so. Days that already have it twice (from before)
+   are merged when the Plan shows them, keeping the larger serves. */
+const dayLabel=k=>{ const d=new Date(k+"T00:00"); return `${DAYS[(d.getDay()+6)%7]} ${d.getDate()}`; };
+const onDay=(k,rid)=>planDay(k).entries.some(e=>e.recipeId===rid);
+const alreadyMsg=k=>`Already on ${dayLabel(k)}. Tap it on the Plan to change the serves.`;
+function mergeDay(day){
+  const seen=new Map(); let merged=false;
+  for(const e of day.entries){ const had=seen.get(e.recipeId); if(had){ had.servings=Math.max(had.servings||0,e.servings||0)||had.servings; merged=true; } else seen.set(e.recipeId,{...e}); }
+  return merged ? {...day, entries:[...seen.values()]} : null;
+}
 function pickRecipe(dateISO){
   const list=Object.entries(state.recipes).sort((a,b)=>(a[1].title||"").localeCompare(b[1].title||""));
   if(!list.length){ toast("No recipes yet"); return; }
   const s=openSheet(`<h3>Add to ${DAYS[(new Date(dateISO+"T00:00").getDay()+6)%7]} ${new Date(dateISO+"T00:00").getDate()}</h3>
     <input class="input" id="pickQ" placeholder="Search" style="margin-bottom:8px">
-    <div id="pickList">${list.map(([id,r])=>`<button class="opt" data-act="pick" data-id="${id}">${esc(r.title)}<small>${r.servings?`Serves ${r.servings}`:""}</small></button>`).join("")}</div>`);
+    <div id="pickList">${list.map(([id,r])=>`<button class="opt${onDay(dateISO,id)?" planned":""}" data-act="pick" data-id="${esc(id)}">${esc(r.title)}<small>${onDay(dateISO,id)?"Already on this day":r.servings?`Serves ${esc(r.servings)}`:""}</small></button>`).join("")}</div>`);
   s.querySelector("#pickQ").oninput=e=>{ const q=e.target.value.toLowerCase(); s.querySelectorAll(".opt").forEach(o=>o.hidden=!o.textContent.toLowerCase().includes(q)); };
   sheetActions(s,{ pick:async o=>{ const r=state.recipes[o.dataset.id]; if(!r) return;
+    if(onDay(dateISO,o.dataset.id)){ closeSheet(); toast(alreadyMsg(dateISO)); return; }
     const day=planDay(dateISO); day.entries.push({recipeId:o.dataset.id, servings:r.servings||2}); const ok=await savePlanDay(dateISO,day); closeSheet(); renderPlan(); if(ok) toast("Added"); } });
 }
 function pickDay(recipeId){
@@ -1929,7 +1947,7 @@ function pickDay(recipeId){
   sheetActions(s,{
     pw:()=>{ state.week=addDays(state.week,-7); pickDay(recipeId); },
     nw:()=>{ state.week=addDays(state.week,7); pickDay(recipeId); },
-    day:async o=>{ const k=o.dataset.k; if(!k) return; const day=planDay(k); day.entries.push({recipeId, servings:Math.max(1,Math.round((r.servings||2)*(state.mult||1)))}); const ok=await savePlanDay(k,day); closeSheet(); if(ok) toast(`Added to ${DAYS[(new Date(k+"T00:00").getDay()+6)%7]}`); },
+    day:async o=>{ const k=o.dataset.k; if(!k) return; if(onDay(k,recipeId)){ closeSheet(); toast(alreadyMsg(k)); return; } const day=planDay(k); day.entries.push({recipeId, servings:Math.max(1,Math.round((r.servings||2)*(state.mult||1)))}); const ok=await savePlanDay(k,day); closeSheet(); if(ok) toast(`Added to ${DAYS[(new Date(k+"T00:00").getDay()+6)%7]}`); },
   });
 }
 
@@ -2121,7 +2139,7 @@ async function writeRecipe(idea,btn){
     const data=await store.ai("write", {title:idea.title, have:pantryText(), missing:idea.missing||[]});
     if(!data||!data.title) throw {code:"empty_completion"};
     state.draft=normalise(data,""); state.draft.photos=[]; state.editingId=null; state.draftManual=false; state.ideas=null;
-    show("import"); window.scrollTo(0,0);
+    show("import"); toTop();
   }catch(e){ btn.disabled=false; btn.textContent=old; toast(aiError(e,"writing that one")); }
 }
 
@@ -2365,7 +2383,7 @@ async function runParse(){
         : "Couldn't find a recipe in that. Try pasting more of the caption or a clearer screenshot.";
       btn.disabled=false; return; }
     state.draft=normalise(data,url); state.editingId=null; state.draftManual=false;
-    status.textContent=""; btn.disabled=false; renderImport(); window.scrollTo(0,0);
+    status.textContent=""; btn.disabled=false; renderImport(); toTop();
   }catch(e){
     btn.disabled=false;
     if(e&&e.name==="AbortError"){ status.className="status"; status.textContent="Stopped. Nothing was imported."; return; }
@@ -2769,7 +2787,7 @@ async function loadAdminList(kind){
 }
 function adminGo(screen, extra={}){
   Object.assign(state, extra); state.adminScreen=screen;
-  renderAdmin(); window.scrollTo(0,0);
+  renderAdmin(); toTop();
   if(screen==="activity") loadAdminActivity(true);
   if(screen==="audit") loadAdminList("audit");
   if(screen==="errors") loadAdminList("errors");

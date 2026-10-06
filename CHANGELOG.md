@@ -6,6 +6,10 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.6.5 — 2026-10-06
+- Fixed: on some iPhones the tab bar (and the Bourdain header) slid up the screen with the recipes while scrolling. They now stay put.
+- A meal can only be planned once on the same day. Adding it again tells you it's already there; tap it on the Plan to change the serves. Days that already had the same meal more than once now show it once, with the larger serves.
+
 ## 2.6.4 — 2026-10-06
 - Fixed: tapping a tab made the pictures (and people's avatars in the Archives) flash blank for a moment. They now stay put when nothing has changed.
 - The first recipes on screen load straight away again; only the ones further down wait until you scroll to them.
