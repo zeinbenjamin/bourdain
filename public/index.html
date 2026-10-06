@@ -113,6 +113,7 @@ section.view.active{display:block}
 .btn{
   border:1px solid var(--ink); background:var(--card); border-radius:999px;
   padding:9px 16px; font-family:var(--sans); font-weight:500; font-size:13px; letter-spacing:.01em;
+  min-height:44px; /* every button is a 44px tap target (2.7.9: the plain and small ones were 40 and 33) */
 }
 .btn.primary{background:var(--ink); color:var(--paper); border-color:var(--ink); font-weight:600}
 .btn.ghost{background:transparent}
@@ -121,6 +122,7 @@ section.view.active{display:block}
 .btn.ghost{border-color:var(--line)}
 .btn:disabled{opacity:.5;cursor:default}
 .btn.small{padding:6px 12px;font-size:12px}
+.btn.sq{width:44px;height:44px;padding:0;font-size:18px;line-height:1;flex:none} /* − / + steppers */
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
 .field label{font-family:var(--sans);font-size:12px;color:var(--ink-2);letter-spacing:.02em}
@@ -278,7 +280,7 @@ body.aslist .rcard .tags{display:none}
 .person{flex:none;width:64px;display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:0;padding:0;color:var(--ink);font-family:var(--sans);font-size:11px;font-weight:500;min-height:44px}
 .person span:last-child{max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:999px;padding:3px;margin:0 0 16px}
-.seg button{min-height:38px;border:0;background:none;border-radius:999px;font-family:var(--sans);font-size:13px;font-weight:500;color:var(--ink-2)}
+.seg button{min-height:44px;border:0;background:none;border-radius:999px;font-family:var(--sans);font-size:13px;font-weight:500;color:var(--ink-2)}
 .seg button.on{background:var(--ink);color:var(--paper);font-weight:600}
 .tl-sub .av.xs{margin-top:-2px}
 .fromline{display:inline-flex;align-items:center;gap:0;background:none;border:0;padding:0;margin:4px 0 2px;min-height:44px;font-family:var(--sans);font-size:13px;color:var(--flame);font-weight:600;text-align:left}
@@ -429,10 +431,18 @@ body.aslist .rcard .tags{display:none}
 .ingrow{display:grid;grid-template-columns:22px 68px 80px 1fr 32px;gap:6px;margin-bottom:10px;align-items:center;background:var(--steel);border:1px solid var(--line);border-radius:6px;padding:8px 6px 8px 2px}
 .ingrow .h{color:var(--ink-3);font-size:18px;text-align:center;white-space:nowrap;letter-spacing:-3px;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;grid-row:1/3;align-self:center}
 .ingrow.dragging{opacity:.55;outline:2px solid var(--flame);outline-offset:-2px}
-.ingrow .input{padding:8px 8px;font-size:16px} /* 16px: iPhone Safari zooms in on any smaller field (2.6.3) */
+.ingrow .input{padding:8px 8px;font-size:16px;min-height:44px} /* 16px: iPhone Safari zooms in on any smaller field (2.6.3) */
 .ingrow .aisle-sel{grid-column:2/4}
 .ingrow .input[data-f=quantity]{padding-left:6px;padding-right:6px}
 .ingrow .x{border:0;background:none;color:var(--ink-3);font-size:20px;width:44px;height:44px;padding:0;margin:-5px -6px;justify-self:center}
+/* A small phone (2.7.9): the ingredient's name gets a line of its own, so it isn't squeezed to 48px */
+@media (max-width:360px){
+  .ingrow{grid-template-columns:22px 1fr 1fr 32px}
+  .ingrow .h{grid-row:1/4}
+  .ingrow [data-f=quantity]{grid-column:2;grid-row:1} .ingrow [data-f=unit]{grid-column:3;grid-row:1} .ingrow .x{grid-column:4;grid-row:1}
+  .ingrow [data-f=item]{grid-column:2/5;grid-row:2}
+  .ingrow .aisle-sel{grid-column:2;grid-row:3} .ingrow [data-f=prep]{grid-column:3/5!important;grid-row:3}
+}
 .ingrow.two{grid-template-columns:1fr 1fr 28px}
 .review h2{font-size:28px;margin-bottom:12px}
 .review h3{font-family:var(--sans);font-size:13px;letter-spacing:.02em;text-transform:uppercase;font-weight:700;margin:22px 0 10px;padding-bottom:5px;border-bottom:1px solid var(--rule)}
@@ -486,7 +496,7 @@ body.aslist .rcard .tags{display:none}
 .scaler{display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:8px 0;margin:10px 0 2px}
 .scaler .lab{font-family:var(--sans);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2)}
 .scaler .ctl{display:flex;align-items:center;gap:8px}
-.scaler .ctl button{border:1px solid var(--ink);background:var(--card);border-radius:var(--r);width:34px;height:34px;font-size:18px;line-height:1;padding:0;font-family:var(--sans)}
+.scaler .ctl button{border:1px solid var(--ink);background:var(--card);border-radius:var(--r);width:44px;height:44px;font-size:18px;line-height:1;padding:0;font-family:var(--sans)}
 .scaler .ctl button:disabled{opacity:.35}
 .scaler .amt{font-family:var(--serif);font-weight:700;font-size:19px;min-width:64px;text-align:center}
 .scaler .amt small{font-family:var(--sans);font-weight:400;font-size:11px;color:var(--ink-2);display:block;letter-spacing:.06em;text-transform:uppercase}
@@ -511,7 +521,7 @@ body.aslist .rcard .tags{display:none}
 .listctl{display:flex;gap:8px;margin:0 0 10px;align-items:center}
 .listctl select{flex:1;min-width:0;min-height:44px;font-size:16px;padding-left:10px;padding-right:6px}
 .tmrs{display:flex;flex-wrap:wrap;gap:6px;padding:0 0 12px 36px}
-.tmr{border:1px solid var(--flame);color:var(--flame);background:var(--paper);border-radius:999px;padding:0 14px;min-height:40px;font-family:var(--sans);font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+.tmr{border:1px solid var(--flame);color:var(--flame);background:var(--paper);border-radius:999px;padding:0 14px;min-height:44px;font-family:var(--sans);font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
 .tmr.run{background:var(--flame);color:var(--flame-ink)}
 .tmr.done{border-color:var(--ink);color:var(--ink);background:var(--steel)}
 .timerbar{position:sticky;top:0;z-index:4;background:var(--paper);display:flex;flex-wrap:wrap;gap:6px;padding:8px 0}
@@ -704,6 +714,10 @@ body.aslist .rcard .tags{display:none}
 <script>
 /* ---------- constants ---------- */
 const AISLES = ["produce","meat & seafood","dairy & eggs","bakery","pantry","spices","frozen","drinks","other"];
+// One of the nine, for an aisle stored by an older version or someone else's app ("meat", "dairy").
+// Until 2.7.9 the edit form showed (and saved) an unknown aisle as Produce, its first option.
+const AISLE_SAME={ meat:"meat & seafood", seafood:"meat & seafood", fish:"meat & seafood", dairy:"dairy & eggs", eggs:"dairy & eggs", bread:"bakery", spice:"spices", "herbs & spices":"spices", freezer:"frozen", drink:"drinks", fruit:"produce", vegetables:"produce", veg:"produce" };
+const aisleOf=a=>{ const x=String(a||"").toLowerCase().trim(); return AISLES.includes(x)?x:AISLE_SAME[x]||"other"; };
 const UNITS = ["","g","kg","ml","l","tsp","tbsp","cup","whole","clove","slice","can","packet","bunch","pinch","drizzle","to taste"];
 /* How a unit reads on screen. Litres are stored as "l" (renaming a stored value
    would orphan old recipes) but shown as "L", which can't be mistaken for a 1.
@@ -725,7 +739,7 @@ async function api(path, opts={}){
   const res = await fetch(API+path, {redirect:"manual", ...opts});
   if(signinLost(res)) throw signin.error();
   if(!res.ok){ let e; try{ e=await res.json(); }catch(_){ e={}; }
-    const err=new Error(e.error||res.statusText); err.code=e.code||("http_"+res.status); err.status=res.status; err.detail=e.detail; err.kind=e.kind; err.limit=e.limit; err.seen=e.seen; err.blocked=!!e.blocked; err.source=e.source;
+    const err=new Error(e.error||res.statusText); err.code=e.code||("http_"+res.status); err.status=res.status; err.detail=e.detail; err.kind=e.kind; err.limit=e.limit; err.seen=e.seen; err.blocked=!!e.blocked; err.source=e.source; err.notPost=!!e.notPost;
     if(NEEDS_SIGNIN.includes(err.code)) signin.lost(err.code, err.seen);
     if(err.code==="ai_limit"&&err.kind&&err.limit) allowance.full(err.kind,err.limit);
     throw err; }
@@ -1991,7 +2005,7 @@ function slotSheet(k,ix){
   const r=state.recipes[en.recipeId]; const d=new Date(k+"T00:00");
   const sh=openSheet(`<h3>${esc(r?r.title:"(deleted recipe)")}</h3><p class="muted small">${DAYS[(d.getDay()+6)%7]} ${d.getDate()} ${MONTHS[d.getMonth()]}</p>
     <div class="row" style="justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line)"><span>Serves</span>
-      <span class="row"><button class="btn small" data-act="minus" aria-label="Fewer serves">−</button><strong id="svN" style="min-width:24px;text-align:center">${en.servings}</strong><button class="btn small" data-act="plus" aria-label="More serves">+</button></span></div>
+      <span class="row"><button class="btn sq" data-act="minus" aria-label="Fewer serves">−</button><strong id="svN" style="min-width:24px;text-align:center">${en.servings}</strong><button class="btn sq" data-act="plus" aria-label="More serves">+</button></span></div>
     ${r?`<button class="opt" data-act="cook">Cook it now</button><button class="opt" data-act="open">Open recipe</button>`:""}
     <button class="opt" data-act="remove" style="color:var(--red)">Remove from this day</button>
     <div class="row" style="margin-top:12px"><button class="btn ghost" data-act="done">Done</button></div>`);
@@ -2078,7 +2092,7 @@ function buildList(days=shopDays()){
         const item=String(ing.item||ing.raw_text||"").trim().toLowerCase(); if(!item) return;
         const fam=family(ing.unit); const key=item+"|"+fam;
         const q = ing.quantity==null||ing.quantity===""? null : Number(ing.quantity)*f;
-        if(!items[key]) items[key]={key,item,fam,qty:0,own:0,units:new Set(),unknown:false,aisle:ing.aisle||"other",from:new Set(),optional:!!ing.optional};
+        if(!items[key]) items[key]={key,item,fam,qty:0,own:0,units:new Set(),unknown:false,aisle:aisleOf(ing.aisle),from:new Set(),optional:!!ing.optional};
         const it=items[key];
         if(q==null||!isFinite(q)) it.unknown=true; else { it.qty+=toBase(q,ing.unit); it.own+=q; it.units.add(String(ing.unit||"").toLowerCase()); }
         it.from.add(r.title||"Untitled"); if(!ing.optional) it.optional=false;
@@ -2091,17 +2105,33 @@ function buildList(days=shopDays()){
 // (3 tbsp stays 3 tbsp), else added up in g/kg or ml/L.
 function shopAmount(it){
   if(it.unknown&&!it.qty) return "";
-  const [q,u]=it.units.size===1?[Math.round(it.own*100)/100,[...it.units][0]]:fromBase(it.qty,it.fam);
-  return `${fmtQty(q)}${unitLabel(u)?" "+unitLabel(u):""}`;
+  const [q,u]=it.units.size===1?[it.own,[...it.units][0]]:fromBase(it.qty,it.fam);
+  return `${fmtQty(buyAmount(q,u))}${unitLabel(u)?" "+unitLabel(u):""}`;
 }
+// What you'd actually buy (2.7.9): scaling a recipe gave "6⅔ clove garlic" and "666⅔ ml".
+// Things you count round up to whole ones; grams and millilitres to a sensible step;
+// kilos and litres to 0.05; spoons and cups to the next quarter.
+function buyAmount(q,u){
+  const up=(x,step)=>Math.ceil(x/step-1e-9)*step, n=Number(q); u=String(u||"").toLowerCase();
+  if(!(n>0)) return q;
+  if(u===""||["whole","clove","slice","can","packet","bunch"].includes(u)) return up(n,1);
+  if(u==="g"||u==="ml") return up(n, n<50?5 : n<250?10 : n<1000?25 : 50);
+  if(u==="kg"||u==="l") return Math.round(up(n,0.05)*100)/100;
+  if(["tsp","tbsp","cup"].includes(u)) return up(n,0.25);
+  return Math.round(n*100)/100;
+}
+const KEY_SEP="§"; // between the keys of one Shop row (an item in more than one unit)
 function shopWeek(){ const k=iso(state.week); const sw=state.shop[k]||(state.shop[k]={week:k}); sw.checked=sw.checked||{}; sw.need=sw.need||{}; sw.manual=Array.isArray(sw.manual)?sw.manual:[]; return sw; }
 async function saveShop(){ const k=iso(state.week); await store.put("shop",k,state.shop[k]); }
 // Everything on the list for the week shown, with what's ticked and why.
 function shopRows(){
   const sw=shopWeek(), have=new Set(Object.values(state.pantry).map(p=>itemKey(p&&p.item)));
-  return [...buildList().map(it=>{ const pantry=have.has(itemKey(it.item));
-      return {key:it.key,label:shopAmount(it),item:it.item,aisle:it.aisle,from:[...it.from].join(", "),optional:it.optional,manual:false,pantry,
-        done:pantry?!sw.need[it.key]:!!sw.checked[it.key]}; }),
+  // One row per ingredient (2.7.9): recipes using it in different units ("1 tbsp" and "12 clove"
+  // garlic) were separate rows. Ticks are still kept per unit (item|family), so old ones still apply.
+  const byItem={}; for(const it of buildList()) (byItem[it.item]=byItem[it.item]||[]).push(it);
+  return [...Object.values(byItem).map(list=>{ const it=list[0], keys=list.map(x=>x.key), pantry=have.has(itemKey(it.item));
+      return {key:keys.join(KEY_SEP),label:list.map(shopAmount).filter(Boolean).join(" + "),item:it.item,aisle:it.aisle,from:[...new Set(list.flatMap(x=>[...x.from]))].join(", "),optional:list.every(x=>x.optional),manual:false,pantry,
+        done:pantry?keys.every(k=>!sw.need[k]):keys.every(k=>sw.checked[k])}; }),
     ...sw.manual.map(m=>({key:"m:"+m.id,label:m.qty?`${fmtQty(m.qty)}${unitLabel(m.unit)?" "+unitLabel(m.unit):""}`:"",item:String(m.item||""),aisle:m.aisle||"other",from:"",manual:true,id:m.id,done:!!sw.checked["m:"+m.id]}))];
 }
 
@@ -2117,9 +2147,10 @@ function renderShop(){
     `<label class="item ${r.done?"done":""}"><input type="checkbox" data-key="${esc(r.key)}" ${r.pantry?"data-pantry":""} ${r.done?"checked":""}>
       <span class="lbl">${r.label?`<span class="q">${esc(r.label)}</span> `:""}${esc(r.item)}${r.optional?` <span class="faint">(optional)</span>`:""}${r.pantry?`<span class="ptag">from pantry</span>`:""}${r.from?`<div class="from">${esc(r.from)}</div>`:""}</span>
       ${r.manual?`<button class="x" data-rmm="${esc(r.id)}" aria-label="Remove ${esc(r.item)}">×</button>`:""}</label>`).join("")}</div>`).join(""));
-  el.onchange=async e=>{ const c=e.target.closest("input[type=checkbox]"); if(!c) return; const sw=shopWeek(), k=c.dataset.key;
-    if(c.hasAttribute("data-pantry")){ if(c.checked) delete sw.need[k]; else sw.need[k]=true; } // unticking a pantry item puts it back on the list
-    else if(c.checked) sw.checked[k]=true; else delete sw.checked[k];
+  el.onchange=async e=>{ const c=e.target.closest("input[type=checkbox]"); if(!c) return; const sw=shopWeek();
+    for(const k of c.dataset.key.split(KEY_SEP)){
+      if(c.hasAttribute("data-pantry")){ if(c.checked) delete sw.need[k]; else sw.need[k]=true; } // unticking a pantry item puts it back on the list
+      else if(c.checked) sw.checked[k]=true; else delete sw.checked[k]; }
     c.closest(".item").classList.toggle("done",c.checked); await saveShop(); };
   el.onclick=async e=>{ const b=e.target.closest("[data-rmm]"); if(!b) return; e.preventDefault(); const sw=shopWeek(); sw.manual=sw.manual.filter(m=>m.id!==b.dataset.rmm); delete sw.checked["m:"+b.dataset.rmm]; await saveShop(); renderShop(); };
 }
@@ -2513,7 +2544,8 @@ document.getElementById("btnFetch").onclick=async()=>{
   }catch(e){
     btn.disabled=false; status.className="status err";
     status.textContent = (e&&e.code==="fetch_failed")
-      ? (e.source==="instagram"||/instagram/.test(hostOf(url)) ? INSTAGRAM_NO_CAPTION
+      ? (e.notPost ? "That's a link to an Instagram profile, not a post. Open the reel or post itself, tap Share, then Copy link, and paste that link here."
+        : e.source==="instagram"||/instagram/.test(hostOf(url)) ? INSTAGRAM_NO_CAPTION
         : e.blocked ? `${hostOf(url)} doesn't let apps read its pages. Open the link in your browser, copy the recipe and paste it into the box above, or add screenshots of it, then tap Read recipe.`
         : `Bourdain couldn't read ${hostOf(url)||"that page"}. Paste the recipe text into the box above, or add screenshots instead.`)
       : (e&&e.code==="blocked_address") ? "That link points inside a private network, so Bourdain won't open it. Use a public recipe link, or paste the text."
@@ -2801,7 +2833,7 @@ async function guessFromPhoto(){
 function renderReview(){
   const d=state.draft; const el=document.getElementById("review");
   const unitOpts=u=>UNITS.map(x=>`<option value="${x}" ${x===u?"selected":""}>${x==="l"?"L":x||"—"}</option>`).join("");
-  const aisleOpts=a=>AISLES.map(x=>`<option ${x===a?"selected":""}>${x}</option>`).join("");
+  const aisleOpts=a=>{ const s=aisleOf(a); return AISLES.map(x=>`<option ${x===s?"selected":""}>${x}</option>`).join(""); };
   el.innerHTML=`
     <div class="detail-head"><button class="btn small ghost" id="revBack">‹ ${state.editingId?"Cancel":"Back"}</button>
       <button class="btn primary" id="revSave">${state.editingId?"Save changes":"Save recipe"}</button></div>

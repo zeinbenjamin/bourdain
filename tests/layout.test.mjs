@@ -323,6 +323,33 @@ try {
   check("Shop: the add box is 16px (no iPhone zoom) and its buttons are 44px tall", shopF.px >= 16 && shopF.btns.length === 4 && shopF.btns.every((h) => h >= 44), JSON.stringify(shopF));
   await page.click('#tabs button[data-view="recipes"]');
 
+  // --- 2.7.9: every button you tap while cooking or planning is at least 44px
+  const hs = (q) => page.evaluate((q) => [...document.querySelectorAll(q)].filter((e) => e.offsetParent).map((e) => Math.round(e.getBoundingClientRect().height)), q);
+  const tall = (a) => a.length > 0 && a.every((h) => h >= 44);
+  await page.click('.rcard:has-text("Leek soup")'); await page.waitForSelector("#view-detail.active");
+  let t44 = { head: await hs("#view-detail .detail-head .btn"), batch: await hs("#view-detail .scaler .ctl button"), actions: await hs("#view-detail .actions .btn") };
+  check("2.7.9: the recipe page's Back/Edit/Delete, batch − and +, and actions are 44px tall", tall(t44.head) && tall(t44.batch) && tall(t44.actions), JSON.stringify(t44));
+  await page.click("#cookThis"); await page.waitForSelector("#cookIng");
+  t44 = { head: await hs("#view-cook .detail-head .btn"), timers: await hs("#view-cook .tmr") };
+  check("…cooking: Back, + Timer and the step's timer button are 44px", tall(t44.head) && tall(t44.timers), JSON.stringify(t44));
+  await page.click("#cookBack"); await page.click("#edit"); await page.waitForSelector("#fTitle");
+  t44 = { inputs: await hs(".ingrow .input") };
+  check("…the edit form's ingredient boxes and aisle menu are 44px", tall(t44.inputs), JSON.stringify(t44));
+  await page.setViewportSize({ width: 320, height: 568 }); await page.waitForTimeout(100);
+  const narrow = await page.evaluate(() => { const r = document.querySelector(".ingrow"), w = (f) => Math.round(r.querySelector(`[data-f=${f}]`).getBoundingClientRect().width); return { item: w("item"), qty: w("quantity"), row: Math.round(r.getBoundingClientRect().width), over: r.scrollWidth > r.clientWidth + 1 }; });
+  check("…on a 320px phone the ingredient name gets a line of its own, not a 48px box", narrow.item >= narrow.row * 0.75 && !narrow.over, JSON.stringify(narrow));
+  await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(100);
+  await page.click("#revBack");
+  await page.evaluate(async () => { const d = new Date(), iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; state.plan[iso] = { date: iso, entries: [{ recipeId: "a", servings: 4 }] }; await store.put("plan", iso, state.plan[iso]); });
+  await page.click('#tabs button[data-view="plan"]'); await page.waitForTimeout(150);
+  t44 = { week: await hs("#view-plan .weeknav .btn") };
+  await page.click("#view-plan .slot"); await page.waitForSelector("#sheet.open");
+  t44.serves = await hs('#sheet [data-act="minus"], #sheet [data-act="plus"]');
+  t44.servesW = await page.evaluate(() => Math.round(document.querySelector('#sheet [data-act="plus"]').getBoundingClientRect().width));
+  check("…Plan: the week arrows, and a meal's serves − and + (44px square)", tall(t44.week) && tall(t44.serves) && t44.servesW >= 44, JSON.stringify(t44));
+  await page.evaluate(() => closeSheet());
+  await page.click('#tabs button[data-view="recipes"]');
+
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
 } catch (e) { finish(e); } finally { await b?.browser.close(); await s?.cleanup(); }
