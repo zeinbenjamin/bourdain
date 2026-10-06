@@ -38,22 +38,22 @@ screen, with the others either side. The app still opens on Recipes. Five tabs:
 `.tabs` becomes `repeat(5,1fr)`. Update the `add` suite's tab check and the
 layout checks at phone width.
 
-### 3. A floating tab bar, Instagram style (Zein, option C)
+### 3. A floating tab bar, Instagram style (Zein, option B)
 
 The tab bar becomes a frosted white pill floating above the page instead of a
 full-width strip: 14px in from each side, 10px above the home bar
 (`env(safe-area-inset-bottom)` included), rounded ends, a thin border, a soft
 shadow, and the content blurred behind it (`backdrop-filter`, with the `-webkit-`
-prefix for Safari). **Icons only, no labels**: 26px icons in 52px-tall buttons, each
-button keeps its name as `aria-label`. The current tab is **Michelin red**
-(`--flame` icon, drawn bolder, on a faint red pill). Chosen 2026-10-06 from three
-mock-ups (icons only in grey, icons with labels, icons only in red).
+prefix for Safari). **Icons with small labels** (24px icons, 10px labels, 54px-tall
+buttons): the labels stay because pilot users are still learning what Pantry and
+Archives are. The current tab sits on a soft grey pill, its icon drawn bolder and
+its label in ink; the others are grey. Chosen 2026-10-06 from three mock-ups (icons
+only in grey, icons with labels, icons only in red).
 
 - `<main>`'s bottom padding grows so the last thing on a page clears the pill.
 - The layout suite measures the pill: inside the screen at phone width, 44px+ tap
-  targets, the last card clear of it, nothing hidden behind it on any tab.
-- Red is also the stars and destructive buttons; it's fine here because the tab is
-  marked by shape (the pill) too, not colour alone.
+  targets, labels not cut off with five tabs, the last card clear of it, nothing
+  hidden behind it on any tab.
 - Check on an iPhone before release: Safari draws the blur differently from
   desktop Chromium, and the tab bar is what drifted in 2.6.x.
 
