@@ -1,6 +1,6 @@
 // Test-only stand-ins for api.anthropic.com and api.openai.com, loaded into the server
 // with `node --import tests/mock-apis.mjs`. The mode is read from MOCK_FILE on every call
-// ({"claude": "...", "image": "...", "scan": "...", "claudeDelay": ms, "imageDelay": ms, "cfCerts": "down", "cost": "junk", "dish": "nofood"|"unsure", "youtube": "nodesc", "instagram": "nocaption"|"json"|"json2"|"escaped"|"reel404"|"403"}), so one
+// ({"claude": "...", "image": "...", "scan": "...", "claudeDelay": ms, "imageDelay": ms, "cfCerts": "down", "cost": "junk", "dish": "nofood"|"unsure", "youtube": "nodesc", "instagram": "nocaption"|"json"|"json2"|"escaped"|"blocked-embed"|"preview-only"|"403"}), so one
 // server can be driven through every failure. Requests are logged as MOCK_CLAUDE_REQ,
 // MOCK_SCAN and MOCK_IMG_REQ so tests can check exactly what was sent.
 import { readFileSync } from "node:fs";
@@ -75,7 +75,19 @@ globalThis.fetch = async (url, opts = {}) => {
     return new Response(`<html><head><meta name="description" content="Short meta &#x1f957; it&rsquo;s &quot;quick&quot;"></head><body><script>var ytInitialPlayerResponse = {"videoDetails":{"videoId":"abcdefghijk","shortDescription":${JSON.stringify(desc)}}};</script></body></html>`, { status: 200, headers: { "content-type": "text/html" } });
   }
   if (u.startsWith("https://www.instagram.com/")) { // 2.7.4: a post's embed page, shaped like the real one
-    console.log("MOCK_INSTAGRAM " + u.slice(0, 90));
+    console.log("MOCK_INSTAGRAM " + (opts.method || "GET") + " " + u.slice(0, 90));
+    // 2.7.7: what the NAS was sent: Instagram's error page instead of the embed; then the post query and the link preview
+    const errorPage = () => new Response(`<html><head><title>Instagram</title></head><body><script type="application/json">{"canonicalRouteName":"comet.igweb.PolarisErrorRoute","url":"\\/p\\/x\\/embed\\/captioned\\/"}</script></body></html>`, { status: 200, headers: { "content-type": "text/html" } });
+    if (u.includes("/graphql/")) {
+      if (m.instagram === "blocked-embed") return json(200, { data: { xdt_shortcode_media: { owner: { username: "iramsfoodstory" }, edge_media_to_caption: { edges: [{ node: { text: "Crispy chipotle beef tacos \u{1f32e}\n\n2 lb ground beef\n1 tbsp taco seasoning" } }] } } } });
+      return json(401, { message: "Please wait a few minutes before you try again.", status: "fail" });
+    }
+    if (!u.includes("/embed/")) { // the post's own page
+      if (m.instagram === "preview-only" && /facebookexternalhit/.test(opts.headers?.["user-agent"] || ""))
+        return new Response(`<html><head><meta property="og:description" content="1,619,905 likes, 1,399 comments - iramsfoodstory on September 12, 2026: &quot;Crispy chipotle beef tacos chipotle lime crema &#x1f32e;&#10;&#10;2 lb ground beef&#10;1 tbsp taco seasoning&quot;. " /></head><body></body></html>`, { status: 200, headers: { "content-type": "text/html" } });
+      return errorPage();
+    }
+    if (m.instagram === "blocked-embed" || m.instagram === "preview-only") return errorPage();
     if (m.instagram === "reel404" && u.includes("/reel/")) return new Response("Not found", { status: 404 });
     if (m.instagram === "escaped") { // 2.7.6: the caption block as a string inside a script, drawn by the page's own JS (as Instagram sent for Dct0lIPyvQJ)
       const block = '<div class="Caption"><span>iramsfoodstory</span><br/><br/>Crispy chipotle beef tacos chipotle lime crema \u{1f32e} <br/><br/>Ingredients <br/><br/>For the taco seasoning:<br/><br/>1 tbsp red chili powder <br/>2 tbsp garlic powder <br/><br/>Method:<br/>Mix it all.<div class="CaptionComments"><a href="#">View all 1,399 comments</a></div></div>';

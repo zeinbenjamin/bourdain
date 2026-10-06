@@ -1464,26 +1464,57 @@ function instagramSeen(status, html) {
   if (/class="Caption"/.test(html)) bits.push("caption block empty");
   if (/login|log in|Log In/i.test(html.match(/<title>[^<]*<\/title>/i)?.[0] || "") || /"loginPage"|accounts\/login/.test(html)) bits.push("login page");
   if (/edge_media_to_caption|contextJSON|__additionalDataLoaded/.test(html)) bits.push("post data present");
-  return `instagram.com sent no caption (${status}, ${kb} KB${bits.length ? ", " + bits.join(", ") : ""})`;
+  if (/PolarisErrorRoute/.test(html)) bits.push("its error page");
+  return `${status}, ${kb} KB${bits.length ? ", " + bits.join(", ") : ""}`;
+}
+/* 2.7.7: Instagram sent the NAS its error page (PolarisErrorRoute) for the embed page that a
+   browser gets fine, so there are several ways to ask, tried in turn. Which one worked goes in
+   the activity log ("read the caption (preview)"), so we learn what Instagram allows. */
+const IG_APP_ID = "936619743392459"; // the web app's public id, sent by every instagram.com page
+const IG_DOC_ID = process.env.INSTAGRAM_DOC_ID || "8845758582119845"; // the post query Instagram's own page runs; it changes now and then
+const igAttempts = (code) => [
+  // 1. the embed page, asked plainly (a browser's headers seemed to earn the error page)
+  { name: "embed", go: () => fetch(`https://www.instagram.com/p/${code}/embed/captioned/`, { signal: AbortSignal.timeout(12000), headers: { "user-agent": BROWSER_UA, accept: "text/html,application/xhtml+xml,*/*;q=0.8", "accept-language": "en-AU,en;q=0.9" } }),
+    read: async (r) => { const html = await r.text(); return { html, caption: instagramCaption(html), who: igWho(html) }; } },
+  // 2. the query Instagram's own post page makes for the post, without signing in
+  { name: "query", go: () => fetch("https://www.instagram.com/graphql/query", { method: "POST", signal: AbortSignal.timeout(12000),
+      headers: { "user-agent": BROWSER_UA, "content-type": "application/x-www-form-urlencoded", "x-ig-app-id": IG_APP_ID, "x-fb-lsd": "AVqbxe3J_YA", "x-asbd-id": "129477", "sec-fetch-site": "same-origin", referer: `https://www.instagram.com/p/${code}/` },
+      body: new URLSearchParams({ av: "0", __d: "www", __user: "0", __a: "1", __req: "3", lsd: "AVqbxe3J_YA", jazoest: "2957", fb_api_caller_class: "RelayModern", fb_api_req_friendly_name: "PolarisPostActionLoadPostQueryQuery",
+        variables: JSON.stringify({ shortcode: code, fetch_tagged_user_count: null, hoisted_comment_id: null, hoisted_reply_id: null }), server_timestamps: "true", doc_id: IG_DOC_ID }).toString() }),
+    read: async (r) => { const html = await r.text(); let j = null; try { j = JSON.parse(html); } catch {}
+      const m = j?.data?.xdt_shortcode_media || j?.data?.shortcode_media;
+      return { html, caption: String(m?.edge_media_to_caption?.edges?.[0]?.node?.text || "").trim(), who: m?.owner?.username || "" }; } },
+  // 3. the link preview Instagram gives to apps that show one (iMessage, WhatsApp): its description quotes the caption
+  { name: "preview", go: () => fetch(`https://www.instagram.com/p/${code}/`, { signal: AbortSignal.timeout(12000), headers: { "user-agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)", accept: "text/html,*/*;q=0.8", "accept-language": "en-AU,en;q=0.9" } }),
+    read: async (r) => { const html = await r.text(); return { html, ...igPreview(html) }; } },
+  // 4. the embed page again, with a browser's full set of headers (what 2.7.4 sent)
+  { name: "embed-browser", go: () => fetch(`https://www.instagram.com/reel/${code}/embed/captioned/`, { signal: AbortSignal.timeout(12000), headers: { ...BROWSER_HEADERS, "sec-fetch-dest": "iframe", "sec-fetch-site": "cross-site" } }),
+    read: async (r) => { const html = await r.text(); return { html, caption: instagramCaption(html), who: igWho(html) }; } },
+];
+function igWho(html) {
+  const plain = unJs(html);
+  return (html.match(/class="UsernameText"[^>]*>([^<]+)</) || plain.match(/class="UsernameText"[^>]*>([^<]+)</))?.[1] || plain.match(/"owner":\{[^{}]*?"username":"([\w.]+)"/)?.[1] || plain.match(/<div class="Caption"[^>]*>\s*<(?:a|span)[^>]*>([\w.]{1,30})</)?.[1] || "";
+}
+// og:description on a post: `1,619 likes, 12 comments - iramsfoodstory on October 1, 2026: "Crispy chipotle…".`
+function igPreview(html) {
+  const raw = html.match(/<meta[^>]+property=["']og:description["'][^>]+content="([^"]*)"/i)?.[1] || html.match(/<meta[^>]+content="([^"]*)"[^>]+property=["']og:description["']/i)?.[1] || "";
+  const d = decodeEntities(raw), m = d.match(/^[\s\S]*?-\s*([\w.]+)\s+on\s+[^:]{3,40}:\s*"([\s\S]+)"\.?\s*$/);
+  return m ? { caption: m[2].trim(), who: m[1] } : { caption: "", who: "" };
 }
 async function instagramText(code) {
-  let last = "";
-  // the reel path first, as the app shares them; the post path as a second try
-  for (const kind of ["reel", "p"]) {
+  const tried = [];
+  for (const a of igAttempts(code)) {
     try {
-      const r = await fetch(`https://www.instagram.com/${kind}/${code}/embed/captioned/`, { signal: AbortSignal.timeout(15000), headers: { ...BROWSER_HEADERS, "sec-fetch-dest": "iframe", "sec-fetch-site": "cross-site", referer: "https://www.google.com/" } });
-      const html = r.ok ? await r.text() : "";
-      const caption = r.ok ? instagramCaption(html) : "";
-      if (caption) {
-        const plain = unJs(html), who = (html.match(/class="UsernameText"[^>]*>([^<]+)</) || plain.match(/class="UsernameText"[^>]*>([^<]+)</))?.[1] || plain.match(/"owner":\{[^{}]*?"username":"([\w.]+)"/)?.[1] || plain.match(/<div class="Caption"[^>]*>\s*<(?:a|span)[^>]*>([\w.]{1,30})</)?.[1] || "";
-        return { text: [who && `by ${decodeEntities(who)}`, caption].filter(Boolean).join("\n\n").slice(0, 20000), seen: "" };
-      }
-      last = r.ok ? instagramSeen(r.status, html) : `instagram.com said ${r.status}`;
-      if (r.ok) keepInstagramPage(code, kind, html);
-    } catch (err) { console.warn("instagram embed failed", code, err.message); last = `instagram.com: ${err.message}`; }
+      const r = await a.go();
+      const { html, caption, who } = r.ok ? await a.read(r) : { html: "", caption: "" };
+      if (caption) return { text: [who && `by ${decodeEntities(who)}`, caption].filter(Boolean).join("\n\n").slice(0, 20000), seen: "", via: a.name };
+      tried.push(`${a.name}: ${r.ok ? instagramSeen(r.status, html) : r.status}`);
+      if (r.ok) keepInstagramPage(code, a.name, html);
+    } catch (err) { tried.push(`${a.name}: ${err.name === "TimeoutError" ? "timed out" : err.message}`); }
   }
-  console.warn("instagram: no caption for", code, "-", last);
-  return { text: "", seen: last };
+  const seen = `instagram.com sent no caption (${tried.join("; ")})`;
+  console.warn("instagram: no caption for", code, "-", seen);
+  return { text: "", seen };
 }
 // The last few embed pages that had no caption, kept in the data folder for the owner to look
 // at (they're public posts). Instagram changes its pages; this shows what it sent the NAS.
@@ -1532,8 +1563,8 @@ app.post("/api/fetch", async (req, res) => {
 
   const ig = instagramCode(url);
   if (ig) {
-    const { text, seen } = await instagramText(ig);
-    logged(text ? "read the caption" : `no caption (${seen})`.slice(0, 200));
+    const { text, seen, via } = await instagramText(ig);
+    logged(text ? `read the caption (${via})` : `no caption (${seen})`.slice(0, 200));
     if (!text) return res.status(422).json({ error: "Instagram sent no caption", code: "fetch_failed", detail: seen, source: "instagram" });
     return res.json({ text, recipeJson: null, source: "instagram" });
   }

@@ -675,13 +675,18 @@ Four routes in, most to least reliable:
    hands that clean text to the model only to structure quantities. Accurate.
 2. **TikTok link** — server also hits TikTok's public oEmbed endpoint for the
    caption the page itself hides. **Instagram links** (2.7.4, `instagramCode`,
-   `instagramText`): the post's own page is a login wall for a server, so the
-   caption comes from its embed page (`/p/<code>/embed/captioned/`, the `.Caption`
-   block, else the post's JSON, unescaped a level at a time since it can sit as
-   JSON inside a string inside a script; `/reel/` first, then `/p/`). No caption is a
-   422 `fetch_failed` with `source: "instagram"`, logged "no caption (…)" with what
-   came back (`instagramSeen`: status, size, login page?), never "read". The last 10
-   caption-less pages are kept in `DATA_DIR/debug/` (`keepInstagramPage`) for a look. **YouTube links** (2.5, `youtubeId`,
+   `instagramText`): the post's own page is a login wall for a server, and (2.7.7)
+   Instagram sends the NAS its error page (`PolarisErrorRoute`) for the embed page a
+   browser gets fine. So `igAttempts` tries in turn: the embed page asked plainly
+   (`/p/<code>/embed/captioned/`; `instagramCaption` reads the `.Caption` block, also
+   when it's a string inside a script, else the post's JSON); the post query
+   Instagram's own page makes (`/graphql/query`, `IG_DOC_ID`, overridable with
+   `INSTAGRAM_DOC_ID` when Instagram changes it); the link preview it gives
+   `facebookexternalhit` (`igPreview`, og:description); the embed with full browser
+   headers. The log says which worked ("read the caption (query)") or what each got
+   (`instagramSeen`). No caption is a 422 `fetch_failed` with `source: "instagram"`,
+   never "read". The last 10 caption-less pages are kept in `DATA_DIR/debug/`
+   (`keepInstagramPage`) for a look. **YouTube links** (2.5, `youtubeId`,
    `youtubeText`): oEmbed for the title and channel, plus `shortDescription`
    from the watch page (sent with a consent cookie). Only the description is
    read, so a recipe that's only spoken needs a screen recording.
