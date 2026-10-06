@@ -30,7 +30,7 @@ try {
   await page.click('#tabs button[data-view="shop"]');
   const shop = () => page.evaluate(() => ({
     week: document.getElementById("shopWeekTitle").textContent, current: document.querySelector("#view-shop .weeknav").classList.contains("current"),
-    sub: document.getElementById("shopSub").textContent,
+    sub: document.getElementById("shopSub")?.textContent ?? null, meals: /meals? planned/.test(document.getElementById("view-shop").textContent),
     aisles: [...document.querySelectorAll("#shopList .aisle h3")].map((h) => h.textContent),
     rows: Object.fromEntries([...document.querySelectorAll("#shopList .item")].map((r) => [[...r.querySelector(".lbl").childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("").trim(), {
       q: r.querySelector(".q")?.textContent || "", from: r.querySelector(".from")?.textContent || "", done: r.querySelector("input").checked, pantry: !!r.querySelector(".ptag") }])),
@@ -40,7 +40,7 @@ try {
   let v = await shop();
   check("the Shop tab opens on this week, marked like the Plan's", v.week === "5 Oct – 11 Oct" && v.current && (await page.evaluate(() => document.querySelector("#tabs button.on").dataset.view)) === "shop", JSON.stringify(v.week));
   check("…from today: Monday's leek soup isn't on it; Tuesday's and Wednesday's meals are", !/leek/.test(v.text) && /chicken thigh/.test(v.text) && /mini cucumber/.test(v.text), v.text.slice(0, 200));
-  check("…and it says so: 'From today · 3 meals planned'", v.sub === "From today · 3 meals planned", v.sub);
+  check("2.7.3: no 'From today · 3 meals planned' line under the dates", v.sub === null && !v.meals, String(v.sub));
   check("grouped by aisle in shop order", v.aisles.join() === "Produce,Meat & seafood,Pantry,Other", v.aisles.join());
   check("each item says which recipes it's for", v.rows["soy sauce"]?.from === "Cucumber noodle salad, Beef pepper rice", JSON.stringify(v.rows["soy sauce"]));
   check("amounts are scaled to the serves planned (beef for 4, not 2)", v.rows["beef ribeye"]?.q === "600 g", JSON.stringify(v.rows["beef ribeye"]));
@@ -91,13 +91,13 @@ try {
   // --- the same week as the Plan
   await page.click('#view-shop [data-week="1"]'); await sleep(300);
   v = await shop();
-  check("› goes to next week, in full: 'Leek soup' for 8, nothing 'from today'", v.week === "12 Oct – 18 Oct" && !v.current && v.rows.leek?.q === "4" && v.sub === "1 meal planned", JSON.stringify([v.week, v.rows.leek, v.sub]));
+  check("› goes to next week, in full: 'Leek soup' for 8, nothing 'from today'", v.week === "12 Oct – 18 Oct" && !v.current && v.rows.leek?.q === "4" && !v.meals, JSON.stringify([v.week, v.rows.leek]));
   await page.click('#tabs button[data-view="plan"]');
   check("…and the Plan is on that week too", (await page.textContent("#weekTitle")) === "12 Oct – 18 Oct");
   await page.click("#prevWeek"); await page.click("#prevWeek"); await page.click('#tabs button[data-view="shop"]');
   check("moving the Plan's week moves the Shop's", (await shop()).week === "28 Sept – 4 Oct" || (await shop()).week === "28 Sep – 4 Oct", (await shop()).week);
   v = await shop();
-  check("a week with nothing planned (and a 1.x list) says what to do", /Nothing to buy yet/.test(v.text) && /Plan some meals/.test(v.text) && v.sub === "No meals planned", v.text);
+  check("a week with nothing planned (and a 1.x list) says what to do", /Nothing to buy yet/.test(v.text) && /Plan some meals/.test(v.text), v.text);
   await page.click('#view-shop [data-week="0"]');
   check("tapping the dates comes back to this week", (await shop()).current);
 

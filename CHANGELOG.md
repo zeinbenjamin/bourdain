@@ -6,6 +6,12 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.7.3 — 2026-10-06
+- The row of people (You, and everyone else in the pilot) has moved from the Archives to the top of Recipes. Tap someone to see their recipes. Everyone / Just me stays on the Archives.
+- The row of tag buttons on Recipes is gone. Type a tag in the search box instead ("chinese", "curry") and its recipes come up.
+- Search now finds recipes with every word you type, in any order: "chicken curry" finds a chicken curry, even when "curry" is only a tag.
+- The Shop no longer shows the "From today · 4 meals planned" line under the dates.
+
 ## 2.7.2 — 2026-10-06
 - The tab bar sits lower on the screen, closer to the bottom edge, like Instagram's.
 - At the end of a page, the last recipe (or day, or pantry aisle) now stops just above the tab bar instead of leaving a big empty gap.

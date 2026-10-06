@@ -49,6 +49,8 @@ try {
   check("search: needs 2 letters", (await api("/api/search?q=a")).j?.code === "short_query");
   const byIng = (await api("/api/search?q=panko")).j, byTag = (await api("/api/search?q=japanese")).j, byDesc = (await api("/api/search?q=crisp")).j;
   check("search: matches ingredients, tags and description", byIng[0]?.id === "katsu" && byTag[0]?.id === "katsu" && byDesc[0]?.id === "katsu" && byIng[0].name === "Sam");
+  const both = (await api("/api/search?q=" + encodeURIComponent("japanese panko"))).j, mixed = (await api("/api/search?q=" + encodeURIComponent("japanese lentil"))).j;
+  check("search: every word counts, in any field (2.7.3): 'japanese panko' finds the katsu, 'japanese lentil' finds nothing", both.length === 1 && both[0].id === "katsu" && mixed.length === 0, JSON.stringify([both.map((h) => h.id), mixed.map((h) => h.id)]));
   const lent = (await api("/api/search?q=lentil")).j;
   check("search: never the caller's own recipes", lent.length === 1 && lent[0].id === "dal" && lent[0].owner === "sam", JSON.stringify(lent));
 
@@ -102,24 +104,30 @@ try {
   await page.evaluate(() => { const f = window.fetch; window.__peopleCalls = 0; window.fetch = (u, o) => { if (String(u).includes("/api/people")) window.__peopleCalls++; return f(u, o); }; });
   await page.click('#tabs button[data-view="timeline"]'); await sleep(2500);
   check("alone: no People row, no Everyone / Just me", !(await page.$(".people")) && !(await page.$(".seg")));
+  await page.click('#tabs button[data-view="recipes"]'); await sleep(300);
+  check("…nor on Recipes", !(await page.$(".people")));
+  await page.click('#tabs button[data-view="timeline"]'); await sleep(300);
   const calls = await page.evaluate(() => window.__peopleCalls);
   check("…and the Archives don't keep asking the server (no render loop)", calls <= 1, `${calls} calls in 2.5s`);
 
   // --- app: with Sam
   d2 = db(); d2.prepare("UPDATE users SET name = 'Sam' WHERE id = 'sam'").run(); d2.close();
   await page.reload(); await page.waitForFunction(() => !store.loading);
-  await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector(".people .person"); await sleep(500);
+  await page.click('#tabs button[data-view="recipes"]'); await page.waitForSelector(".people .person"); await sleep(500);
   const row = await page.$$eval(".people .person", (bs) => bs.map((x) => x.lastElementChild.textContent.trim()));
   check("People row: You first, then Sam", JSON.stringify(row) === JSON.stringify(["You", "Sam"]), JSON.stringify(row));
   check("your own photo in the row", Boolean(await page.$('.people .person:first-child .av img')));
+  check("2.7.3: the People row is at the top of Recipes, above the search box", await page.evaluate(() => { const r = document.querySelector("#view-recipes .people"); return !!r && r.getBoundingClientRect().bottom <= document.getElementById("search").getBoundingClientRect().top; }));
+  await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector(".seg");
+  check("…and no longer on the Archives, which keep Everyone / Just me", !(await page.$("#view-timeline .people")) && !!(await page.$("#view-timeline .seg")));
   d2 = db(); d2.prepare("UPDATE users SET name = 'Sam Taylor-Jones' WHERE id = 'sam'").run(); d2.close();
   await page.evaluate(() => { people.at = 0; people.list = null; }); await page.reload(); await page.waitForFunction(() => !store.loading);
-  await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector('.people .person[data-person="sam"]'); await sleep(300);
+  await page.click('#tabs button[data-view="recipes"]'); await page.waitForSelector('.people .person[data-person="sam"]'); await sleep(300);
   const full = await page.$eval('.people .person[data-person="sam"]', (x) => ({ shown: x.lastElementChild.textContent.trim(), label: x.getAttribute("aria-label") }));
   check("People row: first names only, the full name still read out", full.shown === "Sam" && full.label === "Sam Taylor-Jones", JSON.stringify(full));
   d2 = db(); d2.prepare("UPDATE users SET name = 'Sam' WHERE id = 'sam'").run(); d2.close();
   await page.reload(); await page.waitForFunction(() => !store.loading);
-  await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector(".people .person"); await sleep(500);
+  await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector(".seg"); await sleep(500);
   const statsEvery = await page.$$eval(".stat b", (xs) => xs.map((x) => x.textContent));
   const feedEvery = await page.$$eval(".feed .slot", (xs) => xs.map((x) => x.textContent.replace(/\s+/g, " ").trim()));
   check("Everyone: Sam's cooks in the feed, with his name", /Everyone/.test(await page.textContent(".seg .on")) && feedEvery.filter((t) => /Chicken katsu curry.*Sam/.test(t)).length === 2 && feedEvery.some((t) => /Tarka dal.*Sam/.test(t)) && feedEvery.some((t) => /Leek soup.*You/.test(t)), JSON.stringify(feedEvery));
@@ -140,7 +148,8 @@ try {
   await page.click("#tBack");
 
   // --- app: a profile, then Add to my recipes
-  await page.click('.people .person:has-text("Sam")'); await page.waitForSelector("#view-person .profile");
+  await page.click('#tabs button[data-view="recipes"]'); await page.click('.people .person:has-text("Sam")'); await page.waitForSelector("#view-person .profile");
+  check("…from Recipes, Back says Recipes and the Recipes tab stays lit", (await page.textContent("#pBack")).trim() === "‹ Recipes" && (await page.evaluate(() => document.querySelector("#tabs .on").dataset.view)) === "recipes");
   check("Sam's profile: name, counts, recent cooks and recipes", /Sam/.test(await page.textContent("#view-person h2")) && /2 recipes · 3 cooks/.test(await page.textContent("#view-person .profile")) && (await page.locator("#view-person .rcard").count()) === 2 && (await page.locator("#view-person .tl-top .slot").count()) === 3);
   await page.click('#view-person .rcard:has-text("katsu")'); await page.waitForSelector("#tCopy");
   check("from the profile, Back says Sam", (await page.textContent("#tBack")).trim() === "‹ Sam" && (await page.textContent("#tCopy")).trim() === "Add to my recipes");
@@ -185,7 +194,7 @@ try {
   check("…remove the photo and rename", (await api("/api/me")).j.name === "Zein B" && (await api("/api/me")).j.photo === null);
 
   // --- a default vegetable for anyone without a picture (2.5.1)
-  await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector(".people .person");
+  await page.click('#tabs button[data-view="recipes"]'); await page.waitForSelector(".people .person");
   const dflt = await page.evaluate(() => ({ mine: document.querySelector(".people .person:first-child .av img")?.getAttribute("src"), want: "/avatars/" + defaultVeg(store.me.id) + ".webp",
     same: avatar({ id: "abc", name: "A" }) === avatar({ id: "abc", name: "B" }).replace(/B/g, "A"),
     spread: new Set(Array.from({ length: 40 }, (_, i) => defaultVeg("u" + i))).size, noId: avatar({ name: "Ann" }) }));
@@ -248,14 +257,16 @@ try {
   check("…served as a small WebP", pic.ok && pic.headers.get("content-type") === "image/webp" && (await pic.arrayBuffer()).byteLength < 40000);
   const badVeg = [await put("/api/me", { name: "Zein B", photo: "veg:dragonfruit" }), await put("/api/me", { name: "Zein B", photo: "veg:../../etc" }), await put("/api/me", { name: "Zein B", photo: "tomato" })];
   check("…only the 18 pictures are accepted", badVeg.every((r) => r.j?.code === "bad_photo"), JSON.stringify(badVeg.map((r) => r.status)));
-  await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector(".people .person");
+  await page.click('#tabs button[data-view="recipes"]'); await page.waitForSelector(".people .person");
   check("…and it's what others see in the People row", (await page.getAttribute(".people .person:first-child .av img", "src")) === "/avatars/tomato.webp");
   await page.evaluate(() => { const fake = { name: "X", photo: 'veg:tomato" onerror="window.__p=1' }; document.body.insertAdjacentHTML("beforeend", avatar(fake)); });
   check("…and a made-up picture name never becomes an image", !(await page.evaluate(() => [...document.querySelectorAll("img")].some((i) => /onerror|veg:/.test(i.getAttribute("src") || "")))));
 
   // --- layout
-  await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector(".people .person");
-  const sz = await page.evaluate(() => ({ person: [...document.querySelectorAll(".people .person")].map((x) => Math.round(x.getBoundingClientRect().height)), seg: Math.round(document.querySelector(".seg").getBoundingClientRect().height), over: document.documentElement.scrollWidth - innerWidth }));
+  await page.click('#tabs button[data-view="recipes"]'); await page.waitForSelector(".people .person");
+  const personH = await page.evaluate(() => [...document.querySelectorAll(".people .person")].map((x) => Math.round(x.getBoundingClientRect().height)));
+  await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector(".seg");
+  const sz = await page.evaluate((personH) => ({ person: personH, seg: Math.round(document.querySelector(".seg").getBoundingClientRect().height), over: document.documentElement.scrollWidth - innerWidth }), personH);
   check("layout: people and the switch are easy to tap, no sideways scroll", sz.person.every((h) => h >= 44) && sz.seg >= 44 && sz.over <= 0, JSON.stringify(sz));
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();

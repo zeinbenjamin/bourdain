@@ -407,7 +407,6 @@ body.aslist .rcard .tags{display:none}
 .item .from{font-family:var(--sans);font-size:12px;color:var(--ink-3)}
 /* From the pantry: ticked from the start; the tag is inline-block so the strike-through doesn't reach it */
 .ptag{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;background:var(--steel);border:1px solid var(--line);font-family:var(--sans);font-size:11px;font-weight:600;color:var(--ink-2);vertical-align:2px}
-.shopsub{text-align:center;font-family:var(--sans);font-size:13px;color:var(--ink-3);margin:-4px 0 14px}
 .shopacts{display:flex;gap:8px;margin-top:14px}
 .shopacts .btn{flex:1;min-height:44px}
 .item .x{border:0;background:none;color:var(--ink-3);font-size:20px;line-height:1;padding:0;width:44px;height:44px;margin:-8px -12px -8px 0;flex:none}
@@ -570,8 +569,9 @@ body.aslist .rcard .tags{display:none}
 
   <!-- RECIPES -->
   <section class="view active" id="view-recipes">
+    <div id="peopleRow"></div>
     <div class="searchbar">
-      <input class="input" id="search" type="search" placeholder="Search recipes or ingredients" autocomplete="off">
+      <input class="input" id="search" type="search" placeholder="Search recipes, ingredients or tags" autocomplete="off">
       <button class="btn" id="btnManual" aria-label="Add a recipe">+</button>
     </div>
     <div id="cookBanner"></div>
@@ -587,7 +587,6 @@ body.aslist .rcard .tags{display:none}
       <!-- One button (2.6.3), so sort and filter have room for 16px text; it shows the view it switches to. -->
       <button class="viewtog" id="viewTog" data-as="list" data-view="grid" aria-label="Show as a list"><span class="vt-grid"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2" width="5.5" height="5.5"/><rect x="10.5" y="2" width="5.5" height="5.5"/><rect x="2" y="10.5" width="5.5" height="5.5"/><rect x="10.5" y="10.5" width="5.5" height="5.5"/></svg></span><span class="vt-list"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2.5" width="4" height="4"/><rect x="2" y="11.5" width="4" height="4"/><path d="M9 4.5h7M9 13.5h7"/></svg></span></button>
     </div>
-    <div class="chips" id="tagChips"></div>
     <div class="rlist" id="rlist"></div>
     <div id="others"></div>
   </section>
@@ -621,7 +620,6 @@ body.aslist .rcard .tags{display:none}
       <button class="wk" data-week="0" aria-label="Back to this week"><span class="wkt" id="shopWeekTitle"></span><span class="note">(this week)</span></button>
       <button class="btn small" data-week="1" aria-label="Next week">›</button>
     </div>
-    <p class="shopsub" id="shopSub"></p>
     <div id="shopList"></div>
     <div class="addline">
       <input class="input" id="manualItem" placeholder="Add something else (e.g. 2 lemons)">
@@ -717,7 +715,7 @@ const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov
 /* ---------- state ---------- */
 const state = {
   recipes:{}, plan:{}, shop:{}, pantry:{}, ideas:null,
-  week:mondayOf(new Date()), view:"recipes", query:"", tag:null,
+  week:mondayOf(new Date()), view:"recipes", query:"",
   detailId:null, mult:1, draft:null, editingId:null, images:[], imgMax:10,
 };
 
@@ -1020,7 +1018,7 @@ function show(view){
   if(view!=="detail"&&view!=="cook") state.detailFrom=null; // set by the Timeline so the recipe's Back returns there
   document.querySelectorAll("section.view").forEach(s=>s.classList.toggle("active", s.id==="view-"+view));
   // Which tab stays lit for views that aren't tabs themselves
-  const tab = view==="person" ? "timeline" : view==="admin" ? "recipes"
+  const tab = view==="person" ? (state.personFrom==="timeline"?"timeline":"recipes") : view==="admin" ? "recipes"
     : view==="theirs" ? ({recipes:"recipes",detail:"recipes"}[state.theirs?.from]||"timeline")
     : (view==="detail"||view==="cook"||view==="import") ? (state.detailFrom||"recipes") : view;
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.view===tab));
@@ -1103,7 +1101,6 @@ function render(){
   allowance.paint();
 }
 
-function allTags(){ const c={}; Object.values(state.recipes).forEach(r=>(r.tags||[]).forEach(t=>c[t]=(c[t]||0)+1)); return Object.entries(c).sort((a,b)=>b[1]-a[1]).map(x=>x[0]); }
 
 /* Write a screen's HTML only if it changed (2.6.4). Tapping a tab redraws its
    screen; rewriting identical HTML threw away every picture and drew it again, so
@@ -1115,20 +1112,28 @@ function setHtml(el,html){
   if(el._html===html&&el._first===el.firstChild&&el.firstChild) return false;
   el.innerHTML=html; el._html=html; el._first=el.firstChild; return true;
 }
+/* The People row (2.7.3, on the Archives before): you, then everyone else with a
+   name; tap one for their profile and recipes. Only once someone else has a name. */
+function peopleRowHtml(){
+  if(!people.others().length) return "";
+  const meP=people.list?.find(p=>p.me)||(store.me?{id:store.me.id,name:store.me.name,photo:store.me.photo,me:true}:null);
+  return `<div class="people" role="list">${[meP,...people.others()].filter(Boolean).map(p=>`<button class="person" role="listitem" data-person="${esc(p.id)}" aria-label="${p.me?"You":esc(p.name)}">${avatar(p,"md")}<span>${p.me?"You":esc(firstName(p.name))}</span></button>`).join("")}</div>`;
+}
+// Search: every word typed has to be somewhere in the recipe: its title, description,
+// tags or ingredients (2.7.3: tags are found by searching, with no row of tag buttons).
+const searchWords=q=>String(q||"").toLowerCase().split(/\s+/).filter(Boolean);
+const recipeMatches=(r,words)=>{ if(!words.length) return true;
+  const hay=[r.title,r.description,...(r.tags||[]),...(r.ingredients||[]).map(i=>i&&(i.item||i.raw_text))].join(" ").toLowerCase();
+  return words.every(w=>hay.includes(w)); };
 function renderRecipes(){
-  const chips=document.getElementById("tagChips");
-  const tags=allTags();
-  chips.innerHTML = tags.map(t=>`<button class="chip ${state.tag===t?"on":""}" data-tag="${esc(t)}">${esc(t)}</button>`).join("");
-  chips.onclick=e=>{ const b=e.target.closest(".chip"); if(!b) return; state.tag = state.tag===b.dataset.tag?null:b.dataset.tag; renderRecipes(); };
+  const pr=document.getElementById("peopleRow");
+  if(people.stale()&&!people.loading) people.load(true).then(()=>{ if(state.view==="recipes") setHtml(pr,peopleRowHtml()); });
+  setHtml(pr,peopleRowHtml());
+  pr.onclick=e=>{ const p=e.target.closest("[data-person]"); if(p) openPerson(p.dataset.person); };
   const q=state.query.trim().toLowerCase();
   others.search(q);
-  const pref=listPrefs.get();
-  const list=Object.entries(state.recipes).filter(([id,r])=>{
-    if (state.tag && !(r.tags||[]).includes(state.tag)) return false;
-    if (!q) return true;
-    const hay=[r.title,r.description,...(r.tags||[]),...(r.ingredients||[]).map(i=>i.item||i.raw_text)].join(" ").toLowerCase();
-    return hay.includes(q);
-  }).filter(([id,r])=>keepRecipe(r,pref.filter)).sort((a,b)=>sortRecipes(a[1],b[1],pref.sort));
+  const pref=listPrefs.get(), words=searchWords(q);
+  const list=Object.entries(state.recipes).filter(([id,r])=>recipeMatches(r,words)).filter(([id,r])=>keepRecipe(r,pref.filter)).sort((a,b)=>sortRecipes(a[1],b[1],pref.sort));
   paintCookBanner();
   const el=document.getElementById("rlist");
   if (!Object.keys(state.recipes).length && store.loading){ setHtml(el,`<div class="empty"><span class="spin"></span>Loading your recipes…</div>`); return; }
@@ -1379,12 +1384,13 @@ function renderTheirs(){
 }
 
 /* A person's profile: their recipes (read-only for anyone else) and recent cooks. */
-function openPerson(id){ state.personId=id; state.person=null; show("person"); }
+// A profile remembers the tab it was opened from (Recipes, or Archives through a feed recipe), for Back.
+function openPerson(id){ state.personFrom=document.querySelector("#tabs button.on")?.dataset.view||"recipes"; state.personId=id; state.person=null; show("person"); }
 function renderPerson(){
   const el=document.getElementById("view-person"), id=state.personId;
   const cached=state.person&&state.person.person.id===id ? state.person : null;
   const p=cached?.person||people.byId(id);
-  const head=`<div class="detail-head"><button class="btn small ghost" id="pBack">‹ Archives</button>${p&&p.me?`<button class="btn small" id="pEdit">Edit profile</button>`:""}</div>`;
+  const head=`<div class="detail-head"><button class="btn small ghost" id="pBack">‹ ${state.personFrom==="timeline"?"Archives":"Recipes"}</button>${p&&p.me?`<button class="btn small" id="pEdit">Edit profile</button>`:""}</div>`;
   if(!cached){
     setHtml(el,head+`<div class="empty"><span class="spin"></span>Opening ${esc(possessive(p&&p.name))} recipes…</div>`);
     api("/api/people/"+encodeURIComponent(id),{signal:timeout(10000)})
@@ -1408,7 +1414,7 @@ function renderPerson(){
 }
 function wirePersonHead(){
   const el=document.getElementById("view-person");
-  el.querySelector("#pBack").onclick=()=>show("timeline");
+  el.querySelector("#pBack").onclick=()=>show(state.personFrom==="timeline"?"timeline":"recipes");
   const pe=el.querySelector("#pEdit"); if(pe) pe.onclick=()=>profileSheet(false);
 }
 
@@ -1863,8 +1869,7 @@ function renderTimeline(){
   if(everyone&&feed.stale()&&!feed.loading) feed.load().then(again);
   const theirs=everyone&&feed.entries ? feed.entries.filter(e=>!e.who.me) : [];
   const meP=people.list?.find(p=>p.me)||(store.me?{id:store.me.id,name:store.me.name,photo:store.me.photo,me:true}:null);
-  const row=shared?`<div class="people" role="list">${[meP,...people.others()].filter(Boolean).map(p=>`<button class="person" role="listitem" data-person="${esc(p.id)}" aria-label="${p.me?"You":esc(p.name)}">${avatar(p,"md")}<span>${p.me?"You":esc(firstName(p.name))}</span></button>`).join("")}</div>
-    <div class="seg" role="group" aria-label="Whose cooks"><button data-who="everyone" class="${everyone?"on":""}" aria-pressed="${everyone}">Everyone</button><button data-who="me" class="${everyone?"":"on"}" aria-pressed="${!everyone}">Just me</button></div>`:"";
+  const row=shared?`<div class="seg" role="group" aria-label="Whose cooks"><button data-who="everyone" class="${everyone?"on":""}" aria-pressed="${everyone}">Everyone</button><button data-who="me" class="${everyone?"":"on"}" aria-pressed="${!everyone}">Just me</button></div>`:"";
   if(!mine.length&&!theirs.length){
     setHtml(el,row + (store.loading ? `<div class="empty"><span class="spin"></span>Loading your cooks…</div>`
       : `<div class="empty"><h3>Nothing cooked yet</h3>Open a recipe and tap Cook this. Each time you finish, it shows up here with the date.</div>`));
@@ -1906,7 +1911,6 @@ function renderTimeline(){
 }
 function timelineClick(e){
   const w=e.target.closest("[data-who]"); if(w){ archivesWho.set(w.dataset.who); renderTimeline(); return; }
-  const p=e.target.closest("[data-person]"); if(p){ openPerson(p.dataset.person); return; }
   const o=e.target.closest("[data-owner]"); if(o){ openTheirs(o.dataset.owner,o.dataset.rid,"timeline"); return; }
   const b=e.target.closest("[data-open]"); if(!b) return; state.detailId=b.dataset.open; state.mult=1; state.detailFrom="timeline"; show("detail");
 }
@@ -2032,8 +2036,6 @@ function renderShop(){
   const now=iso(state.week)===iso(mondayOf(new Date()));
   document.getElementById("shopWeekTitle").textContent=weekLabel(state.week);
   document.querySelector("#view-shop .weeknav").classList.toggle("current",now);
-  const meals=shopDays().reduce((n,k)=>n+planDay(k).entries.filter(e=>state.recipes[e.recipeId]).length,0);
-  document.getElementById("shopSub").textContent=`${now?"From today · ":""}${meals?plural(meals,"meal")+" planned":"No meals planned"}`;
   const sw=shopWeek(), rows=shopRows(), el=document.getElementById("shopList");
   if(!rows.length){ setHtml(el,`<div class="empty"><h3>Nothing to buy yet</h3>${now&&shopDays().length<7?"Plan meals for the rest of this week":"Plan some meals for this week"} and the list builds itself. You can also add things below.</div>`); return; }
   const groups={}; rows.forEach(r=>{ (groups[r.aisle]=groups[r.aisle]||[]).push(r); });
