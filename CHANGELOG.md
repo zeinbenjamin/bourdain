@@ -6,6 +6,10 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.6.4 — 2026-10-06
+- Fixed: tapping a tab made the pictures (and people's avatars in the Archives) flash blank for a moment. They now stay put when nothing has changed.
+- The first recipes on screen load straight away again; only the ones further down wait until you scroll to them.
+
 ## 2.6.3 — 2026-10-06
 - Tapping the sort or filter boxes, or an ingredient on the edit form, no longer zooms the page in on iPhone.
 - Tapping a button twice quickly no longer zooms the page.

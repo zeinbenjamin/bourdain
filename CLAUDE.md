@@ -311,8 +311,9 @@ are remembered per phone in `localStorage["bourdain.listPrefs"]`. A saved sort o
 filter that is no longer an option falls back to the default in `listPrefs.get()`. A recipe card
 reads top to bottom: title, a `.cstars` row with the Michelin stars (omitted
 entirely when the recipe has none), the `.meta` row (time · serves · source), and
-tags. Pictures in lists (`cardHtml`, `miniThumb`, `photosHtml`) are `loading="lazy"`
-(2.6.3). Cards deliberately don't show the cook count; that is only on the recipe
+tags. Only cards below the first screen are `loading="lazy"`
+(`cardHtml(r, attrs, extra, lazy)`, from `FIRST_SCREEN` = 6; 2.6.4); thumbnails, photo
+strips and the first cards load at once, so nothing on screen flashes blank. Cards deliberately don't show the cook count; that is only on the recipe
 page. **Grid or list** (2.6.0): `listPrefs.view` (`grid` | `list`), the
 `#viewTog` button beside sort and filter (one button since 2.6.3, showing the view it
 switches to, so the 16px sort and filter labels fit). List view is `body.aslist`, CSS only, so
@@ -415,8 +416,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v49"`
-in `public/sw.js` → `v50`, `v51`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v50"`
+in `public/sw.js` → `v51`, `v52`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -461,6 +462,13 @@ zoom back. Buttons, cards and checklist rows have `touch-action: manipulation`, 
 quick second tap isn't a double-tap zoom (pinch zoom still works). `<main>`'s
 bottom padding includes `env(safe-area-inset-bottom)` so the last thing on a page
 clears the tab bar above the home bar. The layout suite checks all three.
+
+**Don't redraw what hasn't changed (2.6.4).** Recipes, Plan, Archives and a person's
+page write their HTML through `setHtml(el, html)`, which skips the write when it's
+identical, so tapping the tab you're on doesn't throw away and redraw every picture
+(they flashed blank). It only works because those screens set handlers on the
+container (`el.onclick`), not on children: keep it that way, or wire children after
+every call.
 
 **No `confirm()` or `alert()`.** The app runs in a sandboxed frame in some
 contexts where those are silently blocked and return false — a delete button

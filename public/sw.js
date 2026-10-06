@@ -1,6 +1,6 @@
 // Caches the shell so the app opens without a connection.
 // API calls always go to the network: recipe data must never be served stale.
-const CACHE = "bourdain-v49";
+const CACHE = "bourdain-v50";
 const SLOW_MS = 3000; // how long to wait for the network before using the cached app
 const SHELL = ["/", "/index.html", "/manifest.webmanifest", "/icon.svg"];
 
