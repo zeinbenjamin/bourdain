@@ -80,7 +80,8 @@ makes shopping-list merging and pantry matching possible. Keep `raw_text`
 always — it is the fallback if parsing logic improves later.
 
 `plan` is keyed by ISO date (`2026-09-28`) holding `{date, entries: [{recipeId,
-servings}]}`. `shop` is keyed by week-start date. `pantry` is keyed by item id.
+servings}]}`. `shop` is keyed by week-start date, holding `{week, checked, need, manual}`
+(see **Shop tab**). `pantry` is keyed by item id.
 
 ### Client/server boundary
 
@@ -183,6 +184,27 @@ once (2.6.5): the picker and "Add to the week" say "Already on …" instead of
 adding it again, and `mergeDay()` folds older duplicates into one (larger serves)
 when the Plan shows that week.
 
+**Shop tab (2.7.0)** (`renderShop`, `buildList`, `shopRows`, `shopText`): the
+shopping list, restored from the hidden 1.x code. Nothing on it is stored except
+what the person did: it is built from the Plan each time, for the Plan's own week
+(`state.week`, so the two tabs move together; the Shop has its own ‹ › and dates,
+`[data-week]`). For the current week only today onwards (`shopDays()`); other weeks
+in full. Items merge by item and unit family (`item|fam`, the key ticks are stored
+under) and show in the recipe's own unit when every line uses the same unit
+(`shopAmount`), else in g/kg or ml/L. Pantry items (an `itemKey` match) stay in
+their aisle, ticked, with a `.ptag` "from pantry" (inline-block, so the
+strike-through doesn't reach it). The week's `shop` doc holds `checked` (ticked by
+hand), `need` (pantry items unticked to buy) and `manual` (Add something else,
+aisle from `guessAisle`). **Clear ticked** empties `checked` only, with Undo.
+**Share list** sends what's left (not ticked, not pantry) as plain text through
+`navigator.share`, else copies it. 1.x shop docs (`items: []`) open fine.
+
+**The tab bar (2.7.0)**: Plan, Pantry, Recipes, Shop, Archives, with Recipes in the
+middle; the app still opens on Recipes. It's a frosted pill (`backdrop-filter`)
+floating 14px in and 10px above the home bar, icons with 10px labels, the current
+tab on a grey pill. `max-width: 500px` centres it on an iPad. `<main>`'s bottom
+padding (100px + the safe area) clears it; the layout suite measures all of it.
+
 **Adding a recipe** (`addSheet`): the Recipes "+" (and the empty book's button)
 opens a sheet, most used first (2.6.1): **Import a recipe** (the import form, with "‹ Recipes" to go back),
 **Guess from a photo of a dish**, or **Write one yourself** (a blank review form; `state.draftManual` makes its Back
@@ -262,8 +284,8 @@ people (see **Other people** below).
   job at a time). The admin is exempt from all three while `admin_exempt`.
   `/api/cover` goes through `runAi` too, as kind `cover`.
 - **Activity** (`logActivity`): one row per thing someone did, by title or date,
-  never the contents: recipes added, edited, cooked, deleted, copied; plan and
-  pantry changes; profile; every AI job; every link fetch (2.5.5, `link_fetched`,
+  never the contents: recipes added, edited, cooked, deleted, copied; plan,
+  shopping list (2.7.0, `shop_changed`, by week) and pantry changes; profile; every AI job; every link fetch (2.5.5, `link_fetched`,
   the site and the outcome only, never the full link; its own `links` filter, and
   left out of `nosignin` and `content`). A repeat within a minute is folded.
   The daily sweep prunes activity after 183 days and `ai_usage` after 400.
@@ -367,7 +389,7 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   conversion, refusing to start, Cloudflare refused, `/api/me`, the export
   zip), `cost` (estimates, savings in the Archives, re-estimating), `dish`
   (Guess from a photo, YouTube links), `allowance` (what's left of the AI
-  allowance, 2.6.0), `scan`, `video`.
+  allowance, 2.6.0), `shop` (the Shop tab, 2.7.0), `scan`, `video`.
 - `slowProxy` delays: `shell` (index.html), `state` (`/api/state`), `write`
   (PUT/DELETE).
 
@@ -419,8 +441,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v51"`
-in `public/sw.js` → `v52`, `v53`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v52"`
+in `public/sw.js` → `v53`, `v54`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -689,17 +711,15 @@ never inline.
 
 ## Current state
 
-Four tabs: Recipes, Plan, Archives, Pantry. Importing lives behind the Recipes "+" (see
-**Adding a recipe** above); the import form is still `state.view === "import"`,
-with the Recipes tab highlighted. The Shop tab was removed but all its
-code (`buildList`, `renderShop`, the `shop` collection) is intact and hidden —
-restoring it is adding the tab button back and changing `.tabs`
-`grid-template-columns:repeat(4,1fr)` to `repeat(5,1fr)`. Zein may later move
-Pantry behind the Recipes "+" too (as something like "Cook from the pantry").
+Five tabs: Plan, Pantry, Recipes, Shop, Archives (2.7.0; see **The tab bar**).
+Importing lives behind the Recipes "+" (see **Adding a recipe** above); the import
+form is still `state.view === "import"`, with the Recipes tab highlighted. Zein may
+later move Pantry behind the Recipes "+" too (as something like "Cook from the
+pantry").
 
 Live features: link fetch and AI import with review screen, screen-recording
 frame extraction, recipe photos, AI cover illustrations (on request), drag-to-reorder ingredients in the edit form,
-0.5×–10× batch multiplier, week planner, pantry with "cook from what I have"
+0.5×–10× batch multiplier, week planner, a shopping list from the plan (the Shop tab), pantry with "cook from what I have"
 and photo scanning, cook mode with a checklist and step timers, Michelin
 ratings, a per-recipe cook log, the Archives (every cook, with stats; other
 people's too once there are any), profiles, browsing and copying other people's
@@ -713,7 +733,7 @@ The long-term plan (the pilot, what to watch, and the decision at its end) is
 in `docs/strategy.md`; weigh new feature requests against it.
 Ideas not yet built: nutrition estimates, pantry quantities decremented by
 cooking, timer alerts while the phone is locked (would need push
-notifications), restoring the shopping list, and
+notifications), and
 a cleanup for unused photos (`.jpg`); unused covers are already swept.
 
 ## Pinned for v2

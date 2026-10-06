@@ -535,6 +535,7 @@ app.put("/api/:col(recipes|plan|pantry|shop)/:id", sameDataVersion, (req, res) =
     if (!(was && sameApart(was, doc))) logActivity(req.user.id, !prev ? "recipe_added" : addedLater ? "cook_added" : cooked ? "cook_logged" : "recipe_edited",
       addedLater ? `${title} (${fresh.map((c) => String(c.date).slice(0, 10)).join(", ")})` : title); // a new cost estimate isn't an edit
   } else if (col === "plan") logActivity(req.user.id, "plan_changed", id);
+  else if (col === "shop") logActivity(req.user.id, "shop_changed", id); // the week it's for, never what's on it (2.7.0)
   else if (col === "pantry") logActivity(req.user.id, "pantry_changed", doc.item || id);
   db.prepare(`INSERT INTO ${col} (owner, id, doc, updated_at) VALUES (?, ?, ?, ?)
               ON CONFLICT(owner, id) DO UPDATE SET doc = excluded.doc, updated_at = excluded.updated_at`)

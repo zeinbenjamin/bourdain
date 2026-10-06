@@ -109,7 +109,7 @@ CLAUDE.md note that each `cooks` entry needs a `by` field is dropped.
   - Columns: `user, at, action, target`.
   - `action` is one of `signed_in`, `recipe_added`, `recipe_edited`,
     `recipe_deleted`, `recipe_copied`, `cook_logged`, `plan_changed`,
-    `pantry_changed`.
+    `pantry_changed` (and later kinds, such as `shop_changed` in 2.7.0, by week).
   - `target` is the recipe title or date.
   - One row per server-accepted write. It records what happened and when, not
     full contents.
