@@ -120,8 +120,8 @@ try {
   let ig = await s.post("/api/fetch", { url: IG });
   check("Instagram: the caption, from the embed page, with its line breaks", ig.status === 200 && ig.source === "instagram" && /Crispy garlic parmesan chicken rolls \u{1f32f}/u.test(ig.text) && /\n2 lb boneless chicken breast\n1 tbsp butter\n/.test(ig.text) && /Make the sauce & roll/.test(ig.text), JSON.stringify(ig).slice(0, 300));
   check("…headed by who posted it, without the embed's own furniture", /^by iramsfoodstory\n\nCrispy/.test(ig.text) && !/View all 883 comments|CaptionUsername|<a /.test(ig.text), ig.text.slice(0, 120));
-  const igFetched = s.log().match(/MOCK_INSTAGRAM (\S+)/g) || [];
-  check("…asked for at instagram.com only, from the post's code (?stkn and the rest left behind)", igFetched.at(-1) === "MOCK_INSTAGRAM https://www.instagram.com/reel/DdR9Szhy_wE/embed/captioned/", igFetched.join(" "));
+  const igFetched = s.log().match(/MOCK_INSTAGRAM \S+ (\S+)/g) || [];
+  check("…asked for at instagram.com only, from the post's code (?stkn and the rest left behind)", igFetched.at(-1) === "MOCK_INSTAGRAM GET https://www.instagram.com/p/DdR9Szhy_wE/embed/captioned/", igFetched.join(" "));
   const shapes = [];
   for (const u of ["https://instagram.com/p/DdR9Szhy_wE/", "https://www.instagram.com/reels/DdR9Szhy_wE/", "https://www.instagram.com/iramsfoodstory/reel/DdR9Szhy_wE/?igsh=x", "https://m.instagram.com/tv/DdR9Szhy_wE"])
     if ((await s.post("/api/fetch", { url: u })).source !== "instagram") shapes.push(u);
@@ -135,15 +135,21 @@ try {
   s.setMode({ instagram: "escaped" });
   ig = await s.post("/api/fetch", { url: "https://www.instagram.com/reel/Dct0lIPyvQJ/?utm_source=ig_web_copy_link&stkn=NTc4MTIwNjQ2YQ==" });
   check("…or from the caption block sent inside a script, quotes and all escaped (2.7.6: the reel that failed, Dct0lIPyvQJ)", ig.status === 200 && /^by iramsfoodstory\n\nCrispy chipotle beef tacos chipotle lime crema \u{1f32e}\n\nIngredients\n\nFor the taco seasoning:\n\n1 tbsp red chili powder\n2 tbsp garlic powder\n\nMethod:\nMix it all\.$/u.test(ig.text), JSON.stringify(ig.text));
-  s.setMode({ instagram: "reel404" });
-  s.clearLog(); ig = await s.post("/api/fetch", { url: IG });
-  check("…and tries the post's other address when the reel one fails", ig.status === 200 && /Crispy garlic parmesan/.test(ig.text) && /MOCK_INSTAGRAM https:\/\/www\.instagram\.com\/p\/DdR9Szhy_wE\/embed\/captioned\//.test(s.log()), s.log().match(/MOCK_INSTAGRAM.*/g)?.join(" "));
+  // 2.7.7: Instagram sent the NAS its error page for the embed: the post query, then the link preview
+  s.setMode({ instagram: "blocked-embed" });
+  s.clearLog(); ig = await s.post("/api/fetch", { url: "https://www.instagram.com/reels/Dct0lIPyvQJ/" });
+  check("when Instagram sends its error page for the embed, the post query gets the caption", ig.status === 200 && /^by iramsfoodstory\n\nCrispy chipotle beef tacos \u{1f32e}\n\n2 lb ground beef/u.test(ig.text) && /MOCK_INSTAGRAM POST https:\/\/www\.instagram\.com\/graphql\/query/.test(s.log()), JSON.stringify(ig).slice(0, 200));
+  s.setMode({ instagram: "preview-only" });
+  ig = await s.post("/api/fetch", { url: "https://www.instagram.com/reels/Dct0lIPyvQJ/" });
+  check("…and when that's refused too, the link preview Instagram gives apps quotes it", ig.status === 200 && /^by iramsfoodstory\n\nCrispy chipotle beef tacos chipotle lime crema \u{1f32e}\n\n2 lb ground beef\n1 tbsp taco seasoning$/u.test(ig.text), JSON.stringify(ig.text));
+  let viaLog = await (await fetch(s.url + "/api/admin/activity?cat=links&limit=5")).json();
+  check("…the activity log says which way worked", viaLog.some((r) => r.target === "instagram.com · read the caption (preview)") && viaLog.some((r) => r.target === "instagram.com · read the caption (query)"), JSON.stringify(viaLog.map((r) => r.target)));
   s.setMode({ instagram: "nocaption" });
   ig = await s.post("/api/fetch", { url: IG });
-  check("…with no caption: what it got is said, and the page is kept in the data folder to look at", /^instagram\.com sent no caption \(200, \d+ KB\)$/.test(ig.detail) && existsSync(path.join(s.data, "debug", "instagram-DdR9Szhy_wE-reel.html")), ig.detail);
+  check("…with no caption: what each way got is said, and the pages are kept in the data folder to look at", /^instagram\.com sent no caption \(embed: 200, 0 KB; query: 401; preview: 200, 0 KB, its error page; embed-browser: 200, 0 KB\)$/.test(ig.detail) && existsSync(path.join(s.data, "debug", "instagram-DdR9Szhy_wE-embed.html")) && existsSync(path.join(s.data, "debug", "instagram-DdR9Szhy_wE-preview.html")), ig.detail);
   check("…no caption is a failed fetch, not 'read' (2.7.3 logged a login wall as read)", ig.status === 422 && ig.code === "fetch_failed" && ig.source === "instagram", JSON.stringify(ig));
   const links = await (await fetch(s.url + "/api/admin/activity?cat=links&limit=20")).json();
-  check("…and the owner's activity says so: 'no caption', and 'read the caption' when there was one", links.some((r) => /^instagram\.com · no caption \(instagram\.com sent no caption \(200, \d+ KB\)\)$/.test(r.target)) && links.some((r) => r.target === "instagram.com · read the caption") && !links.some((r) => /^instagram\.com · read$/.test(r.target)), JSON.stringify(links.map((r) => r.target).slice(0, 6)));
+  check("…and the owner's activity says so: 'no caption', and 'read the caption' when there was one", links.some((r) => /^instagram\.com · no caption \(instagram\.com sent no caption \(embed: /.test(r.target)) && links.some((r) => r.target === "instagram.com · read the caption (embed)") && !links.some((r) => /^instagram\.com · read$/.test(r.target)), JSON.stringify(links.map((r) => r.target).slice(0, 6)));
   // in the app: an earlier link's text is cleared, and the message says what to do
   await page.evaluate(() => { const st = document.querySelector("#importStatus"); st.className = "status"; st.textContent = ""; document.getElementById("srcText").value = ""; });
   s.setMode({});
