@@ -25,8 +25,12 @@ offline (no service worker), and Web Share (Share list copies instead).
 ## Building and publishing
 
 ```sh
-node tools/preview/build.mjs <out dir> [<repo or worktree to build from>]
+node tools/preview/build.mjs <out dir> [<repo or worktree to build from>] [--as 2.8.0] [--note "Slide along the tab bar"]…
 ```
+
+`--as` is the version the preview is heading for (shown as "2.8.0 preview"; without it,
+the version in `package.json`). Each `--note` becomes a line of a "2.8.0 preview" entry at
+the top of the version sheet's history, so it says what's in the preview to try.
 
 Then publish `<out dir>/index.html` with the Artifact tool to the URL above, with
 `root: <out dir>` and `files` from `<out dir>/files.json`, and a `label` saying what's in

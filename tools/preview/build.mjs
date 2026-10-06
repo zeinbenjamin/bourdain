@@ -1,6 +1,8 @@
 // Builds the Bourdain preview: the real public/index.html with mock.js standing in for
 // server.js, as a page for a Claude artifact (see README.md here).
-//   node tools/preview/build.mjs <out dir> [<repo or worktree to build from>]
+//   node tools/preview/build.mjs <out dir> [<repo or worktree>] [--as 2.8.0] [--note "…"]…
+// --as names the version the preview is heading for (else package.json's); each --note is
+// a line of a "<version> (preview)" entry at the top of the version sheet's history.
 // The out dir gets index.html, img/ (the demo covers) and avatars/; publish index.html
 // with the rest as its files. Fails loudly if index.html has changed in a way it relies on.
 import path from "node:path";
@@ -10,7 +12,9 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const OUT = path.resolve(process.argv[2] || "preview-out"), REPO = path.resolve(process.argv[3] || path.join(HERE, "../.."));
+const args = process.argv.slice(2), pos = [], notes = []; let as = null;
+for (let i = 0; i < args.length; i++) { if (args[i] === "--as") as = args[++i]; else if (args[i] === "--note") notes.push(args[++i]); else pos.push(args[i]); }
+const OUT = path.resolve(pos[0] || "preview-out"), REPO = path.resolve(pos[1] || path.join(HERE, "../.."));
 rmSync(OUT, { recursive: true, force: true }); mkdirSync(path.join(OUT, "img"), { recursive: true }); mkdirSync(path.join(OUT, "avatars"), { recursive: true });
 
 const pkg = JSON.parse(readFileSync(path.join(REPO, "package.json"), "utf8"));
@@ -21,7 +25,9 @@ for (const line of readFileSync(path.join(REPO, "CHANGELOG.md"), "utf8").split("
   const h = line.match(/^##\s+(\S+)\s+[—-]+\s+(\d{4}-\d{2}-\d{2})/); if (h) { changelog.push({ version: h[1], date: h[2], notes: [] }); continue; }
   const b = line.match(/^-\s+(.+)/); if (b && changelog.length) changelog.at(-1).notes.push(b[1].trim());
 }
-const VERSION = { version: pkg.version + " preview", commit, dataVersion: 2, changelog };
+const version = (as || pkg.version) + " preview";
+if (notes.length) changelog.unshift({ version, date: new Date().toISOString().slice(0, 10), notes });
+const VERSION = { version, commit, dataVersion: 2, changelog };
 
 // Demo covers get fixed 32-hex ids, so photoUrl()/coverUrl() accept them as they would real ones.
 const covers = {};
