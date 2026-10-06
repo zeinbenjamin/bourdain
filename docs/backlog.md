@@ -8,38 +8,15 @@ Priorities follow `docs/strategy.md`: reliability first, then the core loop.
 
 Nothing open. Past cooks and the list view shipped in 2.6.0.
 
-## Planned for 2.7.0
+## Planned for 2.7.1
 
-Agreed with Zein on 2026-10-06; not built yet. Waiting on Nicole's answers about
-the shopping list before starting. Mock-ups were made in a test browser, not in
-the app.
+Keeping an unsaved import or edit through an app restart, and back navigation
+(both in the UI review table below). The Shop tab, the new tab order and the
+floating tab bar shipped in 2.7.0.
 
-### 1. Shopping list as its own tab (pilot request, Nicole)
-
-- **Option B:** a Shop tab, with the hidden code restored (`buildList`, `renderShop`,
-  the `shop` collection). A week switcher like the Plan's, kept in step with it.
-- **From today:** for the current week, only today onwards; other weeks in full.
-- **Amounts in the recipe's own unit** when every recipe uses the same one (3 tbsp,
-  4 cup). The old `fromBase` turned them into ml and L ("45 ml curry paste").
-- **Pantry items stay in their aisle**, ticked from the start, with a small grey
-  "from pantry" tag that isn't crossed out (matched with `itemKey`, exact names
-  only). Unticking one puts it back on the list. Clear ticked clears only what
-  you ticked yourself.
-- Grouped by aisle; each item says which recipes it's for; manual "Add something
-  else"; **Share list** (Web Share, copy as a fallback) and **Clear ticked** at the
-  bottom, under the add box.
-- Check Nicole's answers first: from today vs the whole week, whether the recipe
-  names help, and whether she'd share it.
-
-### 2. Tabs in a new order (Zein)
-
-**Plan, Pantry, Recipes, Shop, Archives**: Recipes in the middle as the main
-screen, with the others either side. The app still opens on Recipes. Five tabs:
-`.tabs` becomes `repeat(5,1fr)`. Update the `add` suite's tab check and the
-layout checks at phone width.
-
-The UI review's two bigger items below (keeping a draft through a restart, and
-back navigation) move to 2.7.1.
+To watch after 2.7.0: whether the pilot uses the Shop (`shop_changed` in the
+owner's activity view), and how the floating tab bar looks on a real iPhone and
+iPad (Safari draws the blur differently from desktop Chromium).
 
 ## From the UI review (2026-10-06)
 
@@ -54,6 +31,7 @@ the home bar gap and lazy pictures; these are left, most useful first.
 | "Share to Bourdain" on Android | A `share_target` in the web app manifest puts Bourdain in the share menu of Instagram, TikTok and Chrome. Android only; iPhone doesn't allow it for web apps. Small to medium. |
 | Toasts sit over sheet content | e.g. the Undo toast covers a row of the cook log for 6s. Raise it above the sheet, or into the sheet's own space. Small. |
 | Check the keyboard with the tab bar | On some iOS versions the fixed tab bar rides up over the keyboard and can cover the field being typed in. Needs checking on a real iPhone (edit form, pantry box) before deciding on a fix. |
+| Wider screens (iPad) | Content is capped at 760px, but rows inside it still run the full width: on the Plan a day's name sits far from its "+", and a few other screens look the same. Only worth doing if the pilot uses iPads. The tab bar's iPad cap is in 2.7.0. |
 
 ## Requested by Zein
 
@@ -84,7 +62,6 @@ Nothing open. Home cost vs eating out shipped in 2.5.0.
 | Pantry amounts that go down when you cook | Needs every pantry item to have a real amount and unit: a data migration (a 3.0.0). |
 | Nutrition estimates | |
 | Timer alerts while the phone is locked | Needs push notifications. |
-| Bring back the shopping list | Code is intact and hidden (`renderShop`, the `shop` collection). |
 | Clean up unused photos (`.jpg`) | Covers are already swept. |
 | Move Pantry behind the Recipes "+" | As something like "Cook from the pantry". |
 

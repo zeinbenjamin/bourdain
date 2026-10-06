@@ -6,6 +6,15 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.7.0 — 2026-10-06
+- New Shop tab: your shopping list, built from the meals on the Plan. It's grouped by aisle, and under each item it says which recipes it's for.
+- The Shop shows the same week as the Plan. For this week it lists only what you need from today on; other weeks are in full.
+- Amounts stay in the recipe's own unit when every recipe uses the same one, so 3 tbsp of curry paste is 3 tbsp, not 45 ml.
+- Things already in your pantry stay in their aisle, ticked, with a small "from pantry" tag. Untick one to buy it after all.
+- At the bottom: add anything else you need, Share list (sends what's left to buy to a message or note), and Clear ticked (unticks what you ticked, with Undo; pantry items stay ticked).
+- The tabs are in a new order, with Recipes in the middle: Plan, Pantry, Recipes, Shop, Archives. The app still opens on Recipes.
+- The tab bar is now a rounded bar floating above the page. On an iPad it sits in the middle instead of stretching across the screen.
+
 ## 2.6.5 — 2026-10-06
 - Fixed: on some iPhones the tab bar (and the Bourdain header) slid up the screen with the recipes while scrolling. They now stay put.
 - A meal can only be planned once on the same day. Adding it again tells you it's already there; tap it on the Plan to change the serves. Days that already had the same meal more than once now show it once, with the larger serves.

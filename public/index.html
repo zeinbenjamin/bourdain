@@ -75,27 +75,31 @@ a{color:inherit}
 .top .sub{font-family:var(--sans);color:var(--ink-3);font-size:11px;font-weight:500;letter-spacing:.02em}
 .top .sync{color:var(--ink);font-weight:700}
 
-main{flex:1; min-height:0; overflow-y:auto; overscroll-behavior-y:contain; -webkit-overflow-scrolling:touch; padding:0 0 calc(84px + env(safe-area-inset-bottom,0px))} /* clear the tab bar, home bar included (2.6.3) */
+main{flex:1; min-height:0; overflow-y:auto; overscroll-behavior-y:contain; -webkit-overflow-scrolling:touch; padding:0 0 calc(100px + env(safe-area-inset-bottom,0px))} /* clear the floating tab bar, home bar included (2.6.3, 2.7.0) */
 .signinbar{display:block;width:100%;min-height:48px;border:0;border-bottom:1px solid var(--rule);background:var(--flame);color:var(--paper);font-family:var(--sans);font-size:14px;font-weight:600;padding:10px 18px;text-align:left}
 .signinbar[hidden]{display:none}
 section.view{display:none; padding:16px 18px 24px; max-width:760px; margin:0 auto; width:100%}
 section.view.active{display:block}
 
-/* Tabs */
+/* Tabs (2.7.0): a frosted pill floating above the page, the content blurred behind
+   it. Capped at 500px and centred, so on an iPad it sits under the content like a
+   dock instead of spreading five tabs across the screen. */
 .tabs{
-  position:fixed; left:0; right:0; bottom:0; z-index:5;
-  background:var(--card); border-top:1px solid var(--line);
-  display:grid; grid-template-columns:repeat(4,1fr);
-  padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));
+  position:fixed; left:14px; right:14px; bottom:calc(10px + env(safe-area-inset-bottom,0px)); z-index:5;
+  max-width:500px; margin:0 auto;
+  display:grid; grid-template-columns:repeat(5,1fr); gap:2px; padding:6px;
+  background:rgba(255,255,255,.72); -webkit-backdrop-filter:blur(18px) saturate(180%); backdrop-filter:blur(18px) saturate(180%);
+  border:1px solid rgba(18,18,18,.08); border-radius:999px;
+  box-shadow:0 10px 30px rgba(18,18,18,.16), 0 1px 3px rgba(18,18,18,.08);
 }
 .tabs button{
-  background:none; border:0; padding:8px 4px 6px; border-radius:var(--r);
-  font-family:var(--sans); color:var(--ink-3); font-size:11px; font-weight:500; letter-spacing:.01em;
-  display:flex; flex-direction:column; align-items:center; gap:3px;
+  background:none; border:0; min-height:54px; padding:6px 2px 5px; border-radius:999px;
+  font-family:var(--sans); color:var(--ink-3); font-size:10px; font-weight:500; letter-spacing:.01em; white-space:nowrap;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
 }
-.tabs button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.tabs button.on{color:var(--ink);font-weight:600}
-.tabs button.on svg{stroke:var(--ink)}
+.tabs button svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.tabs button.on{color:var(--ink);font-weight:700;background:rgba(18,18,18,.08)}
+.tabs button.on svg{stroke:var(--ink);stroke-width:2.3}
 
 /* Generic controls */
 .btn{
@@ -392,6 +396,11 @@ body.aslist .rcard .tags{display:none}
 .item .lbl .q{font-weight:600}
 .item.done .lbl{text-decoration:line-through;color:var(--ink-3)}
 .item .from{font-family:var(--sans);font-size:12px;color:var(--ink-3)}
+/* From the pantry: ticked from the start; the tag is inline-block so the strike-through doesn't reach it */
+.ptag{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;background:var(--steel);border:1px solid var(--line);font-family:var(--sans);font-size:11px;font-weight:600;color:var(--ink-2);vertical-align:2px}
+.shopsub{text-align:center;font-family:var(--sans);font-size:13px;color:var(--ink-3);margin:-4px 0 14px}
+.shopacts{display:flex;gap:8px;margin-top:14px}
+.shopacts .btn{flex:1;min-height:44px}
 .item .x{border:0;background:none;color:var(--ink-3);font-size:20px;line-height:1;padding:0;width:44px;height:44px;margin:-8px -12px -8px 0;flex:none}
 .addline{display:flex;gap:6px;margin-top:6px}
 .addline .input{flex:1;min-width:0}
@@ -598,14 +607,20 @@ body.aslist .rcard .tags{display:none}
 
   <!-- SHOP -->
   <section class="view" id="view-shop">
-    <div class="shop-head">
-      <h2 id="shopTitle" style="font-size:22px">Shopping list</h2>
-      <button class="btn small" id="clearChecked">Clear ticked</button>
+    <div class="weeknav">
+      <button class="btn small" data-week="-1" aria-label="Previous week">‹</button>
+      <button class="wk" data-week="0" aria-label="Back to this week"><span class="wkt" id="shopWeekTitle"></span><span class="note">(this week)</span></button>
+      <button class="btn small" data-week="1" aria-label="Next week">›</button>
     </div>
+    <p class="shopsub" id="shopSub"></p>
     <div id="shopList"></div>
     <div class="addline">
       <input class="input" id="manualItem" placeholder="Add something else (e.g. 2 lemons)">
       <button class="btn" id="addManual">Add</button>
+    </div>
+    <div class="shopacts">
+      <button class="btn" id="shareList">Share list</button>
+      <button class="btn" id="clearChecked">Clear ticked</button>
     </div>
   </section>
 
@@ -663,14 +678,16 @@ body.aslist .rcard .tags{display:none}
 </main>
 
 <nav class="tabs" id="tabs">
-  <button data-view="recipes" class="on">
-    <svg viewBox="0 0 24 24"><path d="M4 4h12a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2V4z"/><path d="M4 4v14a2 2 0 0 0 2 2h12"/><path d="M8 8h6M8 12h6"/></svg>Recipes</button>
   <button data-view="plan">
     <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Plan</button>
-  <button data-view="timeline">
-    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></svg>Archives</button>
   <button data-view="pantry">
     <svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M5 12h14M10 7v2M10 15v2"/></svg>Pantry</button>
+  <button data-view="recipes" class="on">
+    <svg viewBox="0 0 24 24"><path d="M4 4h12a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2V4z"/><path d="M4 4v14a2 2 0 0 0 2 2h12"/><path d="M8 8h6M8 12h6"/></svg>Recipes</button>
+  <button data-view="shop">
+    <svg viewBox="0 0 24 24"><path d="M6 8h12l-1 12H7L6 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>Shop</button>
+  <button data-view="timeline">
+    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></svg>Archives</button>
 </nav>
 
 <div class="sheet-bg" id="sheetBg"></div>
@@ -1904,6 +1921,8 @@ function slotSheet(k,ix){
 document.getElementById("prevWeek").onclick=()=>{ state.week=addDays(state.week,-7); show(state.view); };
 document.getElementById("nextWeek").onclick=()=>{ state.week=addDays(state.week,7); show(state.view); };
 document.getElementById("thisWeek").onclick=()=>{ const m=mondayOf(new Date()); if(iso(m)===iso(state.week)) return; state.week=m; show(state.view); }; // tap the dates to come back to this week
+document.querySelector("#view-shop .weeknav").onclick=e=>{ const b=e.target.closest("[data-week]"); if(!b) return; const d=+b.dataset.week; // the Shop shows the Plan's week
+  if(d) state.week=addDays(state.week,7*d); else { const m=mondayOf(new Date()); if(iso(m)===iso(state.week)) return; state.week=m; } show(state.view); };
 
 /* sheets */
 function openSheet(html){
@@ -1951,60 +1970,103 @@ function pickDay(recipeId){
   });
 }
 
-/* ---------- shopping list ---------- */
+/* ---------- shopping list (the Shop tab, 2.7.0) ----------
+   Built from the Plan for the week shown (the same week as the Plan; from today on
+   for this week), grouped by aisle, each item saying which recipes it's for. The
+   `shop` doc for the week keeps only what's yours: `checked` (items you ticked),
+   `need` (pantry items you unticked to buy) and `manual` (things you added). */
 const MASS={g:1,kg:1000}, VOL={ml:1,l:1000,tsp:5,tbsp:15,cup:250};
 function family(u){ u=(u||"").toLowerCase(); if(MASS[u])return "mass"; if(VOL[u])return "vol"; return "count:"+(u||"whole"); }
 function toBase(q,u){ u=(u||"").toLowerCase(); if(MASS[u])return q*MASS[u]; if(VOL[u])return q*VOL[u]; return q; }
 function fromBase(q,fam){ if(fam==="mass") return q>=1000?[+(q/1000).toFixed(2),"kg"]:[Math.round(q),"g"]; if(fam==="vol") return q>=1000?[+(q/1000).toFixed(2),"l"]:[Math.round(q),"ml"]; const u=fam.slice(6); return [+q.toFixed(2), u==="whole"?"":u]; }
+// The days the list is for: this week from today on, any other week in full.
+function shopDays(){ const today=iso(new Date()); return [0,1,2,3,4,5,6].map(i=>iso(addDays(state.week,i))).filter(k=>iso(state.week)!==iso(mondayOf(new Date()))||k>=today); }
 
-function buildList(){
+function buildList(days=shopDays()){
   const items={};
-  for(let i=0;i<7;i++){
-    const k=iso(addDays(state.week,i)); const day=planDay(k);
-    day.entries.forEach(e=>{
+  for(const k of days){
+    planDay(k).entries.forEach(e=>{
       const r=state.recipes[e.recipeId]; if(!r) return;
       const f = r.servings? e.servings/r.servings : 1;
       (r.ingredients||[]).forEach(ing=>{
-        const item=(ing.item||ing.raw_text||"").trim().toLowerCase(); if(!item) return;
+        const item=String(ing.item||ing.raw_text||"").trim().toLowerCase(); if(!item) return;
         const fam=family(ing.unit); const key=item+"|"+fam;
         const q = ing.quantity==null||ing.quantity===""? null : Number(ing.quantity)*f;
-        if(!items[key]) items[key]={key,item,fam,qty:0,unknown:false,aisle:ing.aisle||"other",from:new Set(),optional:!!ing.optional};
+        if(!items[key]) items[key]={key,item,fam,qty:0,own:0,units:new Set(),unknown:false,aisle:ing.aisle||"other",from:new Set(),optional:!!ing.optional};
         const it=items[key];
-        if(q==null||!isFinite(q)) it.unknown=true; else it.qty+=toBase(q,ing.unit);
-        it.from.add(r.title); if(!ing.optional) it.optional=false;
+        if(q==null||!isFinite(q)) it.unknown=true; else { it.qty+=toBase(q,ing.unit); it.own+=q; it.units.add(String(ing.unit||"").toLowerCase()); }
+        it.from.add(r.title||"Untitled"); if(!ing.optional) it.optional=false;
       });
     });
   }
   return Object.values(items);
 }
-function shopWeek(){ const k=iso(state.week); if(!state.shop[k]) state.shop[k]={week:k,checked:{},manual:[]}; return state.shop[k]; }
+// The amount to show: in the recipe's own unit when every recipe uses the same one
+// (3 tbsp stays 3 tbsp), else added up in g/kg or ml/L.
+function shopAmount(it){
+  if(it.unknown&&!it.qty) return "";
+  const [q,u]=it.units.size===1?[Math.round(it.own*100)/100,[...it.units][0]]:fromBase(it.qty,it.fam);
+  return `${fmtQty(q)}${unitLabel(u)?" "+unitLabel(u):""}`;
+}
+function shopWeek(){ const k=iso(state.week); const sw=state.shop[k]||(state.shop[k]={week:k}); sw.checked=sw.checked||{}; sw.need=sw.need||{}; sw.manual=Array.isArray(sw.manual)?sw.manual:[]; return sw; }
 async function saveShop(){ const k=iso(state.week); await store.put("shop",k,state.shop[k]); }
+// Everything on the list for the week shown, with what's ticked and why.
+function shopRows(){
+  const sw=shopWeek(), have=new Set(Object.values(state.pantry).map(p=>itemKey(p&&p.item)));
+  return [...buildList().map(it=>{ const pantry=have.has(itemKey(it.item));
+      return {key:it.key,label:shopAmount(it),item:it.item,aisle:it.aisle,from:[...it.from].join(", "),optional:it.optional,manual:false,pantry,
+        done:pantry?!sw.need[it.key]:!!sw.checked[it.key]}; }),
+    ...sw.manual.map(m=>({key:"m:"+m.id,label:m.qty?`${fmtQty(m.qty)}${unitLabel(m.unit)?" "+unitLabel(m.unit):""}`:"",item:String(m.item||""),aisle:m.aisle||"other",from:"",manual:true,id:m.id,done:!!sw.checked["m:"+m.id]}))];
+}
 
 function renderShop(){
-  const sw=shopWeek(); const auto=buildList();
-  const rows=[...auto.map(it=>{ const [q,u]=fromBase(it.qty,it.fam); return {key:it.key,label:`${it.unknown&&!it.qty?"":fmtQty(q)+(unitLabel(u)?" "+unitLabel(u):"")}`.trim(),item:it.item,aisle:it.aisle,from:[...it.from].join(", "),optional:it.optional,manual:false}; }),
-    ...sw.manual.map(m=>({key:"m:"+m.id,label:m.qty?`${fmtQty(m.qty)}${unitLabel(m.unit)?" "+unitLabel(m.unit):""}`:"",item:m.item,aisle:m.aisle||"other",from:"",manual:true,id:m.id}))];
-  const el=document.getElementById("shopList");
-  if(!rows.length){ el.innerHTML=`<div class="empty"><h3>Nothing to buy yet</h3>Plan some meals for this week and the list builds itself. You can also add things by hand below.</div>`; return; }
+  const now=iso(state.week)===iso(mondayOf(new Date()));
+  document.getElementById("shopWeekTitle").textContent=weekLabel(state.week);
+  document.querySelector("#view-shop .weeknav").classList.toggle("current",now);
+  const meals=shopDays().reduce((n,k)=>n+planDay(k).entries.filter(e=>state.recipes[e.recipeId]).length,0);
+  document.getElementById("shopSub").textContent=`${now?"From today · ":""}${meals?plural(meals,"meal")+" planned":"No meals planned"}`;
+  const sw=shopWeek(), rows=shopRows(), el=document.getElementById("shopList");
+  if(!rows.length){ setHtml(el,`<div class="empty"><h3>Nothing to buy yet</h3>${now&&shopDays().length<7?"Plan meals for the rest of this week":"Plan some meals for this week"} and the list builds itself. You can also add things below.</div>`); return; }
   const groups={}; rows.forEach(r=>{ (groups[r.aisle]=groups[r.aisle]||[]).push(r); });
   const order=[...AISLES,...Object.keys(groups).filter(a=>!AISLES.includes(a))];
-  el.innerHTML=order.filter(a=>groups[a]).map(a=>`<div class="aisle"><h3>${esc(a[0].toUpperCase()+a.slice(1))}</h3>${groups[a].sort((x,y)=>x.item.localeCompare(y.item)).map(r=>{
-    const done=!!sw.checked[r.key];
-    return `<label class="item ${done?"done":""}"><input type="checkbox" data-key="${esc(r.key)}" ${done?"checked":""}>
-      <span class="lbl"><span class="q">${esc(r.label)}</span> ${esc(r.item)}${r.optional?` <span class="faint">(optional)</span>`:""}${r.from?`<div class="from">${esc(r.from)}</div>`:""}</span>
-      ${r.manual?`<button class="x" data-rmm="${r.id}" aria-label="Remove">×</button>`:""}</label>`; }).join("")}</div>`).join("");
-  el.onchange=async e=>{ const c=e.target.closest("input[type=checkbox]"); if(!c) return; if(c.checked) sw.checked[c.dataset.key]=true; else delete sw.checked[c.dataset.key]; c.closest(".item").classList.toggle("done",c.checked); await saveShop(); };
-  el.onclick=async e=>{ const b=e.target.closest("[data-rmm]"); if(!b) return; e.preventDefault(); sw.manual=sw.manual.filter(m=>m.id!==b.dataset.rmm); await saveShop(); renderShop(); };
+  setHtml(el,order.filter(a=>groups[a]).map(a=>`<div class="aisle"><h3>${esc(a[0].toUpperCase()+a.slice(1))}</h3>${groups[a].sort((x,y)=>x.item.localeCompare(y.item)).map(r=>
+    `<label class="item ${r.done?"done":""}"><input type="checkbox" data-key="${esc(r.key)}" ${r.pantry?"data-pantry":""} ${r.done?"checked":""}>
+      <span class="lbl">${r.label?`<span class="q">${esc(r.label)}</span> `:""}${esc(r.item)}${r.optional?` <span class="faint">(optional)</span>`:""}${r.pantry?`<span class="ptag">from pantry</span>`:""}${r.from?`<div class="from">${esc(r.from)}</div>`:""}</span>
+      ${r.manual?`<button class="x" data-rmm="${esc(r.id)}" aria-label="Remove ${esc(r.item)}">×</button>`:""}</label>`).join("")}</div>`).join(""));
+  el.onchange=async e=>{ const c=e.target.closest("input[type=checkbox]"); if(!c) return; const sw=shopWeek(), k=c.dataset.key;
+    if(c.hasAttribute("data-pantry")){ if(c.checked) delete sw.need[k]; else sw.need[k]=true; } // unticking a pantry item puts it back on the list
+    else if(c.checked) sw.checked[k]=true; else delete sw.checked[k];
+    c.closest(".item").classList.toggle("done",c.checked); await saveShop(); };
+  el.onclick=async e=>{ const b=e.target.closest("[data-rmm]"); if(!b) return; e.preventDefault(); const sw=shopWeek(); sw.manual=sw.manual.filter(m=>m.id!==b.dataset.rmm); delete sw.checked["m:"+b.dataset.rmm]; await saveShop(); renderShop(); };
 }
-document.getElementById("clearChecked").onclick=async()=>{ const sw=shopWeek(); sw.checked={}; await saveShop(); renderShop(); };
+// Clear ticked: only what you ticked yourself. Pantry items stay ticked.
+document.getElementById("clearChecked").onclick=async()=>{
+  const sw=shopWeek(), was=sw.checked; if(!Object.keys(was).length){ toast("Nothing ticked to clear"); return; }
+  sw.checked={}; renderShop(); await saveShop();
+  toast("Cleared the ticks",{label:"Undo",run:async()=>{ shopWeek().checked=was; renderShop(); await saveShop(); }});
+};
+// What's left to buy, as plain text: by aisle, without what's ticked or in the pantry.
+function shopText(){
+  const left=shopRows().filter(r=>!r.done); if(!left.length) return "";
+  const groups={}; left.forEach(r=>{ (groups[r.aisle]=groups[r.aisle]||[]).push(r); });
+  const order=[...AISLES,...Object.keys(groups).filter(a=>!AISLES.includes(a))];
+  return `Shopping list, ${weekLabel(state.week)}\n`+order.filter(a=>groups[a]).map(a=>`\n${a[0].toUpperCase()+a.slice(1)}\n`+groups[a].sort((x,y)=>x.item.localeCompare(y.item)).map(r=>`- ${r.label?r.label+" ":""}${r.item}`).join("\n")).join("\n");
+}
+document.getElementById("shareList").onclick=async()=>{
+  const text=shopText(); if(!text){ toast("Nothing left to buy"); return; }
+  if(navigator.share){ try{ await navigator.share({title:"Shopping list",text}); return; }catch(e){ if(e&&e.name==="AbortError") return; } }
+  try{ await navigator.clipboard.writeText(text); toast("List copied. Paste it into a message"); }
+  catch{ toast("Couldn't share or copy the list on this phone"); }
+};
 document.getElementById("addManual").onclick=addManualItem;
 document.getElementById("manualItem").addEventListener("keydown",e=>{ if(e.key==="Enter") addManualItem(); });
 async function addManualItem(){
   const inp=document.getElementById("manualItem"); const t=inp.value.trim(); if(!t) return;
   const m=t.match(/^(\d+(?:\.\d+)?|½|¼|¾)\s*(g|kg|ml|l|tsp|tbsp|cups?|cans?|bunch|packets?)?\s+(.+)$/i);
   const fr={"½":.5,"¼":.25,"¾":.75};
-  const entry = m? {id:uid(),qty:fr[m[1]]??Number(m[1]),unit:(m[2]||"").toLowerCase().replace(/s$/,""),item:m[3].toLowerCase(),aisle:"other"} : {id:uid(),qty:null,unit:"",item:t.toLowerCase(),aisle:"other"};
-  shopWeek().manual.push(entry); inp.value=""; await saveShop(); renderShop();
+  const item=(m?m[3]:t).toLowerCase();
+  const entry = {id:uid(),qty:m?fr[m[1]]??Number(m[1]):null,unit:m?(m[2]||"").toLowerCase().replace(/s$/,""):"",item,aisle:guessAisle(item)};
+  shopWeek().manual.push(entry); inp.value=""; renderShop(); await saveShop();
 }
 
 /* ---------- pantry ---------- */
@@ -2739,7 +2801,7 @@ function renderReview(){
    tap down: a person, AI usage and limits, all activity, the audit log, errors.
    Health shows only what the server can check; the rest says "Not monitored". */
 const ACT_WORDS={ recipe_added:"added", recipe_edited:"edited", recipe_deleted:"deleted", cook_logged:"cooked", cook_added:"added a past cook of", recipe_copied:"copied",
-  plan_changed:"changed the plan for", pantry_changed:"pantry:", pantry_removed:"took off the pantry:", profile_changed:"set their name to",
+  plan_changed:"changed the plan for", shop_changed:"changed the shopping list for", pantry_changed:"pantry:", pantry_removed:"took off the pantry:", profile_changed:"set their name to",
   ai_import:"imported a recipe with AI", ai_scan:"scanned the fridge", ai_ideas:"asked for recipe ideas", ai_write:"had a recipe written", ai_cover:"painted a cover", ai_dish:"guessed a recipe from a photo",
   signed_in:"signed in via", link_fetched:"fetched a link from" };
 const AUDIT_WORDS={ limits_changed:"changed everyone's limits:", person_limits_changed:"changed limits for", cover_price_changed:"changed the cover price:",
@@ -2796,7 +2858,7 @@ function adminGo(screen, extra={}){
 const adminFail=e=>e.code==="not_admin"?"Only the owner can see this.":keepForLater(e)?aiError(e):e.status?`The server couldn't load this (${e.code}). Check the server logs.`:"Can't reach the server. Try again when you're back online.";
 function actLine(r){
   let t=r.target||"";
-  if(r.action==="plan_changed"&&/^\d{4}-\d{2}-\d{2}$/.test(t)) t=fmtDate(t);
+  if((r.action==="plan_changed"||r.action==="shop_changed")&&/^\d{4}-\d{2}-\d{2}$/.test(t)) t=fmtDate(t);
   if(r.action.startsWith("ai_")&&t) t=`(didn't work: ${t})`;
   return `<div class="adm-act"><span class="t">${esc(whenShort(r.at))}</span><span><b>${esc(r.name)}</b> ${esc(ACT_WORDS[r.action]||r.action)}${t?` <i>${esc(t)}</i>`:""}</span></div>`;
 }

@@ -14,8 +14,9 @@ try {
   // --- tab bar
   const tabs = await page.evaluate(() => [...document.querySelectorAll("#tabs button")].map((t) => ({ v: t.dataset.view, w: t.getBoundingClientRect().width })));
   const labels = await page.$$eval("#tabs button", (bs) => bs.map((b) => b.textContent.trim()).join());
-  check("four tabs: Recipes, Plan, Archives, Pantry; no Import", tabs.map((t) => t.v).join() === "recipes,plan,timeline,pantry" && labels === "Recipes,Plan,Archives,Pantry", labels);
-  check("tabs share the width evenly", Math.max(...tabs.map((t) => t.w)) - Math.min(...tabs.map((t) => t.w)) < 1 && tabs[0].w > 80, JSON.stringify(tabs));
+  check("five tabs, Recipes in the middle: Plan, Pantry, Recipes, Shop, Archives; no Import (2.7.0)", tabs.map((t) => t.v).join() === "plan,pantry,recipes,shop,timeline" && labels === "Plan,Pantry,Recipes,Shop,Archives", labels);
+  check("…and the app still opens on Recipes", (await onTab()) === "recipes" && await page.isVisible("#view-recipes.active"));
+  check("tabs share the width evenly", Math.max(...tabs.map((t) => t.w)) - Math.min(...tabs.map((t) => t.w)) < 1 && tabs[0].w >= 60, JSON.stringify(tabs));
 
   // --- "+" asks how
   await page.click("#btnManual");

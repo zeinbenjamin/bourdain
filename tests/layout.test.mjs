@@ -282,6 +282,31 @@ try {
   await page.click(`#sheet [data-k="${kd}"]`); await page.waitForTimeout(300);
   check("…nor from the recipe's 'Add to the week'", (await page.evaluate((k) => state.plan[k].entries.length, kd)) === 2 && /Already on/.test(await page.textContent("#toast")));
 
+  // --- 2.7.0: the tab bar floats: a pill 14px in from each side, 10px above the bottom,
+  // the page blurred behind it; capped at 500px and centred on an iPad
+  const pill = () => page.evaluate(() => { const t = document.getElementById("tabs"), r = t.getBoundingClientRect(), cs = getComputedStyle(t);
+    return { left: Math.round(r.left), right: Math.round(innerWidth - r.right), bottom: Math.round(innerHeight - r.bottom), w: Math.round(r.width), vw: innerWidth,
+      blur: /blur/.test(cs.backdropFilter || cs.webkitBackdropFilter || ""), round: parseFloat(cs.borderTopLeftRadius) >= r.height / 2,
+      buttons: [...t.querySelectorAll("button")].map((b) => { const x = b.getBoundingClientRect(); return { v: b.dataset.view, w: Math.round(x.width), h: Math.round(x.height), fits: b.scrollWidth <= b.clientWidth, label: b.textContent.trim() }; }) }; });
+  await page.evaluate(() => { state.view = "recipes"; show("recipes"); });
+  let tb = await pill();
+  check("tab bar: a rounded pill floating 14px in from each side and 10px above the bottom, the page blurred behind it", tb.left === 14 && tb.right === 14 && tb.bottom === 10 && tb.blur && tb.round, JSON.stringify(tb));
+  check("…five 44px+ tap targets, every label in full", tb.buttons.length === 5 && tb.buttons.every((x) => x.w >= 44 && x.h >= 44 && x.fits && x.label), JSON.stringify(tb.buttons));
+  await page.setViewportSize({ width: 320, height: 568 }); await page.waitForTimeout(100);
+  tb = await pill();
+  check("…labels still fit on a 320px phone", tb.buttons.every((x) => x.fits && x.w >= 44), JSON.stringify(tb.buttons));
+  for (const [w, h, name] of [[1024, 768, "landscape"], [768, 1024, "portrait"]]) {
+    await page.setViewportSize({ width: w, height: h }); await page.waitForTimeout(100);
+    tb = await pill();
+    check(`…on an iPad (${name}) it stays 500px wide, centred under the content`, tb.w === 500 && Math.abs(tb.left - tb.right) <= 1 && tb.bottom === 10, JSON.stringify(tb));
+  }
+  await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(100);
+  // The Shop tab: its add box is 16px like every other field, and its buttons are 44px
+  await page.click('#tabs button[data-view="shop"]');
+  const shopF = await page.evaluate(() => ({ px: parseFloat(getComputedStyle(document.getElementById("manualItem")).fontSize), btns: [...document.querySelectorAll("#view-shop .shopacts .btn, #view-shop .weeknav .btn")].map((b) => Math.round(b.getBoundingClientRect().height)) }));
+  check("Shop: the add box is 16px (no iPhone zoom) and its buttons are 44px tall", shopF.px >= 16 && shopF.btns.length === 4 && shopF.btns.every((h) => h >= 44), JSON.stringify(shopF));
+  await page.click('#tabs button[data-view="recipes"]');
+
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
 } catch (e) { finish(e); } finally { await b?.browser.close(); await s?.cleanup(); }
