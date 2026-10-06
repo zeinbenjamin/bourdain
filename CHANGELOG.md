@@ -6,6 +6,10 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.7.2 — 2026-10-06
+- The tab bar sits lower on the screen, closer to the bottom edge, like Instagram's.
+- At the end of a page, the last recipe (or day, or pantry aisle) now stops just above the tab bar instead of leaving a big empty gap.
+
 ## 2.7.1 — 2026-10-06
 - Fixed: on iPhone, recipes were cut off in a straight line just under the tab bar. They now scroll all the way to the bottom of the screen, behind the tab bar.
 

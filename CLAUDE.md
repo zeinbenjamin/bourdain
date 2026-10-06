@@ -201,9 +201,12 @@ aisle from `guessAisle`). **Clear ticked** empties `checked` only, with Undo.
 
 **The tab bar (2.7.0)**: Plan, Pantry, Recipes, Shop, Archives, with Recipes in the
 middle; the app still opens on Recipes. It's a frosted pill (`backdrop-filter`)
-floating 14px in and 10px above the home bar, icons with 10px labels, the current
-tab on a grey pill. `max-width: 500px` centres it on an iPad. `<main>`'s bottom
-padding (100px + the safe area) clears it; the layout suite measures all of it.
+floating 14px in, icons with 10px labels, the current tab on a grey pill.
+`max-width: 500px` centres it on an iPad. Since 2.7.2 it sits low, like Instagram's:
+its bottom is `--tabgap` (`max(10px, safe-area-inset-bottom − 12px)`, so 22px on an
+iPhone with a home bar). `<main>`'s bottom padding (`--tabgap` + 60px, plus each
+view's own 24px) leaves about 16px between the end of a page and the bar, and the
+toast sits at `--tabgap` + 80px. The layout suite measures all of it.
 
 **Adding a recipe** (`addSheet`): the Recipes "+" (and the empty book's button)
 opens a sheet, most used first (2.6.1): **Import a recipe** (the import form, with "‹ Recipes" to go back),
@@ -441,8 +444,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v53"`
-in `public/sw.js` → `v54`, `v55`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v54"`
+in `public/sw.js` → `v55`, `v56`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -480,7 +483,7 @@ are `overflow: hidden` with `overscroll-behavior: none`; `<main>` is the scrolle
 dragged the page and the list wouldn't move; 2.6.2 made the page scroll instead,
 and then on some iPhones the fixed tab bar and sticky header drifted with the
 content during a fast swipe. Locking the page fixes both. Since 2.7.1 `body` is also
-`position: fixed; inset: 0`: in an iPhone home-screen app `height: 100%` stopped
+`position: fixed; inset: 0` (with the notch's `safe-area-inset-top` as padding): in an iPhone home-screen app `height: 100%` stopped
 short of the home bar, so the page ended in a hard line under the floating tab bar. Reset with `toTop()`
 (`main.scrollTop = 0`), never `window.scrollTo`. An open sheet sets
 `html.sheet-open`, which stops `<main>` scrolling behind it. Desktop Chromium
@@ -490,8 +493,9 @@ can't show the drift, so check a layout change on an iPhone too.
 is at least 16px: Safari zooms in on a smaller field when it's tapped and doesn't
 zoom back. Buttons, cards and checklist rows have `touch-action: manipulation`, so a
 quick second tap isn't a double-tap zoom (pinch zoom still works). `<main>`'s
-bottom padding includes `env(safe-area-inset-bottom)` so the last thing on a page
-clears the tab bar above the home bar. The layout suite checks all three.
+bottom padding follows the tab bar's `--tabgap`, which allows for
+`env(safe-area-inset-bottom)`, so the last thing on a page clears the tab bar above
+the home bar. The layout suite checks all three.
 
 **Don't redraw what hasn't changed (2.6.4).** Recipes, Plan, Archives and a person's
 page write their HTML through `setHtml(el, html)`, which skips the write when it's

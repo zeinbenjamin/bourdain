@@ -41,7 +41,7 @@ html,body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none}
 /* 2.7.1: the body is pinned to the screen like the tab bar is. On an iPhone home-screen
    app, height:100% stopped short of the home bar, so the page was cut off in a hard
    line under the floating tab bar; fixed to all four edges, it reaches the bottom. */
-body{position:fixed;inset:0;height:auto}
+body{position:fixed;inset:0;height:auto;padding-top:env(safe-area-inset-top,0px)} /* the notch, as html's padding gave it before */
 html.sheet-open main{overflow:hidden}
 body{
   background:var(--paper); color:var(--ink);
@@ -79,7 +79,11 @@ a{color:inherit}
 .top .sub{font-family:var(--sans);color:var(--ink-3);font-size:11px;font-weight:500;letter-spacing:.02em}
 .top .sync{color:var(--ink);font-weight:700}
 
-main{flex:1; min-height:0; overflow-y:auto; overscroll-behavior-y:contain; -webkit-overflow-scrolling:touch; padding:0 0 calc(100px + env(safe-area-inset-bottom,0px))} /* clear the floating tab bar, home bar included (2.6.3, 2.7.0) */
+/* Where the floating tab bar sits (2.7.2): low, like Instagram's, its bottom 12px into
+   the iPhone's home-bar area (22px above the screen's edge); 10px on a phone without
+   one. The page's end and the toast are measured from it. */
+:root{--tabgap:max(10px, calc(env(safe-area-inset-bottom,0px) - 12px))}
+main{flex:1; min-height:0; overflow-y:auto; overscroll-behavior-y:contain; -webkit-overflow-scrolling:touch; padding:0 0 calc(var(--tabgap) + 60px)} /* the tab bar (68px) plus about 16px, with the page's own 24px */
 .signinbar{display:block;width:100%;min-height:48px;border:0;border-bottom:1px solid var(--rule);background:var(--flame);color:var(--paper);font-family:var(--sans);font-size:14px;font-weight:600;padding:10px 18px;text-align:left}
 .signinbar[hidden]{display:none}
 section.view{display:none; padding:16px 18px 24px; max-width:760px; margin:0 auto; width:100%}
@@ -89,7 +93,7 @@ section.view.active{display:block}
    it. Capped at 500px and centred, so on an iPad it sits under the content like a
    dock instead of spreading five tabs across the screen. */
 .tabs{
-  position:fixed; left:14px; right:14px; bottom:calc(10px + env(safe-area-inset-bottom,0px)); z-index:5;
+  position:fixed; left:14px; right:14px; bottom:var(--tabgap); z-index:5;
   max-width:500px; margin:0 auto;
   display:grid; grid-template-columns:repeat(5,1fr); gap:2px; padding:6px;
   background:rgba(255,255,255,.72); -webkit-backdrop-filter:blur(18px) saturate(180%); backdrop-filter:blur(18px) saturate(180%);
@@ -393,6 +397,7 @@ body.aslist .rcard .tags{display:none}
 /* Shop */
 .shop-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .aisle{margin-bottom:18px}
+#pantryList .aisle:last-child{margin-bottom:0} /* the page's end is set by <main> (2.7.2) */
 .aisle h3{font-family:var(--sans);font-size:13px;letter-spacing:.02em;text-transform:uppercase;font-weight:700;margin-bottom:4px;padding-bottom:5px;border-bottom:1px solid var(--rule)}
 .item{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
 .item input[type=checkbox]{width:20px;height:20px;margin-top:3px;accent-color:var(--ink);flex:none}
@@ -539,7 +544,7 @@ body.aslist .rcard .tags{display:none}
 .sheet-lead{margin:0 0 6px}
 .sheet-sub{margin:16px 0 0}
 .sheet-row{margin-top:12px}
-.toast{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:9px 14px;border-radius:var(--r);font-family:var(--sans);font-size:13px;z-index:30;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast{position:fixed;left:50%;bottom:calc(var(--tabgap) + 80px);transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:9px 14px;border-radius:var(--r);font-family:var(--sans);font-size:13px;z-index:30;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
 .toast.act{display:flex;align-items:center;gap:6px;padding:0 4px 0 14px;pointer-events:auto;white-space:nowrap}
 .toast-btn{min-height:44px;min-width:44px;padding:0 10px;border:0;background:none;color:var(--paper);font:inherit;font-weight:700;text-decoration:underline;text-underline-offset:3px}
