@@ -1,6 +1,6 @@
 // Test-only stand-ins for api.anthropic.com and api.openai.com, loaded into the server
 // with `node --import tests/mock-apis.mjs`. The mode is read from MOCK_FILE on every call
-// ({"claude": "...", "image": "...", "scan": "...", "claudeDelay": ms, "imageDelay": ms, "cfCerts": "down", "cost": "junk", "dish": "nofood"|"unsure", "youtube": "nodesc", "instagram": "nocaption"|"json"|"403"}), so one
+// ({"claude": "...", "image": "...", "scan": "...", "claudeDelay": ms, "imageDelay": ms, "cfCerts": "down", "cost": "junk", "dish": "nofood"|"unsure", "youtube": "nodesc", "instagram": "nocaption"|"json"|"json2"|"escaped"|"reel404"|"403"}), so one
 // server can be driven through every failure. Requests are logged as MOCK_CLAUDE_REQ,
 // MOCK_SCAN and MOCK_IMG_REQ so tests can check exactly what was sent.
 import { readFileSync } from "node:fs";
@@ -76,6 +76,15 @@ globalThis.fetch = async (url, opts = {}) => {
   }
   if (u.startsWith("https://www.instagram.com/")) { // 2.7.4: a post's embed page, shaped like the real one
     console.log("MOCK_INSTAGRAM " + u.slice(0, 90));
+    if (m.instagram === "reel404" && u.includes("/reel/")) return new Response("Not found", { status: 404 });
+    if (m.instagram === "escaped") { // 2.7.6: the caption block as a string inside a script, drawn by the page's own JS (as Instagram sent for Dct0lIPyvQJ)
+      const block = '<div class="Caption"><span>iramsfoodstory</span><br/><br/>Crispy chipotle beef tacos chipotle lime crema \u{1f32e} <br/><br/>Ingredients <br/><br/>For the taco seasoning:<br/><br/>1 tbsp red chili powder <br/>2 tbsp garlic powder <br/><br/>Method:<br/>Mix it all.<div class="CaptionComments"><a href="#">View all 1,399 comments</a></div></div>';
+      return new Response(`<html><body><div class="EmbedFrame"></div><script>__d("EmbedCaption",[],function(){return {"html":${JSON.stringify(block).replace(/</g, "\\u003C").replace(/\//g, "\\/")}};});</script></body></html>`, { status: 200, headers: { "content-type": "text/html" } });
+    }
+    if (m.instagram === "json2") { // the caption only in the post's data, as a JSON string inside a script's JSON string
+      const ctx = JSON.stringify({ context: { media: { owner: { username: "iramsfoodstory" }, edge_media_to_caption: { edges: [{ node: { text: "Crispy chipotle beef tacos \u{1f32e}\n\n2 lb ground beef\n1 tbsp taco seasoning" } }] } } } });
+      return new Response(`<html><body><div class="Embed"></div><script>requireLazy(["EmbedSDK"],function(e){e.init(${JSON.stringify(JSON.stringify({ contextJSON: ctx }))})});</script></body></html>`, { status: 200, headers: { "content-type": "text/html" } });
+    }
     if (m.instagram === "403") return new Response("<html>Please wait a few minutes</html>", { status: 403, headers: { "content-type": "text/html" } });
     const head = `<html><body><div class="Header"><span class="UsernameText">iramsfoodstory</span></div>`;
     if (m.instagram === "nocaption") return new Response(head + `<div class="Embed">View this post on Instagram</div></body></html>`, { status: 200, headers: { "content-type": "text/html" } });

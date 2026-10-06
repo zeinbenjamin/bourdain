@@ -8,7 +8,7 @@ import { lookup as dnsLookup } from "node:dns";
 import http from "node:http";
 import https from "node:https";
 import { crc32, createGunzip, createInflate, createBrotliDecompress } from "node:zlib";
-import { mkdirSync, existsSync, createReadStream, readFileSync, constants as fsConstants } from "node:fs";
+import { mkdirSync, existsSync, createReadStream, readFileSync, writeFileSync, readdirSync, statSync, rmSync, constants as fsConstants } from "node:fs";
 import { writeFile, readdir, stat, unlink, access, statfs } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -1432,25 +1432,68 @@ function instagramCode(link) {
   } catch { return null; }
 }
 const htmlToText = (h) => decodeEntities(String(h).replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "")).replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-function instagramCaption(html) {
-  // 1. The caption block the embed page draws: <div class="Caption"><a class="CaptionUsername">name</a><br><br>text<div class="CaptionComments">
+// A script's string, read as HTML: \" \/ \n < and friends back to what they stand for.
+const unJs = (t) => t.replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16))).replace(/\\n/g, "\n").replace(/\\t/g, " ").replace(/\\(["'\\/])/g, "$1");
+function captionBlock(html) {
+  // <div class="Caption"><a class="CaptionUsername">name</a> (or <span>name</span>)<br><br>text<div class="CaptionComments">
   const block = html.match(/<div class="Caption"[^>]*>([\s\S]*?)(?:<div class="CaptionComments"|<\/div>)/i)?.[1];
-  if (block) { const t = htmlToText(block.replace(/<a[^>]*class="CaptionUsername"[^>]*>[\s\S]*?<\/a>/i, "")); if (t) return t; }
-  // 2. The post's data, which the page also carries as JSON (sometimes JSON inside a JSON string)
-  for (const src of [html, html.replace(/\\"/g, '"').replace(/\\\\/g, "\\")]) {
-    const m = src.match(/"edge_media_to_caption":\{"edges":\[\{"node":\{"text":"((?:[^"\\]|\\.)*)"/) || src.match(/"caption":\{[^{}]*?"text":"((?:[^"\\]|\\.)*)"/);
-    if (m) { try { const t = JSON.parse(`"${m[1]}"`).trim(); if (t) return t; } catch {} }
+  if (!block) return "";
+  return htmlToText(block.replace(/^\s*<a[^>]*class="CaptionUsername"[^>]*>[\s\S]*?<\/a>/i, "").replace(/^\s*<span[^>]*>[^<]{1,40}<\/span>/i, ""));
+}
+function instagramCaption(html) {
+  // 1. The caption block the embed page draws, as HTML, or (2.7.6) as a string inside a script,
+  //    where every quote is \" and the page's own script puts it on screen.
+  for (let src = html, level = 0; level < 4; level++) {
+    const t = captionBlock(src); if (t) return t;
+    const next = unJs(src); if (next === src) break; src = next;
+  }
+  // 2. The post's data, which the page may also carry as JSON (sometimes JSON inside a string,
+  //    so its quotes arrive as \" or \\\"): take a level of quoting off at a time and look again.
+  for (let src = html, level = 0; level < 4; level++) {
+    for (const re of [/"edge_media_to_caption":\{"edges":\[\{"node":\{"text":"((?:[^"\\]|\\.)*)"/, /"caption":\{(?:[^{}]|\{[^{}]*\})*?"text":"((?:[^"\\]|\\.)*)"/, /"caption":"((?:[^"\\]|\\.){20,})"/]) {
+      const m = src.match(re);
+      if (m) { try { const c = JSON.parse(`"${m[1]}"`).trim(); if (c) return c; } catch {} }
+    }
+    const next = src.replace(/\\(["\\/])/g, "$1"); if (next === src) break; src = next;
   }
   return "";
 }
+// What a page with no caption looked like, so the activity log (and the server log) can say why.
+function instagramSeen(status, html) {
+  const kb = Math.round(html.length / 1024), bits = [];
+  if (/class="Caption"/.test(html)) bits.push("caption block empty");
+  if (/login|log in|Log In/i.test(html.match(/<title>[^<]*<\/title>/i)?.[0] || "") || /"loginPage"|accounts\/login/.test(html)) bits.push("login page");
+  if (/edge_media_to_caption|contextJSON|__additionalDataLoaded/.test(html)) bits.push("post data present");
+  return `instagram.com sent no caption (${status}, ${kb} KB${bits.length ? ", " + bits.join(", ") : ""})`;
+}
 async function instagramText(code) {
+  let last = "";
+  // the reel path first, as the app shares them; the post path as a second try
+  for (const kind of ["reel", "p"]) {
+    try {
+      const r = await fetch(`https://www.instagram.com/${kind}/${code}/embed/captioned/`, { signal: AbortSignal.timeout(15000), headers: { ...BROWSER_HEADERS, "sec-fetch-dest": "iframe", "sec-fetch-site": "cross-site", referer: "https://www.google.com/" } });
+      const html = r.ok ? await r.text() : "";
+      const caption = r.ok ? instagramCaption(html) : "";
+      if (caption) {
+        const plain = unJs(html), who = (html.match(/class="UsernameText"[^>]*>([^<]+)</) || plain.match(/class="UsernameText"[^>]*>([^<]+)</))?.[1] || plain.match(/"owner":\{[^{}]*?"username":"([\w.]+)"/)?.[1] || plain.match(/<div class="Caption"[^>]*>\s*<(?:a|span)[^>]*>([\w.]{1,30})</)?.[1] || "";
+        return { text: [who && `by ${decodeEntities(who)}`, caption].filter(Boolean).join("\n\n").slice(0, 20000), seen: "" };
+      }
+      last = r.ok ? instagramSeen(r.status, html) : `instagram.com said ${r.status}`;
+      if (r.ok) keepInstagramPage(code, kind, html);
+    } catch (err) { console.warn("instagram embed failed", code, err.message); last = `instagram.com: ${err.message}`; }
+  }
+  console.warn("instagram: no caption for", code, "-", last);
+  return { text: "", seen: last };
+}
+// The last few embed pages that had no caption, kept in the data folder for the owner to look
+// at (they're public posts). Instagram changes its pages; this shows what it sent the NAS.
+function keepInstagramPage(code, kind, html) {
   try {
-    const r = await fetch(`https://www.instagram.com/p/${code}/embed/captioned/`, { signal: AbortSignal.timeout(15000), headers: { ...BROWSER_HEADERS, "accept-encoding": "gzip, deflate, br", "sec-fetch-dest": "iframe", "sec-fetch-site": "cross-site" } });
-    if (!r.ok) return { text: "", seen: `instagram.com said ${r.status}` };
-    const html = await r.text(), caption = instagramCaption(html);
-    const who = html.match(/class="UsernameText"[^>]*>([^<]+)</)?.[1] || html.match(/"owner":\{[^{}]*?"username":"([\w.]+)"/)?.[1] || "";
-    return { text: caption ? [who && `by ${decodeEntities(who)}`, caption].filter(Boolean).join("\n\n").slice(0, 20000) : "", seen: caption ? "" : "instagram.com sent no caption" };
-  } catch (err) { console.warn("instagram embed failed", code, err.message); return { text: "", seen: `instagram.com: ${err.message}` }; }
+    const dir = path.join(DATA_DIR, "debug"); mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, `instagram-${code}-${kind}.html`), html.slice(0, MAX_PAGE));
+    const files = readdirSync(dir).filter((f) => f.startsWith("instagram-")).map((f) => ({ f, t: statSync(path.join(dir, f)).mtimeMs })).sort((a, b) => b.t - a.t);
+    for (const { f } of files.slice(10)) rmSync(path.join(dir, f), { force: true });
+  } catch (err) { console.warn("couldn't keep the instagram page", err.message); }
 }
 async function youtubeText(id) {
   const watch = `https://www.youtube.com/watch?v=${id}`, parts = [];

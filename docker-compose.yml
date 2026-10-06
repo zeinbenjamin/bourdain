@@ -31,7 +31,7 @@ services:
       # The app won't start without it.
       OWNER_EMAIL: "you@example.com"
       ANTHROPIC_API_KEY: "sk-ant-REPLACE-ME"
-      CLAUDE_MODEL: "claude-sonnet-4-6"
+      CLAUDE_MODEL: "claude-sonnet-5-5"
       # Recipe covers: Claude describes the dish, OpenAI paints it. Leave the key as-is
       # to run without covers; the Make cover button then says the key is missing.
       OPENAI_API_KEY: "sk-REPLACE-ME"
