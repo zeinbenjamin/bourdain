@@ -6,6 +6,10 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.7.8 — 2026-10-07
+- Instagram links read faster: Bourdain now asks first in the way that's been working, instead of trying the others first.
+- If Instagram's copy of a caption looks cut short, Bourdain still tries the other ways and uses the fullest caption it gets. The activity view marks a shortened one as "maybe cut short".
+
 ## 2.7.7 — 2026-10-07
 - Instagram: some reels still came back with "no caption", because Instagram was sending the NAS an error page instead of the post. Bourdain now has three more ways to ask for the caption and tries each in turn.
 - The owner's activity view says which way worked ("read the caption (preview)"), or what each one got back.
