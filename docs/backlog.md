@@ -12,11 +12,26 @@ Nothing open. Past cooks and the list view shipped in 2.6.0.
 
 After 2.7.0: whether the pilot uses the Shop (`shop_changed` in the owner's
 activity view), and how the floating tab bar looks on a real iPhone and iPad
-(Safari draws the blur differently from desktop Chromium). After 2.7.4: whether
-Instagram's embed page keeps carrying captions (the activity log says "read the
-caption" or "no caption"), and which recipe sites still answer 403 to the NAS.
+(Safari draws the blur differently from desktop Chromium). Since 2.7.8: whether
+Instagram keeps giving captions (the activity log says "read the caption (preview)"
+or which other way worked, or "no caption"), and which recipe sites still answer 403 to the NAS.
 If several do, a reader service could fetch for Bourdain, but that sends each link
 to a third party, so it's Zein's call.
+
+## Planned (not started; Zein gives the go-ahead)
+
+Paused while the pilot settles (2026-10-07): only fixes for now, and fewer, bigger
+releases, per `docs/strategy.md`.
+
+| Item | Notes |
+| --- | --- |
+| Slide along the tab bar (2.8.0 candidate) | Press anywhere on the tab bar and slide: the grey pill lifts slightly (white, a soft shadow, scaled about 1.1×) and follows the finger, the tab under it goes bold and the one you started on dims, and letting go opens it. A plain tap works as now. The pill becomes one element that glides between tabs (a springy ease) rather than each button's own background. A `navigator.vibrate` tick on each new tab (Android only; iPhone has no web haptics). Like iOS 26's own tab bar. Proof of concept shown 2026-10-07 (pointer events on `#tabs`, pointer capture, `touch-action: none` on the bar only). |
+| …and the same on Everyone / Just me in the Archives | The `.seg` switch gets the same treatment: press and slide between the two halves, the pill follows, letting go chooses; a tap still works. Built as one helper shared by the tab bar and `.seg`, so any later segmented switch gets it too. |
+
+Decided 2026-10-07, not to be built: **swiping the page sideways to change tabs**
+(option B of the same proof of concept). It risks changing tab on a sloppy scroll in
+the kitchen, fights the sideways drags already on the page (ingredient reorder, the
+People row, covers), and clashes with Safari's swipe-from-the-edge to go back.
 
 ## From the UI review (2026-10-06)
 
