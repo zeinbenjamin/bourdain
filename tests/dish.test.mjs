@@ -113,6 +113,47 @@ try {
   await b.ctx.setOffline(false);
   check("offline says offline", /You're offline/.test(msg), msg);
 
+  // --- 2.7.4: Instagram captions come from the post's embed page; a site that refuses
+  // Bourdain says so; an earlier link's text never stays in the box after a failed fetch
+  const IG = "https://www.instagram.com/reel/DdR9Szhy_wE/?stkn=YjR5OXlsNnRyeGE3";
+  let ig = await s.post("/api/fetch", { url: IG });
+  check("Instagram: the caption, from the embed page, with its line breaks", ig.status === 200 && ig.source === "instagram" && /Crispy garlic parmesan chicken rolls \u{1f32f}/u.test(ig.text) && /\n2 lb boneless chicken breast\n1 tbsp butter\n/.test(ig.text) && /Make the sauce & roll/.test(ig.text), JSON.stringify(ig).slice(0, 300));
+  check("…headed by who posted it, without the embed's own furniture", /^by iramsfoodstory\n\nCrispy/.test(ig.text) && !/View all 883 comments|CaptionUsername|<a /.test(ig.text), ig.text.slice(0, 120));
+  const igFetched = s.log().match(/MOCK_INSTAGRAM (\S+)/g) || [];
+  check("…asked for at instagram.com only, from the post's code (?stkn and the rest left behind)", igFetched.at(-1) === "MOCK_INSTAGRAM https://www.instagram.com/p/DdR9Szhy_wE/embed/captioned/", igFetched.join(" "));
+  const shapes = [];
+  for (const u of ["https://instagram.com/p/DdR9Szhy_wE/", "https://www.instagram.com/reels/DdR9Szhy_wE/", "https://www.instagram.com/iramsfoodstory/reel/DdR9Szhy_wE/?igsh=x", "https://m.instagram.com/tv/DdR9Szhy_wE"])
+    if ((await s.post("/api/fetch", { url: u })).source !== "instagram") shapes.push(u);
+  check("…/p/, /reels/, /tv/, and links with the account name in them", shapes.length === 0, shapes.join(" "));
+  s.setMode({ instagram: "json" });
+  ig = await s.post("/api/fetch", { url: IG });
+  check("…or from the post's data when the page draws no caption block", ig.status === 200 && /Garlic rolls \u{1f32f}\n\n2 lb chicken breast/u.test(ig.text) && /^by iramsfoodstory/.test(ig.text), JSON.stringify(ig).slice(0, 200));
+  s.setMode({ instagram: "nocaption" });
+  ig = await s.post("/api/fetch", { url: IG });
+  check("…no caption is a failed fetch, not 'read' (2.7.3 logged a login wall as read)", ig.status === 422 && ig.code === "fetch_failed" && ig.source === "instagram", JSON.stringify(ig));
+  const links = await (await fetch(s.url + "/api/admin/activity?cat=links&limit=20")).json();
+  check("…and the owner's activity says so: 'no caption', and 'read the caption' when there was one", links.some((r) => r.target === "instagram.com · no caption (instagram.com sent no caption)") && links.some((r) => r.target === "instagram.com · read the caption") && !links.some((r) => /^instagram\.com · read$/.test(r.target)), JSON.stringify(links.map((r) => r.target).slice(0, 6)));
+  // in the app: an earlier link's text is cleared, and the message says what to do
+  await page.evaluate(() => { const st = document.querySelector("#importStatus"); st.className = "status"; st.textContent = ""; document.getElementById("srcText").value = ""; });
+  s.setMode({});
+  await page.route("**/api/ai", (r) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ json: { error: "no recipe found" } }) }));
+  await page.fill("#srcUrl", "https://www.instagram.com/reel/DdR9Szhy_wE/"); await page.click("#btnFetch");
+  await page.waitForFunction(() => document.querySelector("#importStatus").classList.contains("err"));
+  check("app: an Instagram link fills the box with the caption", /Crispy garlic parmesan/.test(await page.inputValue("#srcText")));
+  s.setMode({ instagram: "nocaption" });
+  await page.fill("#srcUrl", "https://www.instagram.com/reel/DKZV_VdBiqX/"); await page.click("#btnFetch");
+  await page.waitForFunction(() => document.querySelector("#importStatus").classList.contains("err") && /caption/.test(document.querySelector("#importStatus").textContent));
+  check("…a second link with no caption clears the first one's text (it used to stay and be read as this recipe)", (await page.inputValue("#srcText")) === "", await page.inputValue("#srcText"));
+  check("…and says how to get the caption in", /copy the caption and paste it into the box above/.test(await page.textContent("#importStatus")), await page.textContent("#importStatus"));
+  s.setMode({});
+  await page.fill("#srcText", "My own notes about this dish");
+  await page.route("**/api/fetch", (r) => r.fulfill({ status: 422, contentType: "application/json", body: JSON.stringify({ error: "nothing came back", code: "fetch_failed", detail: "rasamalaysia.com said 403", blocked: true, site: "rasamalaysia.com" }) }));
+  await page.fill("#srcUrl", "https://rasamalaysia.com/sambal-ladys-finger-recipe/"); await page.click("#btnFetch");
+  await page.waitForFunction(() => document.querySelector("#importStatus").classList.contains("err"));
+  check("a site that refuses Bourdain (403): says so by name, and how to get the recipe in", /rasamalaysia\.com doesn't let apps read its pages\. Open the link in your browser, copy the recipe/.test(await page.textContent("#importStatus")), await page.textContent("#importStatus"));
+  check("…and what you typed yourself stays in the box", (await page.inputValue("#srcText")) === "My own notes about this dish");
+  await page.unroute("**/api/fetch"); await page.unroute("**/api/ai");
+
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
 } catch (e) { finish(e); } finally { await b?.browser.close(); await s?.cleanup(); }

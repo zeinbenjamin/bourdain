@@ -725,7 +725,7 @@ async function api(path, opts={}){
   const res = await fetch(API+path, {redirect:"manual", ...opts});
   if(signinLost(res)) throw signin.error();
   if(!res.ok){ let e; try{ e=await res.json(); }catch(_){ e={}; }
-    const err=new Error(e.error||res.statusText); err.code=e.code||("http_"+res.status); err.status=res.status; err.detail=e.detail; err.kind=e.kind; err.limit=e.limit; err.seen=e.seen;
+    const err=new Error(e.error||res.statusText); err.code=e.code||("http_"+res.status); err.status=res.status; err.detail=e.detail; err.kind=e.kind; err.limit=e.limit; err.seen=e.seen; err.blocked=!!e.blocked; err.source=e.source;
     if(NEEDS_SIGNIN.includes(err.code)) signin.lost(err.code, err.seen);
     if(err.code==="ai_limit"&&err.kind&&err.limit) allowance.full(err.kind,err.limit);
     throw err; }
@@ -1027,7 +1027,76 @@ function show(view){
   toTop();
   if(view!=="cook") wake.release();
   render();
+  nav.sync();
 }
+/* The phone's back gesture and back button (2.7.4). Screens aren't separate pages, so
+   until 2.7.4 Android's back closed the app from anywhere and Safari's swipe left it.
+   Now, whenever there's somewhere to go back to (an open sheet, a recipe, a form, any
+   tab but Recipes), one history entry sits on top; going back takes it off, and the
+   app does what its own Back would: close the sheet, press the screen's Back button,
+   or return to Recipes. At Recipes with nothing open there's no entry, so back leaves
+   the app as before. */
+const nav={
+  silent:false,
+  sheetOpen(){ return document.getElementById("sheet").classList.contains("open"); },
+  needed(){ return this.sheetOpen() || state.view!=="recipes"; },
+  sync(){
+    const have=!!(history.state&&history.state.bourdain);
+    if(this.needed()&&!have) history.pushState({bourdain:1},"");
+    else if(!this.needed()&&have){ this.silent=true; history.back(); } // the app's own Back got here: take the entry off quietly
+  },
+  back(){
+    if(this.sheetOpen()){ closeSheet(); return; }
+    const v=document.getElementById("view-"+state.view);
+    if(state.view==="import"&&state.draft&&!document.getElementById("review").hidden){ leaveReview(); return; } // never lose a recipe to a stray swipe
+    const b=v&&["#revBack","#impBack","#cookBack","#back","#tBack","#pBack","#aBack"].map(q=>v.querySelector(q)).find(x=>x&&x.offsetParent);
+    if(b) b.click(); else show("recipes");
+  },
+};
+addEventListener("popstate",()=>{
+  if(nav.silent){ nav.silent=false; nav.sync(); return; }
+  nav.back(); nav.sync();
+});
+// Back from a recipe that isn't saved yet asks first; the app's own Back button still discards straight away.
+function leaveReview(){
+  const editing=!!state.editingId;
+  const s=openSheet(`<h3>${editing?"Leave without saving your changes?":"Leave this recipe without saving?"}</h3>
+    <p class="muted">${editing?"Your changes to this recipe will be lost.":"It isn't in your book yet."}</p>
+    <div class="actions"><button class="btn primary" data-act="stay">Keep editing</button><button class="btn danger" data-act="leave">${editing?"Discard changes":"Leave without saving"}</button></div>`);
+  sheetActions(s,{ stay:()=>closeSheet(), leave:()=>{ closeSheet(); document.getElementById("revBack").click(); } });
+}
+
+/* An unsaved recipe outlives the app (2.7.4). iPhone often closes a home-screen app in
+   the background (switching to Instagram to copy a caption, say), and the import or
+   edit in progress went with it. It's kept on this phone, for this person, until it's
+   saved or discarded, and offered again under "Carry on with …". Screenshots aren't
+   kept (too big for the phone's storage); the link, the text and the form are. */
+const drafts={
+  key(){ return store.key("bourdain.draft"); },
+  save(){
+    try{
+      let d=state.draft;
+      if(d&&state.view==="import"&&state.reviewCollect&&!document.getElementById("review").hidden){ try{ d=state.reviewCollect(); }catch(_){} }
+      const src={url:document.getElementById("srcUrl").value.trim(), text:document.getElementById("srcText").value};
+      if(!d&&!src.url&&!src.text.trim()){ localStorage.removeItem(this.key()); return; }
+      localStorage.setItem(this.key(),JSON.stringify({dv:DATA_VERSION, at:new Date().toISOString(), draft:d||null, editingId:d?state.editingId||null:null, draftManual:!!(d&&state.draftManual), src}));
+    }catch(e){ console.warn("couldn't keep the draft",e); }
+  },
+  clear(){ try{ localStorage.removeItem(this.key()); }catch(_){} },
+  restore(){
+    let j=null; try{ j=JSON.parse(localStorage.getItem(this.key())||"null"); }catch(_){}
+    if(!j||(j.dv||1)>DATA_VERSION||state.draft) return;
+    if(j.editingId&&!state.recipes[j.editingId]) j.editingId=null; // the recipe it was editing is gone: keep it as a new one
+    document.getElementById("srcUrl").value=j.src?.url||""; document.getElementById("srcText").value=j.src?.text||"";
+    if(j.draft){ state.draft=j.draft; state.editingId=j.editingId; state.draftManual=!!j.draftManual; }
+    const name=j.draft?`“${j.draft.title||"Untitled"}”`:"the import you started";
+    setTimeout(()=>toast(j.editingId?`Your changes to ${name} are kept.`:`${name[0].toUpperCase()+name.slice(1)} is kept. It isn't saved yet.`,{label:"Carry on",run:()=>show("import")}),600);
+  },
+};
+let draftTimer=null;
+const keepDraft=()=>{ clearTimeout(draftTimer); draftTimer=setTimeout(()=>drafts.save(),400); };
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden") drafts.save(); });
+addEventListener("pagehide",()=>drafts.save());
 document.getElementById("tabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(b) show(b.dataset.view); });
 
 /* ---------- render ---------- */
@@ -1174,12 +1243,14 @@ function addSheet(){
     <button class="opt" data-act="manual">Write one yourself<small>${open?`Replaces ${name}`:"Start from a blank recipe"}</small></button>`);
   sheetActions(s,{
     resume:()=>{ closeSheet(); show("import"); },
-    import:()=>{ closeSheet(); state.editingId=null; state.draft=null; state.draftManual=false; show("import"); },
+    import:()=>{ closeSheet(); state.editingId=null; state.draft=null; state.draftManual=false; show("import"); drafts.save(); },
     manual:()=>{ closeSheet(); state.editingId=null; state.draft=blankRecipe(); state.draftManual=true; show("import"); },
     guess:()=>guessFromPhoto(),
   });
 }
 document.getElementById("btnManual").onclick=addSheet;
+document.getElementById("view-import").addEventListener("input",keepDraft);
+document.getElementById("view-import").addEventListener("change",keepDraft);
 document.getElementById("impBack").onclick=()=>show("recipes");
 
 function blankRecipe(){ return {photos:[],title:"",description:"",source_url:"",source_type:"manual",servings:2,prep_min:null,cook_min:null,ingredients:[{raw_text:"",quantity:null,unit:"",item:"",prep:"",section:"",aisle:"other",optional:false}],steps:[""],tags:[]}; }
@@ -1944,10 +2015,11 @@ function openSheet(html){
   document.documentElement.classList.add("sheet-open"); // the page behind a sheet stays put
   document.getElementById("toast").classList.remove("show"); // a leftover toast would sit on top of the sheet
   s.addEventListener("click",e=>{ const b=e.target.closest("[data-act]"); if(!b||!s._acts) return; const fn=s._acts[b.dataset.act]; if(fn) fn(b,e); });
+  nav.sync();
   return s;
 }
 function sheetActions(s,acts){ s._acts=acts; }
-function closeSheet(){ document.getElementById("sheet").classList.remove("open"); document.getElementById("sheetBg").classList.remove("open"); document.documentElement.classList.remove("sheet-open"); }
+function closeSheet(){ document.getElementById("sheet").classList.remove("open"); document.getElementById("sheetBg").classList.remove("open"); document.documentElement.classList.remove("sheet-open"); nav.sync(); }
 document.getElementById("sheetBg").onclick=closeSheet;
 
 /* A recipe is on a day at most once (2.6.5): its serves are changed on the meal
@@ -2399,7 +2471,7 @@ function videoToSheets(file,maxSheets,onProgress){
     v.load();
   });
 }
-document.getElementById("btnClear").onclick=()=>{ document.getElementById("srcUrl").value=""; document.getElementById("srcText").value=""; state.images=[]; renderThumbs(); const s=document.getElementById("importStatus"); s.className="status"; s.textContent=""; };
+document.getElementById("btnClear").onclick=()=>{ document.getElementById("srcUrl").value=""; document.getElementById("srcText").value=""; state.images=[]; renderThumbs(); const s=document.getElementById("importStatus"); s.className="status"; s.textContent=""; drafts.save(); };
 
 let parseCtl=null;
 document.getElementById("btnFetch").onclick=async()=>{
@@ -2407,13 +2479,17 @@ document.getElementById("btnFetch").onclick=async()=>{
   const status=document.getElementById("importStatus"); const btn=document.getElementById("btnFetch");
   if(!/^https?:\/\//i.test(url)){ status.className="status err"; status.textContent="Paste a full link starting with https://"; return; }
   btn.disabled=true; status.className="status"; status.innerHTML=`<span class="spin"></span>Fetching the page…`;
+  // 2.7.4: what an earlier link brought back goes when a new one is fetched, so a failed
+  // fetch can't leave another page's text in the box (and read it as this recipe).
+  // Anything typed or pasted by hand stays.
+  const box=document.getElementById("srcText"); if(state.fetchedText&&box.value===state.fetchedText) box.value=""; state.fetchedText="";
   try{
     // One quiet retry when nothing came back from Bourdain itself: a dropped connection,
     // or Cloudflare's own 5xx page (http_5xx). Both are usually gone a second later.
     const f = await store.fetchUrl(url).catch(e=>{ if(e&&(!e.status||/^http_5/.test(e.code||""))&&navigator.onLine!==false) return store.fetchUrl(url); throw e; });
     if(!f || !f.text || f.text.length<40){
       status.className="status err";
-      status.textContent = /instagram/.test(hostOf(url)) ? "Instagram didn't hand over the caption. Paste it below, or add screenshots, then tap Read recipe." : sourceType(url)==="youtube" ? "That video's description doesn't include the recipe. Screen-record the video while it shows the recipe, and add the recording instead." : "That page came back empty. Paste the recipe text or add screenshots instead.";
+      status.textContent = /instagram/.test(hostOf(url)) ? INSTAGRAM_NO_CAPTION : sourceType(url)==="youtube" ? "That video's description doesn't include the recipe. Screen-record the video while it shows the recipe, and add the recording instead." : "That page came back empty. Paste the recipe text or add screenshots instead.";
       btn.disabled=false; return;
     }
     document.getElementById("srcText").value = f.text.slice(0,20000);
@@ -2430,16 +2506,20 @@ document.getElementById("btnFetch").onclick=async()=>{
         "", "METHOD", ...(r.steps||[]).map((x,i)=>`${i+1}. ${x}`),
       ].filter(Boolean).join("\n").slice(0,20000);
     }
+    state.fetchedText=box.value;
     status.textContent=""; btn.disabled=false;
     await runParse();
   }catch(e){
     btn.disabled=false; status.className="status err";
     status.textContent = (e&&e.code==="fetch_failed")
-      ? "The server couldn't read that page. Paste the text or add screenshots instead."
+      ? (e.source==="instagram"||/instagram/.test(hostOf(url)) ? INSTAGRAM_NO_CAPTION
+        : e.blocked ? `${hostOf(url)} doesn't let apps read its pages. Open the link in your browser, copy the recipe and paste it into the box above, or add screenshots of it, then tap Read recipe.`
+        : `Bourdain couldn't read ${hostOf(url)||"that page"}. Paste the recipe text into the box above, or add screenshots instead.`)
       : (e&&e.code==="blocked_address") ? "That link points inside a private network, so Bourdain won't open it. Use a public recipe link, or paste the text."
       : aiError(e, "fetching that page");
   }
 };
+const INSTAGRAM_NO_CAPTION="Instagram didn't hand over the caption. Open the post, copy the caption and paste it into the box above, or add screenshots or a screen recording, then tap Read recipe.";
 document.getElementById("btnParse").onclick=()=>runParse();
 async function runParse(){
   const url=document.getElementById("srcUrl").value.trim(), text=document.getElementById("srcText").value.trim();
@@ -2787,7 +2867,7 @@ function renderReview(){
   const endDrag=()=>{ if(!drag) return; drag.classList.remove("dragging"); drag=null; };
   rowsEl.onpointerup=endDrag; rowsEl.onpointercancel=endDrag;
   el.querySelector("#addIng").onclick=()=>{ state.draft=collect(); state.draft.ingredients.push({raw_text:"",quantity:null,unit:"",item:"",prep:"",section:"",aisle:"other",optional:false}); renderReview(); setTimeout(()=>{ const rows=el.querySelectorAll(".ingrow"); rows[rows.length-1]?.querySelector("[data-f=item]").focus(); },0); };
-  el.querySelector("#revBack").onclick=()=>{ state.draft=null;
+  el.querySelector("#revBack").onclick=()=>{ state.draft=null; drafts.save();
     if(state.editingId){ const id=state.editingId; state.editingId=null; state.detailId=id; show("detail"); }
     else if(state.draftManual){ state.draftManual=false; show("recipes"); } // nothing to go back to on the import form
     else renderImport(); };
@@ -2799,9 +2879,10 @@ function renderReview(){
     const id=state.editingId||uid(); r.created_at=state.editingId? (state.recipes[id]?.created_at||new Date().toISOString()) : new Date().toISOString(); r.updated_at=new Date().toISOString();
     state.recipes[id]=r; state.lastSavedId=id; const ok=await store.put("recipes",id,r);
     state.draft=null; state.editingId=null; state.draftManual=false; state.images=[]; document.getElementById("srcText").value=""; document.getElementById("srcUrl").value="";
-    if(ok) toast("Saved"); state.detailId=id; show("detail");
+    drafts.clear(); if(ok) toast("Saved"); state.detailId=id; show("detail");
   };
   el.querySelector("#revSave").onclick=save; el.querySelector("#revSave2").onclick=save;
+  keepDraft(); // every re-render follows a change (a photo, a cover, an ingredient)
 }
 
 /* ---------- the owner's control room (2.4) ----------
@@ -3182,6 +3263,7 @@ navigator.serviceWorker?.register?.("/sw.js").catch(()=>{});
 (async()=>{
   await photoQueue.init(); // before the first render, so photos kept on this phone show
   store.loadLocal();
+  drafts.restore(); // an import or edit left unsaved when the app was closed (2.7.4)
   show(state.view); // sets the header date as well as rendering
   await store.init();
   if(!(state.view==="import"&&state.draft)) render(); // don't wipe a form the user started while it loaded
