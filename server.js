@@ -1566,6 +1566,11 @@ app.post("/api/fetch", async (req, res) => {
   }
 
   const ig = instagramCode(url);
+  // 2.7.9: a profile, the explore page or a story isn't a post: say so, rather than reading Instagram's login page as "read"
+  if (!ig && /^(www\.|m\.)?(instagram\.com|instagr\.am)$/i.test(new URL(url).hostname)) {
+    logged("not a post");
+    return res.status(422).json({ error: "that Instagram link isn't a post", code: "fetch_failed", source: "instagram", notPost: true });
+  }
   if (ig) {
     const { text, seen, via } = await instagramText(ig);
     logged(text ? `read the caption (${via})` : `no caption (${seen})`.slice(0, 200));

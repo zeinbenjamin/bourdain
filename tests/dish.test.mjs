@@ -95,7 +95,11 @@ try {
   await page.route("**/api/ai", (r) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ json: { error: "no recipe found" } }) }));
   await fetchStatus();
   check("a dropped connection is retried once, quietly", calls === 2 && /Beef pepper rice/.test(await page.inputValue("#srcText")), `${calls} calls`);
-  await page.unroute("**/api/fetch"); await page.unroute("**/api/ai");
+  await page.unroute("**/api/fetch");
+  await page.fill("#srcUrl", "https://www.instagram.com/iramsfoodstory/"); await page.click("#btnFetch");
+  await page.waitForFunction(() => document.querySelector("#importStatus").classList.contains("err") && /profile/.test(document.querySelector("#importStatus").textContent));
+  check("app: a profile link says it's a profile, and how to copy the post's own link", /That's a link to an Instagram profile, not a post\. Open the reel or post itself, tap Share, then Copy link/.test(await page.textContent("#importStatus")), await page.textContent("#importStatus"));
+  await page.unroute("**/api/ai");
   await page.route("**/api/fetch", (r) => r.abort("connectionreset"));
   let msg = await fetchStatus();
   check("…and if nothing ever comes back, it says it couldn't get through, not that the server is down", /Couldn't get through to Bourdain/.test(msg) && !/server/i.test(msg), msg);
@@ -156,6 +160,12 @@ try {
   check("…no caption is a failed fetch, not 'read' (2.7.3 logged a login wall as read)", ig.status === 422 && ig.code === "fetch_failed" && ig.source === "instagram", JSON.stringify(ig));
   const links = await (await fetch(s.url + "/api/admin/activity?cat=links&limit=20")).json();
   check("…and the owner's activity says so: 'no caption', and 'read the caption' when there was one", links.some((r) => /^instagram\.com · no caption \(instagram\.com sent no caption \(preview: /.test(r.target)) && links.some((r) => r.target === "instagram.com · read the caption (embed)") && !links.some((r) => /^instagram\.com · read$/.test(r.target)), JSON.stringify(links.map((r) => r.target).slice(0, 6)));
+  // 2.7.9: a link to someone's profile, not a post
+  s.setMode({});
+  ig = await s.post("/api/fetch", { url: "https://www.instagram.com/iramsfoodstory/?igsh=x" });
+  check("2.7.9: an Instagram profile link isn't a post: 422 with notPost, nothing fetched", ig.status === 422 && ig.code === "fetch_failed" && ig.notPost === true, JSON.stringify(ig));
+  const prof = await (await fetch(s.url + "/api/admin/activity?cat=links&limit=30")).json();
+  check("…and the log says 'not a post', not 'read'", prof.some((r) => r.target === "instagram.com · not a post") && !prof.some((r) => r.target === "instagram.com · read"), JSON.stringify(prof.map((r) => r.target)));
   // in the app: an earlier link's text is cleared, and the message says what to do
   await page.evaluate(() => { const st = document.querySelector("#importStatus"); st.className = "status"; st.textContent = ""; document.getElementById("srcText").value = ""; });
   s.setMode({});

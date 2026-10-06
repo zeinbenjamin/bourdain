@@ -111,6 +111,32 @@ try {
     const tabs = document.getElementById("tabs").getBoundingClientRect(), btn = document.getElementById("clearChecked").getBoundingClientRect(); return { btnBottom: Math.round(btn.bottom), tabsTop: Math.round(tabs.top), h: Math.round(btn.height) }; });
   check("Share list and Clear ticked sit above the tab bar at the bottom of the list, 44px tall", reach.btnBottom <= reach.tabsTop && reach.h >= 44, JSON.stringify(reach));
 
+  // --- 2.7.9: amounts you'd buy, one row per ingredient, aisles that aren't the app's own
+  await R("roast", "Garlic roast pork", 6, [I(4, "clove", "garlic", "produce"), I(400, "ml", "chicken stock", "pantry"), I(500, "g", "pork mince", "meat"), I(1, "packet", "mystery mix", "somewhere odd")]);
+  await R("aioli", "Aioli", 2, [I(1, "tbsp", "garlic", "produce")]);
+  await s.put("plan", "2026-10-20", { date: "2026-10-20", entries: [{ recipeId: "roast", servings: 10 }, { recipeId: "aioli", servings: 2 }] });
+  await page.reload(); await page.waitForFunction(() => !store.loading); await page.click('#tabs button[data-view="shop"]');
+  await page.click('#view-shop [data-week="1"]'); await page.click('#view-shop [data-week="1"]'); await sleep(300);
+  v = await shop();
+  const garlic = Object.entries(v.rows).filter(([k]) => k === "garlic");
+  check("rounded up to what you'd buy: 4 cloves for 6, made for 10, is 7 cloves, not 6⅔", /^7 clove/.test(v.rows.garlic?.q || ""), JSON.stringify(v.rows.garlic));
+  check("…and 666⅔ ml of stock is 675 ml", v.rows["chicken stock"]?.q === "675 ml", JSON.stringify(v.rows["chicken stock"]));
+  check("one row for garlic though the recipes use cloves and tbsp, with both amounts", garlic.length === 1 && (await page.evaluate(() => [...document.querySelectorAll("#shopList .item .lbl")].filter((l) => [...l.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("").trim() === "garlic").length)) === 1 && /^7 cloves? \+ 1 tbsp$/.test(v.rows.garlic?.q || ""), JSON.stringify(v.rows.garlic));
+  check("…for both recipes", v.rows.garlic?.from === "Garlic roast pork, Aioli", v.rows.garlic?.from);
+  await page.evaluate(() => [...document.querySelectorAll("#shopList .item")].find((r) => [...r.querySelector(".lbl").childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("").trim() === "garlic").querySelector("input").click()); await sleep(400);
+  const ticks = Object.entries((await s.state()).shop["2026-10-19"]?.checked || {}).filter(([k]) => k.startsWith("garlic|"));
+  check("…ticking it ticks both", ticks.length === 2 && ticks.every(([, t]) => t === true), JSON.stringify(ticks));
+  await page.reload(); await page.waitForFunction(() => !store.loading); await page.click('#tabs button[data-view="shop"]');
+  await page.click('#view-shop [data-week="1"]'); await page.click('#view-shop [data-week="1"]'); await sleep(300);
+  check("…and it's still ticked after a reload", (await shop()).rows.garlic?.done === true);
+  const inAisle = (item) => page.evaluate((item) => [...document.querySelectorAll("#shopList .aisle")].find((a) => a.textContent.includes(item))?.querySelector("h3").textContent, item);
+  check("an aisle written as 'meat' goes under Meat & seafood, not Produce", (await inAisle("pork mince")) === "Meat & seafood", await inAisle("pork mince"));
+  check("…one the app doesn't know goes under Other", (await inAisle("mystery mix")) === "Other", await inAisle("mystery mix"));
+  await page.click('#tabs button[data-view="recipes"]'); await page.click('.rcard:has-text("Garlic roast pork")'); await page.click("#edit"); await page.waitForSelector("#fTitle");
+  const sel = await page.evaluate(() => [...document.querySelectorAll(".ingrow")].map((r) => r.querySelector("[data-f=aisle]")?.value));
+  check("…and the edit form shows them as Meat & seafood and Other, not Produce", sel[2] === "meat & seafood" && sel[3] === "other" && sel[0] === "produce", JSON.stringify(sel));
+  await page.click("#revBack");
+
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
 } catch (e) { finish(e); } finally { await b?.browser.close(); await s?.cleanup(); }

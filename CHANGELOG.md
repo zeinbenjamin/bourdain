@@ -6,6 +6,14 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.7.9 — 2026-10-07
+- The shopping list rounds amounts up to what you'd buy: 7 cloves of garlic, not 6⅔, and 675 ml of stock, not 666⅔.
+- An ingredient used in different ways across the week (garlic by the clove in one recipe and by the tablespoon in another) is one line on the shopping list, showing both amounts. Ticking it ticks the lot.
+- An ingredient whose aisle Bourdain doesn't recognise now goes under Other, rather than showing (and saving) as Produce. Close matches like "meat" or "dairy" go to the right aisle.
+- Buttons are easier to hit: the batch − and +, a meal's serves − and +, the step timers, Everyone / Just me and the edit form's boxes are all at least as big as a fingertip.
+- On a small phone, the ingredient name in the edit form gets a line of its own instead of a tiny box.
+- Pasting a link to someone's Instagram profile, rather than a post, now says so, and how to copy the post's own link.
+
 ## 2.7.8 — 2026-10-07
 - Instagram links read faster: Bourdain now asks first in the way that's been working, instead of trying the others first.
 - If Instagram's copy of a caption looks cut short, Bourdain still tries the other ways and uses the fullest caption it gets. The activity view marks a shortened one as "maybe cut short".

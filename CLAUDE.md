@@ -190,12 +190,16 @@ what the person did: it is built from the Plan each time, for the Plan's own wee
 (`state.week`, so the two tabs move together; the Shop has its own ‹ › and dates,
 `[data-week]`). For the current week only today onwards (`shopDays()`); other weeks
 in full (there's no line saying so, since 2.7.3). Items merge by item and unit family (`item|fam`, the key ticks are stored
-under) and show in the recipe's own unit when every line uses the same unit
-(`shopAmount`), else in g/kg or ml/L. Pantry items (an `itemKey` match) stay in
+under; since 2.7.9 `shopRows` shows one row per item across families, its keys
+joined with `KEY_SEP` "§" and its amounts with " + ", and ticking it ticks every key) and show in the recipe's own unit when every line uses the same unit
+(`shopAmount`), else in g/kg or ml/L, rounded up to what you'd buy (`buyAmount`, 2.7.9:
+whole counts, g/ml in 5/10/25/50 steps, spoons in quarters). Pantry items (an `itemKey` match) stay in
 their aisle, ticked, with a `.ptag` "from pantry" (inline-block, so the
 strike-through doesn't reach it). The week's `shop` doc holds `checked` (ticked by
 hand), `need` (pantry items unticked to buy) and `manual` (Add something else,
-aisle from `guessAisle`). **Clear ticked** empties `checked` only, with Undo.
+aisle from `guessAisle`). An aisle that isn't one of `AISLES` goes through `aisleOf()`
+(2.7.9: close names like "meat" via `AISLE_SAME`, else "other"), on the list and in the
+edit form's menu, which used to show and save it as Produce. **Clear ticked** empties `checked` only, with Undo.
 **Share list** sends what's left (not ticked, not pantry) as plain text through
 `navigator.share`, else copies it. 1.x shop docs (`items: []`) open fine.
 
@@ -242,7 +246,9 @@ drawn by the `<span>` inside.
 
 **Edit form ingredients** (`renderReview`, `.ingrow`): each ingredient is a grey
 `--steel` card with a border and 10px between cards, white inputs inside, the
-⋮⋮ drag handle on the left and a 44px × on the right.
+⋮⋮ drag handle on the left and a 44px × on the right. Every box is 44px tall (2.7.9). At 360px
+or narrower the card is three rows (quantity, unit, ×; then the name across the width;
+then aisle and prep), so the name isn't squeezed to a 48px box.
 
 **Archives tab** (`renderTimeline`, `timelineEntries`): named for Bourdain's
 "the archives". It was called Timeline until 1.10.0 and is still `timeline`
@@ -469,8 +475,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v57"`
-in `public/sw.js` → `v58`, `v59`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v58"`
+in `public/sw.js` → `v59`, `v60`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -687,7 +693,9 @@ Four routes in, most to least reliable:
    headers. A caption ending in "…" may be cut short: it's kept, the rest are
    still tried, and it's used only if nothing else comes back ("(preview, maybe
    cut short)"). The log says which worked ("read the caption (query)") or what each got
-   (`instagramSeen`). No caption is a 422 `fetch_failed` with `source: "instagram"`,
+   (`instagramSeen`). A link that isn't a post (a profile, 2.7.9) is
+   422 `fetch_failed` with `notPost: true`, logged "not a post", and the phone says to
+   copy the post's own link. No caption is a 422 `fetch_failed` with `source: "instagram"`,
    never "read". The last 10 caption-less pages are kept in `DATA_DIR/debug/`
    (`keepInstagramPage`) for a look. **YouTube links** (2.5, `youtubeId`,
    `youtubeText`): oEmbed for the title and channel, plus `shortDescription`
@@ -747,7 +755,8 @@ never inline.
 
 ## Conventions
 
-- Mobile first. It is used on a phone, standing in a kitchen. Tap targets ≥ 44px.
+- Mobile first. It is used on a phone, standing in a kitchen. Tap targets ≥ 44px (since 2.7.9 every `.btn` has `min-height: 44px`; a
+  square ± is `.btn.sq`, 44×44).
   A small glyph like "×" gets a 44px box (a negative margin keeps the glyph where
   it was). No inline `style="margin…"` on layout: it silently beats the
   stylesheet. When you fix spacing, add a measured check to
