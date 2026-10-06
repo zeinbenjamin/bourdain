@@ -1019,7 +1019,8 @@ function show(view){
   document.querySelectorAll("section.view").forEach(s=>s.classList.toggle("active", s.id==="view-"+view));
   // Which tab stays lit for views that aren't tabs themselves
   const tab = view==="person" ? (state.personFrom==="timeline"?"timeline":"recipes") : view==="admin" ? "recipes"
-    : view==="theirs" ? ({recipes:"recipes",detail:"recipes"}[state.theirs?.from]||"timeline")
+    : view==="theirs" ? (state.theirs?.from==="person" ? (state.personFrom==="timeline"?"timeline":"recipes") // a friend's recipe, from their profile (2.7.5)
+      : {recipes:"recipes",detail:"recipes"}[state.theirs?.from]||"timeline")
     : (view==="detail"||view==="cook"||view==="import") ? (state.detailFrom||"recipes") : view;
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.view===tab));
   const sub=document.getElementById("topSub");

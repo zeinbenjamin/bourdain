@@ -152,6 +152,7 @@ try {
   check("…from Recipes, Back says Recipes and the Recipes tab stays lit", (await page.textContent("#pBack")).trim() === "‹ Recipes" && (await page.evaluate(() => document.querySelector("#tabs .on").dataset.view)) === "recipes");
   check("Sam's profile: name, counts, recent cooks and recipes", /Sam/.test(await page.textContent("#view-person h2")) && /2 recipes · 3 cooks/.test(await page.textContent("#view-person .profile")) && (await page.locator("#view-person .rcard").count()) === 2 && (await page.locator("#view-person .tl-top .slot").count()) === 3);
   await page.click('#view-person .rcard:has-text("katsu")'); await page.waitForSelector("#tCopy");
+  check("…a recipe opened from their profile keeps Recipes lit, not Archives (2.7.5)", (await page.evaluate(() => document.querySelector("#tabs .on").dataset.view)) === "recipes" && (await page.textContent("#tBack")).trim() === "‹ Sam");
   check("from the profile, Back says Sam", (await page.textContent("#tBack")).trim() === "‹ Sam" && (await page.textContent("#tCopy")).trim() === "Add to my recipes");
   await page.click("#tCopy"); await page.waitForSelector("#view-detail #fromLine");
   const copyId = await page.evaluate(() => state.detailId);

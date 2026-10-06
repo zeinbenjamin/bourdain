@@ -265,8 +265,9 @@ people (see **Other people** below).
   everyone's recipes and cooks, and write only their own.
 - **The People row** (`peopleRowHtml`) is at the top of Recipes since 2.7.3 (it was
   on the Archives), only once someone else has a name. A profile opened from it
-  (`openPerson`, `state.personFrom`) says "‹ Recipes" and keeps Recipes lit; one
-  opened from a recipe in the feed goes back to the Archives.
+  (`openPerson`, `state.personFrom`) says "‹ Recipes" and keeps Recipes lit, and so
+  does a recipe opened from that profile (`show()` maps `theirs` from `person` through
+  `personFrom`, 2.7.5); one opened from a recipe in the feed goes back to the Archives.
 - **Archives.** **Everyone / Just me** (per phone,
   `bourdain.archivesWho`) appears only once someone else has a name. Your cooks
   come from the phone's copy; everyone else's from `/api/feed`. `people.stale()`
@@ -468,8 +469,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v56"`
-in `public/sw.js` → `v57`, `v58`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v57"`
+in `public/sw.js` → `v58`, `v59`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after

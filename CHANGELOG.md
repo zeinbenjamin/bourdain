@@ -6,6 +6,9 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.7.5 — 2026-10-06
+- Fixed: opening a friend's recipe from their profile lit up the Archives tab. It now stays on Recipes, where you came from.
+
 ## 2.7.4 — 2026-10-06
 - Instagram links work again: Fetch & read now gets the post's caption. If the recipe isn't written in the caption, it says so, and screenshots or a screen recording are still the way in.
 - When a recipe site turns Bourdain away (some block apps from reading their pages), it now names the site and says how to get the recipe in: copy it from your browser and paste it, or add screenshots. Bourdain also asks for pages more like a browser does, so fewer sites turn it away.
