@@ -241,8 +241,9 @@ try {
   const ta = await page.evaluate(() => [...document.querySelectorAll("button, .ck, .rcard")].filter((e) => e.offsetParent).map((e) => getComputedStyle(e).touchAction));
   check("…a quick double tap on a button is a tap, not a zoom", ta.length > 0 && ta.every((t) => t === "manipulation"), [...new Set(ta)].join());
   await page.evaluate(() => { state.draft = null; state.editingId = null; state.view = "recipes"; show("recipes"); });
-  const pad = await page.evaluate(() => [...document.styleSheets].flatMap((sh) => { try { return [...sh.cssRules]; } catch { return []; } }).find((r) => r.selectorText === "main")?.cssText || "");
-  check("…the space under a page includes the iPhone's home bar", /safe-area-inset-bottom/.test(pad), pad);
+  const pad = await page.evaluate(() => { const rules = [...document.styleSheets].flatMap((sh) => { try { return [...sh.cssRules]; } catch { return []; } });
+    return (rules.find((r) => r.selectorText === "main")?.cssText || "") + " | " + (rules.find((r) => r.selectorText === ":root" && /--tabgap/.test(r.cssText))?.cssText.match(/--tabgap:[^;]+/)?.[0] || ""); });
+  check("…the space under a page follows the tab bar, which allows for the iPhone's home bar", /var\(--tabgap\)/.test(pad) && /--tabgap: ?max\(10px, ?calc\(env\(safe-area-inset-bottom/.test(pad), pad);
   // 2.6.4: lazy only below the first screen, so cards already on screen never flash blank
   const lazy = await page.evaluate(() => { const r = { cover: "c".repeat(32), photos: ["d".repeat(32)] };
     return { below: [cardHtml(r, "", "", true), cardHtml({ photos: ["d".repeat(32)] }, "", "", true)].every((h) => /loading="lazy"/.test(h)),
@@ -296,6 +297,17 @@ try {
   let tb = await pill();
   check("tab bar: a rounded pill floating 14px in from each side and 10px above the bottom, the page blurred behind it", tb.left === 14 && tb.right === 14 && tb.bottom === 10 && tb.blur && tb.round, JSON.stringify(tb));
   check("…five 44px+ tap targets, every label in full", tb.buttons.length === 5 && tb.buttons.every((x) => x.w >= 44 && x.h >= 44 && x.fits && x.label), JSON.stringify(tb.buttons));
+  // 2.7.2: at the end of a page there's a small gap above the tab bar, not a big empty band
+  const gaps = {};
+  await page.setViewportSize({ width: 390, height: 420 }); // short, so every one of these scrolls
+  for (const [tab, sel] of [["recipes", "#rlist .rcard"], ["plan", "#planHint"], ["pantry", "#pantryList > *, #view-pantry .actions"], ["shop", "#view-shop .shopacts"]]) {
+    await page.click(`#tabs button[data-view="${tab}"]`); await page.waitForTimeout(150);
+    gaps[tab] = await page.evaluate(async (q) => { const m = document.getElementById("main"); m.scrollTop = m.scrollHeight; await new Promise((r) => setTimeout(r, 100));
+      const last = [...document.querySelectorAll(q)].filter((e) => e.offsetParent).at(-1).getBoundingClientRect(), t = document.getElementById("tabs").getBoundingClientRect();
+      return m.scrollHeight > m.clientHeight ? Math.round(t.top - last.bottom) : "no scroll"; }, sel);
+  }
+  check("2.7.2: scrolled to the end, the last thing sits 8–28px above the tab bar (Recipes, Plan, Pantry, Shop)", Object.values(gaps).every((g) => typeof g === "number" && g >= 8 && g <= 28), JSON.stringify(gaps));
+  await page.click('#tabs button[data-view="recipes"]'); await page.setViewportSize({ width: 390, height: 844 });
   await page.setViewportSize({ width: 320, height: 568 }); await page.waitForTimeout(100);
   tb = await pill();
   check("…labels still fit on a 320px phone", tb.buttons.every((x) => x.fits && x.w >= 44), JSON.stringify(tb.buttons));
