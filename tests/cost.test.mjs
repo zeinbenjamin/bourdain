@@ -27,6 +27,12 @@ try {
   s.setMode({ cost: "junk" });
   const junk = await s.post("/api/ai", { kind: "cost", material });
   check("a reply that isn't a set of prices is refused (invalid_json)", junk.status === 422 && junk.code === "invalid_json", JSON.stringify(junk));
+  // 2.7.10: on Sonnet 5.5 the estimate ran past its 600-token cap and every one came back truncated
+  s.setMode({ cost: "long" }); s.clearLog();
+  const long = await s.post("/api/ai", { kind: "cost", material });
+  const asked = JSON.parse((s.log().match(/MOCK_CLAUDE_REQ (.*)/) || [])[1] || "{}");
+  check("a longer estimate has room to finish (not cut off as 'truncated')", long.status === 200 && long.json?.home_per_serve === 7, JSON.stringify(long));
+  check("…the cost job asks for up to 2000 tokens (you pay only for what's written)", asked.max_tokens === 2000, JSON.stringify(asked));
   s.setMode({});
   await putLimits({ defaults: { cost: 0, admin_exempt: false } });
   const lim = await s.post("/api/ai", { kind: "cost", material });

@@ -848,7 +848,7 @@ have `mid_per_serve`, and their `out_per_serve` is the old average, so the
 phone and `feedEntry` read `casual_per_serve` first (`outOf()`). On the phone, `costs` estimates in the background,
 one at a time, any recipe whose `cost.hash` (title-free hash of servings and
 ingredients) is missing or stale, and saves it with `store.enqueue` (no toast).
-It runs only when `store.me.ai` (the server has a Claude key). Saved per cook =
+It runs only when `store.me.ai` (the server has a Claude key). The job may write up to 2000 tokens (`maxTokens`, 2.7.10): at 600, Sonnet 5.5's estimates were cut off and failed as `truncated`. Saved per cook =
 (out − home) per serve × servings × batch (`cookSaved`). The recipe page shows
 `costHtml()`; the Archives show each cook's saving and `savingsHtml()` totals.
 `feedEntry` sends others' `cost` per serve. A recipe PUT that only changes `cost`

@@ -6,6 +6,9 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.7.10 — 2026-10-07
+- Fixed: the cost of a recipe ("about $X a serve" and what you saved in the Archives) often failed to work out after the switch to the newer Claude model, and the owner's view showed "Last call failed (truncated)". Estimates now have room to finish.
+
 ## 2.7.9 — 2026-10-07
 - The shopping list rounds amounts up to what you'd buy: 7 cloves of garlic, not 6⅔, and 675 ml of stock, not 666⅔.
 - An ingredient used in different ways across the week (garlic by the clove in one recipe and by the tablespoon in another) is one line on the shopping list, showing both amounts. Ticking it ticks the lot.

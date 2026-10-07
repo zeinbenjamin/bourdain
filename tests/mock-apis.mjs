@@ -1,6 +1,6 @@
 // Test-only stand-ins for api.anthropic.com and api.openai.com, loaded into the server
 // with `node --import tests/mock-apis.mjs`. The mode is read from MOCK_FILE on every call
-// ({"claude": "...", "image": "...", "scan": "...", "claudeDelay": ms, "imageDelay": ms, "cfCerts": "down", "cost": "junk", "dish": "nofood"|"unsure", "youtube": "nodesc", "instagram": "nocaption"|"json"|"json2"|"escaped"|"blocked-embed"|"preview-only"|"403"}), so one
+// ({"claude": "...", "image": "...", "scan": "...", "claudeDelay": ms, "imageDelay": ms, "cfCerts": "down", "cost": "junk"|"long", "dish": "nofood"|"unsure", "youtube": "nodesc", "instagram": "nocaption"|"json"|"json2"|"escaped"|"blocked-embed"|"preview-only"|"403"}), so one
 // server can be driven through every failure. Requests are logged as MOCK_CLAUDE_REQ,
 // MOCK_SCAN and MOCK_IMG_REQ so tests can check exactly what was sent.
 import { readFileSync } from "node:fs";
@@ -45,6 +45,8 @@ globalThis.fetch = async (url, opts = {}) => {
     if (/You estimate food costs/.test(prompt)) { // 2.5
       console.log("MOCK_COST " + JSON.stringify(prompt.slice(prompt.indexOf("RECIPE:"), prompt.indexOf("RECIPE:") + 60)));
       if (m.cost === "junk") return json(200, { content: [{ type: "text", text: '{"course":"main","home_total":"cheap"}' }], stop_reason: "end_turn", usage });
+      // 2.7.10: a wordier model's estimate needs ~900 tokens; under a lower max_tokens it's cut off, as Claude does
+      if (m.cost === "long" && body.max_tokens < 900) return json(200, { content: [{ type: "text", text: '{"course":"main","comparable":"Beef rendang with rice","home_total":42,"casual_per_serve":22,"basis":"Mostly the beef, which at' }], stop_reason: "max_tokens", usage: { input_tokens: 1000, output_tokens: body.max_tokens } });
       return json(200, { content: [{ type: "text", text: JSON.stringify({ course: "main", comparable: "Beef rendang with rice", home_total: 42, casual_per_serve: 22, basis: "Mostly the beef." }) }], stop_reason: "end_turn", usage });
     }
     if (/photo of a finished dish/.test(prompt)) { // 2.5

@@ -754,7 +754,9 @@ AI_JOBS.dish = { group: "import", images: 3, prompt: () => DISH_PROMPT,
     return { ...j, guess: { dish: clip(g.dish || j.title, 120), cuisine: clip(g.cuisine, 60), confidence,
       alternatives: (Array.isArray(g.alternatives) ? g.alternatives : []).slice(0, 3).map((a) => clip(a, 80)).filter(Boolean), basis: clip(g.basis, 300) } };
   } };
-AI_JOBS.cost = { group: "cost", images: 0, maxTokens: 600, prompt: COST_PROMPT,
+// 2.7.10: 2000, not 600. On Sonnet 5.5 estimates ran past 600 and came back "truncated";
+// only what Claude writes is billed, so the higher cap costs nothing extra.
+AI_JOBS.cost = { group: "cost", images: 0, maxTokens: 2000, prompt: COST_PROMPT,
   finish: (j, m) => {
     const serves = Number(m.servings) > 0 ? Number(m.servings) : 2;
     const home = money(j && j.home_total), casual = money(j && j.casual_per_serve);
