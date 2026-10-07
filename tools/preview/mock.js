@@ -3,7 +3,7 @@
    device (localStorage). AI jobs, link fetches and covers give canned answers.
    Injected by build.mjs before the app's own script; COVERS and VERSION are filled in there. */
 (() => {
-  const COVERS = /*COVERS*/{}, VERSION = /*VERSION*/{}, ME = "me";
+  const COVERS = /*COVERS*/{}, VERSION = /*VERSION*/{}, ADMIN = /*ADMIN*/{}, ME = "me";
   const KEY = "bourdain.preview.db", PKEY = "bourdain.preview.photos";
   const get = (k) => { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch { return null; } };
   const put = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } };
@@ -15,7 +15,8 @@
   const cook = (n, mult = 1) => ({ date: ymd(day(n)), at: day(n).toISOString(), mult });
   const I = (quantity, unit, item, prep = "", aisle = "produce") => ({ raw_text: [quantity, unit, item].filter((v) => v != null && v !== "").join(" ") + (prep ? ", " + prep : ""), quantity, unit, item, prep, section: "", aisle, optional: false });
   const cost = (home, out, comparable) => ({ home_per_serve: home, casual_per_serve: out, out_per_serve: out, course: "main", currency: "AUD", comparable, at: new Date().toISOString(), hash: "" });
-  const R = (title, o) => ({ title, description: "", servings: 4, prep_min: 15, cook_min: 25, source_type: "instagram", source_url: "", tags: [], photos: [], cooks: [], steps: [], ingredients: [], created_at: day(o.ago || 1).toISOString(), updated_at: day(o.ago || 1).toISOString(), ...o });
+  const R = (title, o) => ({ title, description: "", servings: 4, prep_min: 15, cook_min: 25, source_type: "instagram", source_url: "", tags: [], photos: [], cooks: [], steps: [], ingredients: [], created_at: day(o.ago || 1).toISOString(), updated_at: day(o.ago || 1).toISOString(), ...o,
+    cooks: [...(o.cooks || [])].sort((a, b) => (a.date + a.at).localeCompare(b.date + b.at)) }); // date order, as the app keeps them
   function seed() {
     const mine = {
       rendang: R("Beef Rendang", { ago: 1, cover: COVERS.rendang, servings: 6, prep_min: 30, cook_min: 170, source_type: "web", source_url: "https://example.com/beef-rendang", tags: ["indonesian", "beef", "curry"],
@@ -78,7 +79,25 @@
   const person = (u) => ({ id: u.id, name: u.name, photo: u.photo || null, me: u.id === ME });
   const named = () => Object.values(db.users).filter((u) => u.name);
   const recipesOf = (id) => (db.data[id] && db.data[id].recipes) || {};
-  const me = () => ({ id: ME, email: db.users.me.email, name: db.users.me.name, photo: db.users.me.photo, is_admin: false, ai: true, allowance: { exempt: true } });
+  const me = () => ({ id: ME, email: db.users.me.email, name: db.users.me.name, photo: db.users.me.photo, is_admin: true, ai: true, allowance: { exempt: true } });
+  // The owner's view: the server's own answers (admin.json, from capture-admin.mjs) with the
+  // demo people swapped in. Visitors per day are made up: Zein alone, then the pilot.
+  const visitors = () => { const out = [], pilot = [4, 8, 9, 7, 6];
+    for (let i = 29; i >= 0; i--) { const day = ymd(day_(i)), p = i < pilot.length ? pilot[pilot.length - 1 - i] : (i % 6 === 3 ? 0 : 1); out.push({ day, people: p, others: Math.max(0, p - 1) }); }
+    return out; };
+  const day_ = (n) => { const x = new Date(); x.setDate(x.getDate() - n); return x; };
+  function summary() {
+    const sum = JSON.parse(JSON.stringify(ADMIN.summary || {})), tmpl = (sum.people || [])[0] || {};
+    sum.day = ymd(new Date());
+    sum.people = Object.values(db.users).map((u, i) => { const rs = Object.values(recipesOf(u.id));
+      return { ...tmpl, id: u.id, email: u.email || u.id + "@example.com", name: u.name, photo: u.photo, is_admin: u.id === ME, last_seen: day_(i).toISOString(), created_at: day_(30 + i).toISOString(),
+        recipes: rs.length, cooks: rs.reduce((n, r) => n + (r.cooks || []).filter((c) => !c.added).length, 0), cooks_added: rs.reduce((n, r) => n + (r.cooks || []).filter((c) => c.added).length, 0), copies: rs.filter((r) => r.copied_from).length }; });
+    Object.assign(sum.totals || (sum.totals = {}), { users: sum.people.length, recipes: sum.people.reduce((n, p) => n + p.recipes, 0), active_today: 1 });
+    sum.visitors = visitors();
+    if (sum.system) sum.system.version = VERSION.version;
+    return sum; }
+  const activity = () => Object.values(db.users).flatMap((u, k) => Object.entries(recipesOf(u.id)).slice(0, 3).map(([, r], j) => ({ id: 100 - k * 10 - j, user: u.id, name: u.name, at: day_(k + j).toISOString(), action: "recipe_added", target: r.title || "" })))
+    .sort((a, b) => b.at.localeCompare(a.at));
   const feedEntry = (u, id, r, c) => ({ who: person(u), owner: u.id, recipeId: id, title: r.title || "", cover: r.cover || null, firstPhoto: (r.photos || [])[0] || null, rating: Number.isInteger(r.rating) ? r.rating : null,
     servings: Number(r.servings) || null, cost: r.cost ? { home_per_serve: r.cost.home_per_serve, out_per_serve: r.cost.casual_per_serve ?? r.cost.out_per_serve } : null, date: c.date, at: c.at || c.date, mult: Number(c.mult) || 1 });
   const words = (q) => q.toLowerCase().split(/\s+/).filter(Boolean);
@@ -135,6 +154,13 @@
     if (p[0] === "ai") { const b = JSON.parse(body || "{}"); if (!AI[b.kind]) return err(400, "bad_kind", "unknown AI job"); await sleep(b.kind === "cost" ? 300 : 1800); return json(200, { json: AI[b.kind](b.material || {}), allowance: { exempt: true } }); }
     if (p[0] === "cover") { await sleep(2500); const pool = Object.values(COVERS); return json(200, { id: pool[Math.floor(Math.random() * pool.length)], allowance: { exempt: true } }); }
     if (p[0] === "export") return err(404, "not_found", "Export isn't in the preview");
+    if (p[0] === "admin") {
+      if (p[1] === "summary") return json(200, summary());
+      if (p[1] === "activity") return json(200, activity());
+      if (p[1] === "audit") return json(200, ADMIN.audit || []);
+      if (p[1] === "errors") return json(200, ADMIN.errors || []);
+      if (method === "PUT") return json(200, { ok: true });
+    }
     return err(404, "not_found", "not in the preview");
   }
   const realFetch = window.fetch.bind(window);

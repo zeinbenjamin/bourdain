@@ -87,9 +87,11 @@ try {
   const gone = (await s.state()).recipes.soup.cooks.length;
   const tb = await page.evaluate(() => { const b = document.querySelector("#toast.show .toast-btn"), r = b && b.getBoundingClientRect(); return b && { text: b.textContent, h: Math.round(r.height), w: Math.round(r.width), msg: document.querySelector("#toast").firstChild.textContent }; });
   check("removing says so, with a 44px Undo", tb && tb.text === "Undo" && tb.h >= 44 && tb.w >= 44 && /^Removed /.test(tb.msg), JSON.stringify(tb));
+  const over = await page.evaluate(() => { const t = document.getElementById("toast").getBoundingClientRect(), sh = document.getElementById("sheet").getBoundingClientRect(); return { toastBottom: Math.round(t.bottom), sheetTop: Math.round(sh.top) }; });
+  check("2.8.0: with the sheet open, the toast sits just above it, not over its rows", over.toastBottom <= over.sheetTop && over.sheetTop - over.toastBottom <= 20, JSON.stringify(over));
   await page.click("#toast .toast-btn"); await sleep(500);
   r = await server("soup");
-  check("…Undo puts it back, in date order, and the sheet lists it again", r.cooks.length === gone + 1 && r.cooks.every((c, i, a) => !i || (a[i - 1].date + a[i - 1].at) <= (c.date + c.at)) && (await page.locator("#sheet .cooks li").count()) === 2 && /Put back/.test(await page.textContent("#toast")));
+  check("…Undo puts it back, in date order, and the sheet lists it again, saying 'Added' (2.8.0, was 'Put back')", r.cooks.length === gone + 1 && r.cooks.every((c, i, a) => !i || (a[i - 1].date + a[i - 1].at) <= (c.date + c.at)) && (await page.locator("#sheet .cooks li").count()) === 2 && /^Added /.test(await page.textContent("#toast")), await page.textContent("#toast"));
   await page.locator('#sheet [data-act="rm"]').first().click(); await sleep(400); // take it off again for the checks below
   await page.click('#sheet [data-act="done"]');
   check("recipe page updated: 3 Michelin stars · Cooked once", (await page.locator("#cookStats .mstar").count()) === 3 && /Cooked once/.test(await page.textContent("#cookStats")));
@@ -159,6 +161,43 @@ try {
   const summary = await (await fetch(s.url + "/api/admin/summary")).json();
   const all = Object.values((await s.state()).recipes).flatMap((x) => x.cooks || []);
   check("…and the owner's view counts it apart", summary.people[0].cooks === all.filter((c) => !c.added).length && summary.people[0].cooks_added === 2, JSON.stringify({ cooks: summary.people[0].cooks, added: summary.people[0].cooks_added }));
+
+  // --- 2.8.0: change how many servings a logged cook made (tap its date in the cook log)
+  const rowsText = async () => page.$$eval("#sheet .cooks li .cook-edit", (x) => x.map((e) => e.textContent.replace(/\s+/g, " ").trim()));
+  const editsBefore = (await (await fetch(s.url + "/api/admin/activity?cat=content&limit=200")).json()).filter((a) => a.action === "recipe_edited").length;
+  let rowsNow = await rowsText();
+  check("each cook in the log says what it made: today 4 servings (2× of 2), 40 days ago 4, 400 days ago 2", /· 4 servings/.test(rowsNow[0]) && /· 4 servings.*added later/.test(rowsNow[1]) && /· 2 servings/.test(rowsNow[2]), JSON.stringify(rowsNow));
+  const editBox = await page.locator('#sheet .cooks li:first-child [data-act="edit"]').boundingBox();
+  check("…and each date is a 44px button", editBox && editBox.height >= 44, JSON.stringify(editBox));
+  const fortyIx = (await server("soup")).cooks.findIndex((c) => c.date === d40);
+  await page.click(`#sheet [data-act="edit"][data-i="${fortyIx}"]`); await page.waitForSelector("#ecN");
+  check("tapping a past cook opens its servings: 4, with the recipe's own 2 as a reminder", (await page.textContent("#ecN")) === "4 servings" && /The recipe makes 2/.test(await page.textContent("#sheet")));
+  await page.click('#sheet [data-act="minus"]'); await page.click('#sheet [data-act="save"]'); await page.waitForSelector("#sheet.open #addPastCook"); await sleep(400);
+  r = await server("soup");
+  const forty = r.cooks.find((c) => c.date === d40);
+  check("…3 servings saved as a 1.5× batch, still added later, same date and time", forty.mult === 1.5 && forty.added === true && r.cooks.length === 3 && new Date(forty.at).getHours() === 12, JSON.stringify(forty));
+  check("…says so, and the log shows it", (await page.textContent("#toast")) === `${await page.evaluate((d) => fmtDate(d), d40)} is now 3 servings` && /· 3 servings/.test((await rowsText())[1]), await page.textContent("#toast"));
+  const todayIx = r.cooks.findIndex((c) => c.date === today);
+  await page.click(`#sheet [data-act="edit"][data-i="${todayIx}"]`); await page.waitForSelector("#ecN");
+  await page.click('#sheet [data-act="plus"]'); await page.click('#sheet [data-act="save"]'); await page.waitForSelector("#sheet.open #addPastCook"); await sleep(400);
+  r = await server("soup");
+  check("…a cook finished in cook mode can be changed too (4 → 5 servings, 2.5×), still a finished cook", r.cooks.find((c) => c.date === today).mult === 2.5 && !r.cooks.find((c) => c.date === today).added);
+  check("…the Archives show the new servings", await page.evaluate(() => timelineEntries().filter((e) => e.recipeId === "soup").map((e) => cookServes(state.recipes.soup.servings, e.mult)).sort().join()) === "2 servings,3 servings,5 servings",
+    await page.evaluate(() => JSON.stringify(timelineEntries().filter((e) => e.recipeId === "soup").map((e) => e.mult))));
+  const acts2 = await (await fetch(s.url + "/api/admin/activity?cat=content&limit=200")).json();
+  check("…logged as 'changed the servings for a cook of', with the date, not as an edit", acts2.some((a) => a.action === "cook_changed" && a.target.endsWith(` (${d40})`)) && acts2.some((a) => a.action === "cook_changed" && a.target.endsWith(` (${today})`)) && acts2.filter((a) => a.action === "recipe_edited").length === editsBefore,
+    JSON.stringify(acts2.slice(0, 4)));
+  await page.click(`#sheet [data-act="edit"][data-i="${todayIx}"]`); await page.waitForSelector("#ecN"); await page.click('#sheet [data-act="back"]'); await page.waitForSelector("#sheet.open #addPastCook");
+  check("…Back goes back to the log without changing anything", (await server("soup")).cooks.find((c) => c.date === today).mult === 2.5);
+  await page.click('#sheet [data-act="done"]');
+  // a recipe without servings picks a batch instead
+  await s.put("recipes", "jam", { title: "Plum jam", ingredients: [{ item: "plum", quantity: 1, unit: "kg" }], steps: ["Boil."], photos: [], tags: [], cooks: [{ date: today, at: new Date().toISOString(), mult: 1 }], created_at: "2026-09-01" });
+  await page.reload(); await page.waitForFunction(() => !store.loading);
+  await page.click('.rcard:has-text("Plum jam")'); await page.click("#cookStats"); await page.waitForSelector("#sheet.open .cooks");
+  await page.click('#sheet [data-act="edit"][data-i="0"]'); await page.waitForSelector("#ecN");
+  check("a recipe without servings asks for the batch: 1×", (await page.textContent("#ecN")) === "1× batch" && /How big a batch/.test(await page.textContent("#sheet")));
+  await page.click('#sheet [data-act="plus"]'); await page.click('#sheet [data-act="save"]'); await sleep(400);
+  check("…+ goes to 1½×, saved as 1.5", (await server("jam")).cooks[0].mult === 1.5 && /1½× batch/.test(await page.textContent("#toast")), await page.textContent("#toast"));
   await page.click('#sheet [data-act="done"]');
 
   check("no page errors", errors.length === 0, errors.join(" | "));

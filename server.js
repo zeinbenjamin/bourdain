@@ -262,6 +262,7 @@ function signedInUser(email) {
 const clientIp = (req) => plainIp(req.socket.remoteAddress); // never X-Forwarded-For: anyone can send that
 const viaCloudflare = (req) => Boolean(req.get("cf-ray") || req.get("cf-connecting-ip") || req.get("cf-access-jwt-assertion"));
 const lastSeenAt = new Map(), refusedAt = new Map();
+const visitedOn = new Map(); // user id -> the day their visit was last recorded
 /* Two checks for requests a browser sends on someone's behalf:
    - A change sent from another website (a form or script on a page you happen
      to visit) is refused: browsers say where a request came from in
@@ -318,6 +319,10 @@ app.use("/api", async (req, res, next) => {
   if (req.user.disabled_at && !req.user.is_admin && !(req.method === "GET" && req.path === "/export"))
     return res.status(403).json({ error: "this account is paused", code: "account_disabled" });
   req.signin = { how, ip: clientIp(req), cloudflare: cf };
+  // 2.8.0: who opened Bourdain each day, for the owner's "People each day" chart. Once per
+  // person per (server-local) day; last_seen alone only remembers the latest visit.
+  const today = localDay();
+  if (visitedOn.get(req.user.id) !== today) { visitedOn.set(req.user.id, today); db.prepare("INSERT OR IGNORE INTO visits (day, user) VALUES (?, ?)").run(today, req.user.id); }
   const seen = lastSeenAt.get(req.user.id) || 0;
   if (Date.now() - seen > 5 * 60_000) {
     lastSeenAt.set(req.user.id, Date.now());
@@ -530,10 +535,15 @@ app.put("/api/:col(recipes|plan|pantry|shop)/:id", sameDataVersion, (req, res) =
     // 2.6.0: a cook added for an earlier day (not finished in cook mode) is its own kind,
     // so "finished a cook" in the activity log stays a count of real, live cooks.
     const addedLater = cooked && fresh.length > 0 && fresh.every((c) => c.added === true);
+    // 2.8.0: the same cooks with a different batch (servings changed in the cook log)
+    const multOf = new Map(cooksOf(was).map((c) => [`${c.date}|${c.at}`, Number(c.mult) || 1]));
+    const resized = !cooked && !fresh.length ? cooksOf(doc).filter((c) => multOf.has(`${c.date}|${c.at}`) && multOf.get(`${c.date}|${c.at}`) !== (Number(c.mult) || 1)) : [];
+    const onlyCooks = (r) => { const { cooks, cost, updated_at, ...rest } = r || {}; return JSON.stringify(rest); };
+    const changedCook = resized.length > 0 && was && onlyCooks(was) === onlyCooks(doc);
     const sameApart = (a, b) => { const strip = ({ cost, updated_at, ...rest } = {}) => JSON.stringify(rest); return strip(a) === strip(b); };
     const title = doc.title || "Untitled";
-    if (!(was && sameApart(was, doc))) logActivity(req.user.id, !prev ? "recipe_added" : addedLater ? "cook_added" : cooked ? "cook_logged" : "recipe_edited",
-      addedLater ? `${title} (${fresh.map((c) => String(c.date).slice(0, 10)).join(", ")})` : title); // a new cost estimate isn't an edit
+    if (!(was && sameApart(was, doc))) logActivity(req.user.id, !prev ? "recipe_added" : addedLater ? "cook_added" : cooked ? "cook_logged" : changedCook ? "cook_changed" : "recipe_edited",
+      addedLater ? `${title} (${fresh.map((c) => String(c.date).slice(0, 10)).join(", ")})` : changedCook ? `${title} (${resized.map((c) => String(c.date).slice(0, 10)).join(", ")})` : title); // a new cost estimate isn't an edit
   } else if (col === "plan") logActivity(req.user.id, "plan_changed", id);
   else if (col === "shop") logActivity(req.user.id, "shop_changed", id); // the week it's for, never what's on it (2.7.0)
   else if (col === "pantry") logActivity(req.user.id, "pantry_changed", doc.item || id);
@@ -778,6 +788,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, actor TEXT, action TEXT NOT NULL, detail TEXT);
   CREATE TABLE IF NOT EXISTS server_errors (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, area TEXT NOT NULL, code TEXT NOT NULL, message TEXT);
   CREATE TABLE IF NOT EXISTS photos (id TEXT PRIMARY KEY, owner TEXT NOT NULL, bytes INTEGER NOT NULL, created_at TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS visits (day TEXT NOT NULL, user TEXT NOT NULL, PRIMARY KEY (day, user));
   CREATE INDEX IF NOT EXISTS photos_owner ON photos (owner);
 `);
 const getSetting = (k) => { const r = db.prepare("SELECT value FROM settings WHERE key = ?").get(k); try { return r ? JSON.parse(r.value) : null; } catch { return null; } };
@@ -972,6 +983,20 @@ async function systemHealth() {
   return h;
 }
 const monthUse = (where, args) => db.prepare(`SELECT grp, COUNT(*) AS calls, COALESCE(SUM(est_usd), 0) AS usd FROM ai_usage WHERE day LIKE ? ${where} GROUP BY grp`).all(localDay().slice(0, 7) + "%", ...args);
+/* People each day (2.8.0): for each of the last `n` days, oldest first, how many people
+   opened Bourdain (`people`) and how many of them weren't the owner (`others`). From
+   `visits`, plus anyone with activity that day, which covers the days before 2.8.0
+   recorded visits (activity alone misses someone who only looked around). */
+function visitorsByDay(n) {
+  const days = [], d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() - (n - 1));
+  for (let i = 0; i < n; i++) { days.push(localDay(d)); d.setDate(d.getDate() + 1); }
+  const who = new Map(days.map((k) => [k, new Set()]));
+  for (const r of db.prepare("SELECT day, user FROM visits WHERE day >= ?").all(days[0])) who.get(r.day)?.add(r.user);
+  const from = new Date(days[0] + "T00:00:00");
+  for (const r of db.prepare("SELECT user, at FROM activity WHERE at >= ?").all(from.toISOString())) who.get(localDay(new Date(r.at)))?.add(r.user);
+  const admins = new Set(db.prepare("SELECT id FROM users WHERE is_admin = 1").all().map((u) => u.id));
+  return days.map((day) => { const s = who.get(day); return { day, people: s.size, others: [...s].filter((u) => !admins.has(u)).length }; });
+}
 app.get("/api/admin/summary", requireAdmin, async (req, res, next) => {
   try {
     const day = localDay(), month = day.slice(0, 7) + "%", since = midnightIso();
@@ -1007,6 +1032,7 @@ app.get("/api/admin/summary", requireAdmin, async (req, res, next) => {
       active_today: people.filter((p) => p.last_seen && p.last_seen >= since).length,
       ai_calls_today: db.prepare("SELECT COUNT(*) AS n FROM ai_usage WHERE day = ?").get(day).n,
     };
+    const visitors = visitorsByDay(30);
     const health = await systemHealth();
     const lastError = db.prepare("SELECT at, area, code, message FROM server_errors ORDER BY id DESC LIMIT 1").get() || null;
     const errorsToday = db.prepare("SELECT COUNT(*) AS n FROM server_errors WHERE at >= ?").get(since).n;
@@ -1018,7 +1044,7 @@ app.get("/api/admin/summary", requireAdmin, async (req, res, next) => {
       if (p.limits.storage_mb > 0 && p.storage_bytes >= 0.9 * p.limits.storage_mb * 1024 * 1024) attention.push(`${p.name || p.email} has used ${Math.round((100 * p.storage_bytes) / (p.limits.storage_mb * 1024 * 1024))}% of their photo storage`);
     }
     if (errorsToday) attention.push(`${errorsToday} error${errorsToday === 1 ? "" : "s"} recorded today`);
-    res.json({ day, people, totals, health, attention,
+    res.json({ day, people, totals, health, attention, visitors,
       month: { calls: byKind.reduce((n, r) => n + r.calls, 0), usd: total, byKind },
       ai: { providers: { anthropic: Math.min(anthropic, total), openai: Math.max(0, total - anthropic), images }, budget, failures },
       system: { version: VERSION, commit: COMMIT, data_version: DATA_VERSION, started_at: STARTED_AT, last_error: lastError, errors_today: errorsToday },
@@ -1250,6 +1276,7 @@ function pruneLogs() {
   const cut = (days) => new Date(Date.now() - days * 86_400_000).toISOString();
   const a = db.prepare("DELETE FROM activity WHERE at < ?").run(cut(183)).changes, u = db.prepare("DELETE FROM ai_usage WHERE at < ?").run(cut(400)).changes;
   db.prepare("DELETE FROM server_errors WHERE at < ?").run(cut(90)); // the audit log is never pruned
+  db.prepare("DELETE FROM visits WHERE day < ?").run(cut(400).slice(0, 10));
   if (a || u) console.log(`pruned ${a} old activity row${a === 1 ? "" : "s"} and ${u} old AI usage row${u === 1 ? "" : "s"}`);
 }
 const runSweep = () => { try { pruneLogs(); } catch (err) { console.error("log prune failed", err); } return sweepCovers().catch((err) => console.error("cover sweep failed", err)); };

@@ -1,0 +1,332 @@
+{
+ "summary": {
+  "day": "2026-10-07",
+  "people": [
+   {
+    "id": "cf67d54d18d1",
+    "email": "owner@example.com",
+    "name": "Test Owner",
+    "photo": null,
+    "is_admin": true,
+    "paused": false,
+    "paused_at": null,
+    "created_at": "2026-10-07T13:50:44.013Z",
+    "last_seen": "2026-10-07T13:50:44.124Z",
+    "recipes": 1,
+    "cooks": 0,
+    "cooks_added": 0,
+    "copies": 0,
+    "ai": {
+     "today": {
+      "import": 0,
+      "scan": 0,
+      "ideas": 0,
+      "cover": 0,
+      "cost": 0
+     },
+     "month_calls": 0,
+     "month_usd": 0,
+     "month_by_kind": []
+    },
+    "storage_bytes": 0,
+    "limits": {
+     "import": 20,
+     "scan": 10,
+     "ideas": 15,
+     "cover": 5,
+     "cost": 40,
+     "monthly_usd": 5,
+     "storage_mb": 500,
+     "admin_exempt": true
+    },
+    "overrides": null
+   }
+  ],
+  "totals": {
+   "users": 1,
+   "recipes": 1,
+   "storage_bytes": 0,
+   "photos": 0,
+   "covers": 0,
+   "recipes_today": 1,
+   "active_today": 1,
+   "ai_calls_today": 0
+  },
+  "health": {
+   "auth": {
+    "label": "Signing in",
+    "status": "off",
+    "text": "Home network only",
+    "detail": "Cloudflare sign-in isn't set up"
+   },
+   "db": {
+    "label": "Database",
+    "status": "ok",
+    "text": "Operational",
+    "detail": "0 MB · data version 2"
+   },
+   "storage": {
+    "label": "Photo storage",
+    "status": "ok",
+    "text": "Operational",
+    "detail": "27.7 GB free on the dataset"
+   },
+   "ai": {
+    "label": "AI (Claude)",
+    "status": "off",
+    "text": "Not configured",
+    "detail": "No ANTHROPIC_API_KEY on the server"
+   },
+   "images": {
+    "label": "Cover pictures (OpenAI)",
+    "status": "off",
+    "text": "Not configured",
+    "detail": "No OPENAI_API_KEY on the server"
+   },
+   "backups": {
+    "label": "Backups",
+    "status": "unknown",
+    "text": "Not monitored",
+    "detail": "ZFS snapshots run on TrueNAS; Bourdain can't see them"
+   }
+  },
+  "attention": [],
+  "visitors": [
+   {
+    "day": "2026-09-08",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-09-09",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-09-10",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-09-11",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-09-12",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-09-13",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-09-14",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-09-15",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-09-16",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-09-17",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-09-18",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-09-19",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-09-20",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-09-21",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-09-22",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-09-23",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-09-24",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-09-25",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-09-26",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-09-27",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-09-28",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-09-29",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-09-30",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-10-01",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-10-02",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-10-03",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-10-04",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-10-05",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-10-06",
+    "people": 0,
+    "others": 0
+   },
+   {
+    "day": "2026-10-07",
+    "people": 1,
+    "others": 0
+   }
+  ],
+  "month": {
+   "calls": 0,
+   "usd": 0,
+   "byKind": []
+  },
+  "ai": {
+   "providers": {
+    "anthropic": 0,
+    "openai": 0,
+    "images": 0
+   },
+   "budget": {
+    "combined": 0,
+    "people": 0
+   },
+   "failures": []
+  },
+  "system": {
+   "version": "2.8.0",
+   "commit": "dev",
+   "data_version": 2,
+   "started_at": "2026-10-07T13:50:44.020Z",
+   "last_error": null,
+   "errors_today": 0
+  },
+  "defaults": {
+   "import": 20,
+   "scan": 10,
+   "ideas": 15,
+   "cover": 5,
+   "cost": 40,
+   "monthly_usd": 5,
+   "storage_mb": 500,
+   "admin_exempt": true
+  },
+  "prices": {
+   "model": "claude-sonnet-4-6",
+   "claude": [
+    3,
+    15
+   ],
+   "known": true,
+   "image_usd": 0.05
+  },
+  "signin": {
+   "cloudflare": false,
+   "team": null,
+   "trusted": [],
+   "you": {
+    "how": "home (sign-in not set up)",
+    "ip": "127.0.0.1",
+    "cloudflare": false
+   }
+  }
+ },
+ "activity": [
+  {
+   "id": 3,
+   "user": "cf67d54d18d1",
+   "name": "Test Owner",
+   "at": "2026-10-07T13:50:44.143Z",
+   "action": "recipe_added",
+   "target": "Beef Rendang"
+  },
+  {
+   "id": 2,
+   "user": "cf67d54d18d1",
+   "name": "Test Owner",
+   "at": "2026-10-07T13:50:44.138Z",
+   "action": "profile_changed",
+   "target": "Test Owner"
+  }
+ ],
+ "audit": [
+  {
+   "id": 1,
+   "at": "2026-10-07T13:50:44.028Z",
+   "actor": null,
+   "action": "deployed",
+   "detail": "v2.8.0 (dev)"
+  }
+ ],
+ "errors": {
+  "server": [],
+  "ai": []
+ }
+}
