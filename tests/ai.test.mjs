@@ -195,6 +195,18 @@ try {
     const lay = await page.evaluate(() => ({ w: document.documentElement.scrollWidth, small: [...document.querySelectorAll("#view-admin button, #view-admin select, #view-admin input:not([type=checkbox])")].filter((x) => x.offsetParent && x.getBoundingClientRect().height < 44).map((x) => x.textContent.trim().slice(0, 30) || x.id) }));
     check(`${label}: fits a phone, no sideways scroll, everything tappable is 44px tall`, lay.w <= 390 && lay.small.length === 0, JSON.stringify(lay));
   };
+  // 2.8.0: someone else's days, for "People each day": a visit two days ago, and only
+  // activity three days ago (as before 2.8.0 recorded visits)
+  const dayOf = (n) => { const x = new Date(); x.setDate(x.getDate() - n); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`; };
+  { const d = db(); d.prepare("INSERT INTO users (id, email, name, created_at) VALUES ('ava', 'ava@example.com', 'Ava', datetime())").run();
+    d.prepare("INSERT INTO visits (day, user) VALUES (?, 'ava')").run(dayOf(2));
+    d.prepare("INSERT INTO activity (user, at, action, target) VALUES ('ava', ?, 'recipe_added', 'Pho')").run(new Date(dayOf(3) + "T12:00:00").toISOString()); d.close(); }
+  const vis = (await (await fetch(s.url + "/api/admin/summary")).json()).visitors;
+  const visRows = (() => { const d = db(); try { return d.prepare("SELECT * FROM visits WHERE user != 'ava'").all(); } finally { d.close(); } })();
+  check("2.8.0: opening Bourdain records the day, once per person", visRows.length === 1 && visRows[0].day === dayOf(0) && visRows[0].user === owner, JSON.stringify(visRows));
+  check("…the summary has the last 30 days, oldest first, ending today", vis.length === 30 && vis[29].day === dayOf(0) && vis[0].day === dayOf(29), JSON.stringify([vis[0], vis[29]]));
+  check("…today: 1 person, you, so 0 besides you", vis[29].people === 1 && vis[29].others === 0, JSON.stringify(vis[29]));
+  check("…two days ago Ava's visit counts, three days ago her activity does (days before visits were recorded)", vis[27].people === 1 && vis[27].others === 1 && vis[26].people === 1 && vis[26].others === 1 && vis[25].people === 0, JSON.stringify(vis.slice(25)));
   await page.click("#brand"); await page.waitForSelector("#sheet.open #verHead");
   await page.click("#verHead"); await sleep(800);
   check("a tap on the version heading does nothing", !(await page.evaluate(() => state.view === "admin")) && await page.isVisible("#sheet.open"));
@@ -203,12 +215,20 @@ try {
   await page.waitForSelector("#view-admin.active .adm-title");
   let adm = await admText();
   check("a long press opens the admin overview, with the sheet closed", /System overview/.test(adm) && /Only you can see this/.test(adm) && !(await page.isVisible("#sheet.open")));
-  check("…sections in order: overview, health, AI usage, people, recent activity, admin, system", (await page.$$eval("#view-admin .adm-head h3", (hs) => hs.map((h) => h.textContent.replace(/\s*\d+$/, "").trim()))).join("|") === "System health|AI usage|People|Recent activity|Admin|System", adm.slice(0, 200));
+  check("…sections in order: overview, people each day (2.8.0), health, AI usage, people, recent activity, admin, system", (await page.$$eval("#view-admin .adm-head h3", (hs) => hs.map((h) => h.textContent.replace(/\s*\d+$/, "").trim()))).join("|") === "People each day|System health|AI usage|People|Recent activity|Admin|System", adm.slice(0, 200));
   check("…overview metrics: users, recipes, AI calls, AI spend, storage", (await page.$$eval("#view-admin .adm-metrics .adm-m span", (xs) => xs.map((x) => x.textContent))).map((t) => t.replace(/ · .*/, "")).join("|") === "Users|Recipes|AI calls|AI spend|Storage");
   check("…health rows say what they know: database operational, backups not monitored", /Database[\s\S]*Operational/.test(adm) && /Backups[\s\S]*Not monitored/.test(adm) && (await page.locator("#view-admin .adm-h.ok").count()) >= 2 && (await page.locator("#view-admin .adm-h.unknown, #view-admin .adm-h.off").count()) >= 2);
   check("…needs attention lists today's errors", /Needs attention/.test(adm) && /recorded today/.test(adm));
   check("…a compact people list and recent activity without sign-ins", /Test Owner · You/.test(adm) && /\d+ recipes? · \d+ cooks? · \d+ AI calls? · US\$/.test(adm) && /deleted\s*Dal tadka/.test(adm) && !/signed in via/.test(adm));
   check("…the Recipes tab stays lit", await page.evaluate(() => document.querySelector('#tabs button.on')?.dataset.view === "recipes"));
+  const chart = await page.evaluate(() => { const v = document.querySelector("#view-admin .vis"); return v && { read: v.querySelector(".vread").textContent, cols: v.querySelectorAll(".col").length, bars: v.querySelectorAll(".bar").length, today: !!v.querySelector(".bar.today"), table: v.querySelectorAll("table tr").length, label: v.querySelector("svg").getAttribute("aria-label") }; });
+  check("2.8.0 People each day: a bar for each day with someone in it, today's in the accent", chart && chart.cols === 30 && chart.bars === 3 && chart.today, JSON.stringify(chart));
+  check("…the line above reads today: '1 person · just you'", chart && chart.read === "Today · 1 person · just you", chart?.read);
+  check("…and a screen reader gets the same as a table", chart && chart.table === 31 && /last 30 days/.test(chart.label));
+  const svgBox = await page.locator("#view-admin .vis svg").boundingBox();
+  await page.mouse.move(svgBox.x + svgBox.width * (20 / 340) + (svgBox.width * (1 - 20 / 340)) * (27.5 / 30), svgBox.y + svgBox.height / 2); await sleep(150);
+  const read2 = await page.textContent("#view-admin .vis .vread");
+  check("…pointing at a day reads it: two days ago, 1 person, 1 besides you", read2.includes("1 person · 1 besides you") && !read2.startsWith("Today") && (await page.locator("#view-admin .vis .sel").count()) >= 1, read2);
   await fitsPhone("overview");
 
   // a person

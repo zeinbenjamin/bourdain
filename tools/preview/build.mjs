@@ -50,7 +50,8 @@ html = html.replaceAll('src="/avatars/', 'src="avatars/');
 const head = html.slice(html.indexOf("<head>") + 6, html.indexOf("</head>"))
   .replace(/<meta charset[^>]*>\n?/, "").replace(/<meta name="viewport"[^>]*>\n?/, "").replace(/<title>[^<]*<\/title>\n?/, "");
 const body = html.slice(html.indexOf("<body>") + 6, html.lastIndexOf("</body>"));
-const mock = readFileSync(path.join(HERE, "mock.js"), "utf8").replace("/*COVERS*/{}", JSON.stringify(covers)).replace("/*VERSION*/{}", JSON.stringify(VERSION));
+const mock = readFileSync(path.join(HERE, "mock.js"), "utf8").replace("/*COVERS*/{}", JSON.stringify(covers)).replace("/*VERSION*/{}", JSON.stringify(VERSION))
+  .replace("/*ADMIN*/{}", () => readFileSync(path.join(HERE, "admin.json"), "utf8").trim());
 writeFileSync(path.join(OUT, "index.html"), `<title>Bourdain preview</title>\n<script>\n${mock}\n</script>\n${head}\n${body}`);
 const files = [...readdirSync(path.join(OUT, "img")).map((f) => "img/" + f), ...readdirSync(path.join(OUT, "avatars")).map((f) => "avatars/" + f)];
 writeFileSync(path.join(OUT, "files.json"), JSON.stringify(files.map((p) => ({ path: p }))));

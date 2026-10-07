@@ -6,6 +6,14 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.8.0 — 2026-10-07
+- Slide along the tab bar: press any tab and slide your finger to another, then let go to open it. Everyone / Just me in the Archives slides the same way. Tapping works as before.
+- Change how many servings you made for a cook you've already logged: open the recipe's cook log (tap the line under its title) and tap the date. Works for cooks finished in cook mode and ones added later.
+- The cook log now shows what each cook made, like "4 servings".
+- A message shown while a sheet is open, like Undo after removing a cook, now sits just above the sheet instead of covering it.
+- Undo after removing a cook now says "Added" with the date, rather than "Put back".
+- Owner's view: a new "People each day" chart shows how many people opened Bourdain on each of the last 30 days. Tap or drag across it to read a day.
+
 ## 2.7.10 — 2026-10-07
 - Fixed: the cost of a recipe ("about $X a serve" and what you saved in the Archives) often failed to work out after the switch to the newer Claude model, and the owner's view showed "Last call failed (truncated)". Estimates now have room to finish.
 

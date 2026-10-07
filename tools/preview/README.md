@@ -16,10 +16,15 @@ Live at **https://claude.ai/artifact/GXP3kbY5VKKrM2dKU3WEAo** (private to Zein).
   device; link fetches, AI jobs and covers give canned answers after a short wait.
   It seeds a demo book (Zein's own recipes and covers) and two made-up friends, Sam and Alex.
   `#reset` on the link starts the demo over.
+- The demo user is the owner, so the owner's view opens (long press on the version
+  sheet's heading). Its answers come from `admin.json`, captured from a real test server by
+  `node tools/preview/capture-admin.mjs` (re-run it when the owner's view changes), with
+  the demo people and made-up visitor numbers swapped in by `mock.js`.
 - `covers/` are the demo covers, given fixed 32-hex ids so `photoUrl()`/`coverUrl()`
   accept them.
 
-Not in the preview: real data, real AI, Export, the owner's view (`is_admin` is false),
+Not in the preview: real data, real AI, Export, changes in the owner's view (limits and
+pausing answer OK but nothing is kept),
 offline (no service worker), and Web Share (Share list copies instead).
 
 ## Building and publishing

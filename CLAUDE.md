@@ -40,6 +40,9 @@ phone, and every read and write is scoped to it. Alongside them:
   person picks one in the welcome sheet; only named people are shown to others,
   and emails never are.
 - `meta (key, value)`, holding `data_version`.
+- `visits (day, user)` (2.8.0): one row per person per server-local day they opened
+  Bourdain, written by the who-is-asking middleware (`visitedOn` keeps it to one insert a
+  day), pruned after 400 days. Created on start; no data conversion.
 
 See **Data version** under Gotchas.
 
@@ -148,7 +151,11 @@ the date), never `cook_logged`, and the owner's view counts them apart
 (`cooks_added`), so the pilot's count of finished cooks stays honest (Zein,
 2026-10-05). Everywhere on the phone they count like any other cook. Removing a cook (× in
 that sheet) is instant, and its toast has **Undo** (2.6.1), which puts it back with
-`addCook()`. The cooking screen (`state.view ===
+`addCook()`. **Changing a cook's servings** (2.8.0, `editCookSheet`): each date in that sheet
+is a button showing what it made (`cookMade()`, "4 servings"); it opens − / + servings
+(or a batch from `PAST_MULTS` for a recipe without servings) and saves only `mult`, so the
+date, `at` and `added` stay. The server logs it as `cook_changed` ("changed the servings
+for a cook of", with the date), not `recipe_edited`. The cooking screen (`state.view ===
 "cook"`, `renderCook`) toggles ticks in place instead of re-rendering, so the
 page never jumps while you cook. `wake` holds a Screen Wake Lock while it's open
 and releases it in `show()` for any other view.
@@ -211,6 +218,15 @@ its bottom is `--tabgap` (`max(10px, safe-area-inset-bottom − 12px)`, so 22px 
 iPhone with a home bar). `<main>`'s bottom padding (`--tabgap` + 60px, plus each
 view's own 24px) leaves about 16px between the end of a page and the bar, and the
 toast sits at `--tabgap` + 80px. The layout suite measures all of it.
+**Slide to choose (2.8.0, `slide`)**: press the tab bar, or any `.seg` switch (Everyone /
+Just me), and move 8px sideways: a `.slidepill` follows the finger, `.near` marks the
+button under it, and letting go clicks that button, so each control keeps its own click
+handler (a tap is left to the ordinary click). The pill isn't enlarged and is clamped to
+the box's padding, so its gap from the edge at the ends equals the gap above and below
+(6px on the bar, 3px on `.seg`). `.tabs` is `touch-action: none`; `.seg` is `pan-y`, and
+a mostly vertical drag on it is a scroll. If the screen is redrawn mid-slide (the Archives
+when the feed arrives) `slide.relink()` carries on with the same switch in the new
+drawing, found by its buttons' `data-*`. The `slide` suite checks all of it.
 
 **Adding a recipe** (`addSheet`): the Recipes "+" (and the empty book's button)
 opens a sheet, most used first (2.6.1): **Import a recipe** (the import form, with "‹ Recipes" to go back),
@@ -345,7 +361,11 @@ heading, only when `store.me.is_admin`. There is deliberately no button.
   today and this month, limits, their activity, Pause/Resume), `ai` (cost by
   provider, feature and person, failed calls, the limits form), `activity`
   (person / event kind / period / search; sign-ins are their own kind),
-  `audit`, `errors`, `people`. Sub-screens' Back is "‹ Admin"; `adminGo()`
+  `audit`, `errors`, `people`. **People each day** (2.8.0, `visitorsHtml`): bars for
+  the last 30 days from `summary.visitors` (`visitorsByDay()`: `visits`, plus anyone with
+  activity that day, which covers days before visits were recorded), today in `--flame`;
+  hovering, tapping or dragging across it (`visPick`) reads a day in the line above, with
+  how many weren't the owner ("· just you"). Sub-screens' Back is "‹ Admin"; `adminGo()`
   moves between them. Activity filters repaint only `#actList`, so the search
   box keeps focus.
 - **Health is real or it says so** (`systemHealth()` in `server.js`): the
@@ -423,7 +443,8 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   zip), `cost` (estimates, savings in the Archives, re-estimating), `dish`
   (Guess from a photo, YouTube links), `allowance` (what's left of the AI
   allowance, 2.6.0), `shop` (the Shop tab, 2.7.0), `back` (the phone's back
-  gesture and drafts kept through a restart, 2.7.4), `preview` (the preview in
+  gesture and drafts kept through a restart, 2.7.4), `slide` (sliding along the tab bar
+  and Everyone / Just me, 2.8.0), `preview` (the preview in
   Claude still builds and runs, `tools/preview`), `scan`, `video`.
 - `slowProxy` delays: `shell` (index.html), `state` (`/api/state`), `write`
   (PUT/DELETE).
@@ -496,8 +517,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v58"`
-in `public/sw.js` → `v59`, `v60`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v59"`
+in `public/sw.js` → `v60`, `v61`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -785,7 +806,9 @@ never inline.
 - Plain DOM. No React, no jQuery, no state library.
 - Patterns already in the file: `render()` dispatches by `state.view`;
   `esc()` on every interpolated string; `toast()` for feedback (`toast(msg,
-  {label, run})` adds a 44px button such as Undo and stays up 6s, 2.6.1);
+  {label, run})` adds a 44px button such as Undo and stays up 6s, 2.6.1; with a sheet
+  open, `placeToast()` floats it 12px above the sheet's top, following the sheet's size
+  through `sheetSize`, 2.8.0);
   `openSheet`/`sheetActions` for modals.
 - Errors get a specific, human message that says what to do next. Not "an error
   occurred". Look at how the import statuses are worded and match that register.

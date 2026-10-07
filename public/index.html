@@ -108,6 +108,26 @@ section.view.active{display:block}
 .tabs button svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 .tabs button.on{color:var(--ink);font-weight:700;background:rgba(18,18,18,.08)}
 .tabs button.on svg{stroke:var(--ink);stroke-width:2.3}
+/* Slide to choose (2.8.0, `slide`): press the tab bar or Everyone / Just me and slide.
+   A lifted pill (white with a shadow, not enlarged, so it keeps the same gap from the
+   bar's edge at the ends as above and below: the bar's own padding) follows the finger, the button under it lights, the one you started
+   on dims, and letting go chooses. At rest it's the .on button's own background. */
+.tabs{touch-action:none;-webkit-user-select:none;user-select:none}
+.seg{position:relative;touch-action:pan-y;-webkit-user-select:none;user-select:none}
+.tabs button,.seg button{position:relative;z-index:1;transition:color .15s}
+.slidepill{position:absolute;z-index:0;left:0;width:0;border-radius:999px;pointer-events:none;
+  transition:transform .18s ease-out,box-shadow .18s,left .22s cubic-bezier(.3,1.3,.5,1)}
+.slidepill.live{transition:transform .18s ease-out,box-shadow .18s}
+.tabs .slidepill{top:6px;bottom:6px;background:rgba(255,255,255,.95);box-shadow:0 4px 18px rgba(18,18,18,.18),0 0 0 1px rgba(18,18,18,.06)}
+.seg .slidepill{top:3px;bottom:3px;background:var(--ink)}
+.slidepill.done{transform:none;box-shadow:none}
+.tabs.sliding button.on,.seg.sliding button.on{background:none}
+.tabs.sliding button.on:not(.near){color:var(--ink-3);font-weight:500}
+.tabs.sliding button.on:not(.near) svg{stroke:currentColor;stroke-width:1.9}
+.tabs.sliding button.near{color:var(--ink);font-weight:700}
+.tabs.sliding button.near svg{stroke-width:2.3}
+.seg.sliding button.on:not(.near){color:var(--ink-2);font-weight:500}
+.seg.sliding button.near{color:var(--paper);font-weight:600}
 
 /* Generic controls */
 .btn{
@@ -328,6 +348,22 @@ body.aslist .rcard .tags{display:none}
   .adm-metrics.four .adm-m:nth-child(n+3){border-top:1px solid var(--line)}
 }
 .adm-today{font-family:var(--sans);font-size:12px;color:var(--ink-2);margin:8px 0 0}
+/* People each day (2.8.0, visitorsHtml): one bar a day for 30 days, today in the accent.
+   Tap, drag or hover across it to read a day in the line above. */
+.vis{margin:6px 0 0}
+.vis .vread{font-family:var(--sans);font-size:13px;color:var(--ink);margin:0 0 6px;min-height:20px;font-variant-numeric:tabular-nums}
+.vis .vread b{font-weight:700}
+.vis svg{display:block;width:100%;height:auto;touch-action:pan-y;-webkit-user-select:none;user-select:none;cursor:crosshair}
+.vis .grid{stroke:var(--line);stroke-width:1}
+.vis .base{stroke:var(--ink-3);stroke-width:1}
+.vis .bar{fill:var(--ink-3)}
+.vis .bar.today{fill:var(--flame)}
+.vis .bar.sel{fill:var(--ink)}
+.vis .bar.today.sel{fill:var(--flame)}
+.vis .col.sel{fill:var(--steel)}
+.vis text{font-family:var(--sans);font-size:10px;fill:var(--ink-3);font-variant-numeric:tabular-nums}
+.vis .vsum{font-family:var(--sans);font-size:12px;color:var(--ink-2);margin:6px 0 0}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .adm-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;border-bottom:1px solid var(--rule);margin:22px 0 0;min-height:44px}
 .adm-head h3{font-family:var(--sans);font-size:13px;letter-spacing:.02em;text-transform:uppercase;font-weight:700;margin:0;padding-bottom:6px}
 .adm-head h3 .n{color:var(--ink-3);font-weight:600;margin-left:4px}
@@ -549,6 +585,11 @@ body.aslist .rcard .tags{display:none}
 .rate .opt.on{box-shadow:inset 3px 0 0 var(--flame);padding-left:12px}
 .cooks{list-style:none;padding:0;margin:8px 0 0}
 .cooks li{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding:6px 0;font-family:var(--sans);font-size:14px}
+.cooks .cook-edit{flex:1;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;background:none;border:0;padding:0 8px 0 0;font:inherit;color:var(--ink);text-align:left}
+.cooks .cook-edit .chev{color:var(--ink-3);font-size:18px}
+.sheet-hint{margin:8px 0 0}
+.stepper{align-items:center;gap:14px}
+.stepper strong{font-family:var(--sans);font-size:17px;min-width:110px;text-align:center}
 .cooks .x{border:0;background:none;color:var(--ink-3);font-size:18px;min-width:44px;min-height:44px}
 .sheet-lead{margin:0 0 6px}
 .sheet-sub{margin:16px 0 0}
@@ -1007,7 +1048,16 @@ function weekLabel(m){ const s=addDays(m,6); return `${m.getDate()} ${MONTHS[m.g
 function toast(msg,action){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.toggle("act",!!action);
   // 2.6.1: an optional button, like Undo; the toast stays up longer and can be tapped
   if(action){ const b=document.createElement("button"); b.className="toast-btn"; b.textContent=action.label; b.onclick=()=>{ t.classList.remove("show","act"); clearTimeout(t._h); action.run(); }; t.append(b); }
-  t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show","act"),action?6000:Math.max(2200,msg.length*60)); } // long messages stay up long enough to read
+  placeToast(); t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show","act"),action?6000:Math.max(2200,msg.length*60)); } // long messages stay up long enough to read
+// 2.8.0: with a sheet open, the toast floats just above the sheet's top edge, over the
+// dimmed page, instead of covering a row of the sheet (the Undo after removing a cook).
+// A sheet is at most 75% of the screen, so there's always room. It follows the sheet as
+// it grows or shrinks (sheetSize, from openSheet).
+function placeToast(){
+  const t=document.getElementById("toast"), s=document.getElementById("sheet");
+  t.style.bottom = s&&s.classList.contains("open") ? Math.round(innerHeight-s.getBoundingClientRect().top+12)+"px" : "";
+}
+const sheetSize=typeof ResizeObserver==="function" ? new ResizeObserver(()=>placeToast()) : null;
 // Only http(s) links become links: a "javascript:" source link in someone else's recipe would run in your session.
 function webUrl(u){ return /^https?:\/\//i.test(String(u||"").trim()) ? String(u).trim() : ""; }
 function hostOf(u){ try{ return new URL(u).hostname.replace(/^www\./,""); }catch(e){ return ""; } }
@@ -1113,6 +1163,62 @@ const keepDraft=()=>{ clearTimeout(draftTimer); draftTimer=setTimeout(()=>drafts
 document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden") drafts.save(); });
 addEventListener("pagehide",()=>drafts.save());
 document.getElementById("tabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(b) show(b.dataset.view); });
+/* Slide to choose (2.8.0): the tab bar and any .seg switch. A tap is left to the
+   ordinary click; only a press that moves 8px sideways becomes a slide. Letting go
+   clicks the button under the finger, so each control keeps its own click handler.
+   The pill lives only while sliding; at rest the .on button draws itself. */
+const slide={
+  on:null,
+  start(e){
+    const box=e.target.closest(".tabs, .seg"); if(!box||e.button>0||this.on) return;
+    const btns=[...box.querySelectorAll(":scope > button")]; if(btns.length<2) return;
+    this.on={box, btns, id:e.pointerId, x0:e.clientX, y0:e.clientY, moving:false, near:-1, pill:null};
+  },
+  move(e){
+    const s=this.on; if(!s||e.pointerId!==s.id) return;
+    if(!s.moving){
+      const dx=Math.abs(e.clientX-s.x0), dy=Math.abs(e.clientY-s.y0);
+      if(s.box.classList.contains("seg")&&dy>10&&dy>dx){ this.on=null; return; } // a scroll that began on the switch
+      if(dx<8) return;
+      s.moving=true; try{ s.box.setPointerCapture(s.id); }catch(_){}
+      s.pill=document.createElement("span"); s.pill.className="slidepill live"; s.box.prepend(s.pill);
+      s.box.classList.add("sliding");
+    }
+    if(!s.box.isConnected&&!this.relink(s)){ this.on=null; return; }
+    const r=s.box.getBoundingClientRect(), b0=s.btns[0], w=b0.offsetWidth, x=e.clientX-r.left;
+    const cs=getComputedStyle(s.box), min=parseFloat(cs.paddingLeft), max=s.box.clientWidth-parseFloat(cs.paddingRight)-w;
+    s.pill.style.width=w+"px"; s.pill.style.left=Math.max(min,Math.min(max,x-w/2))+"px";
+    let near=0, best=1e9; s.btns.forEach((b,i)=>{ const d=Math.abs(b.offsetLeft+b.offsetWidth/2-x); if(d<best){ best=d; near=i; } });
+    if(near!==s.near){ if(s.near>=0) navigator.vibrate?.(4); s.near=near; s.btns.forEach((b,i)=>b.classList.toggle("near",i===near)); }
+  },
+  // The screen was redrawn mid-slide (the Archives when the feed arrives): carry on
+  // with the same switch in the new drawing, found by its buttons' data-* attributes.
+  relink(s){
+    const key=x=>JSON.stringify({...x.dataset}), want=s.btns.map(key).join();
+    const box=[...document.querySelectorAll(".tabs, .seg")].find(x=>[...x.querySelectorAll(":scope > button")].map(key).join()===want);
+    if(!box){ s.pill?.remove(); return false; }
+    s.box=box; s.btns=[...box.querySelectorAll(":scope > button")];
+    box.prepend(s.pill); box.classList.add("sliding"); try{ box.setPointerCapture(s.id); }catch(_){}
+    s.btns.forEach((b,i)=>b.classList.toggle("near",i===s.near));
+    return true;
+  },
+  end(e, cancel){
+    const s=this.on; if(!s||e.pointerId!==s.id) return; this.on=null;
+    if(!s.moving) return; // a tap: the click does the rest
+    // The screen may have been redrawn mid-slide (the Archives when the feed arrives):
+    // then click the same button in the new drawing.
+    if(!s.box.isConnected&&!this.relink(s)) return;
+    const b=s.btns[s.near], pill=s.pill;
+    pill.classList.remove("live"); pill.style.left=b.offsetLeft+"px"; pill.classList.add("done");
+    const tidy=()=>{ pill.remove(); s.box.classList.remove("sliding"); s.btns.forEach(x=>x.classList.remove("near")); };
+    if(cancel){ tidy(); return; }
+    setTimeout(()=>{ tidy(); if(!b.classList.contains("on")) b.click(); }, 160);
+  },
+};
+addEventListener("pointerdown",e=>slide.start(e));
+addEventListener("pointermove",e=>slide.move(e));
+addEventListener("pointerup",e=>slide.end(e,false));
+addEventListener("pointercancel",e=>slide.end(e,true));
 
 /* ---------- render ---------- */
 /* How much of the AI allowance is left (2.6.0). The server sends counts and a
@@ -1825,12 +1931,13 @@ function historySheet(recipeId){
   const sh=openSheet(`<h3>${esc(r.title)}</h3><p class="muted small sheet-lead">Michelin rating</p>
     ${ratingOpts(r.rating??null)}
     <p class="muted small sheet-sub">${cooks.length?`Cooked ${cooks.length===1?"once":cooks.length+" times"}`:"Not cooked yet. Tap Cook this on the recipe to start, or add a time you've already made it."}</p>
-    ${cooks.length?`<ul class="cooks">${cooks.map(c=>`<li><span>${esc(fmtDate(c.date))}${c.mult&&c.mult!==1?` · ${esc(c.mult)}× batch`:""}${c.added?` <span class="muted">· added later</span>`:""}</span><button class="x" data-act="rm" data-i="${c.i}" aria-label="Remove this date">×</button></li>`).join("")}</ul>`:""}
+    ${cooks.length?`<ul class="cooks">${cooks.map(c=>`<li><button class="cook-edit" data-act="edit" data-i="${c.i}" aria-label="Change the servings for ${esc(fmtDate(c.date))}"><span>${esc(fmtDate(c.date))}${cookMade(r,c)?` · ${esc(cookMade(r,c))}`:""}${c.added?` <span class="muted">· added later</span>`:""}</span><span class="chev" aria-hidden="true">›</span></button><button class="x" data-act="rm" data-i="${c.i}" aria-label="Remove this date">×</button></li>`).join("")}</ul><p class="muted small sheet-hint">Tap a date to change how many servings you made.</p>`:""}
     <div class="row sheet-row"><button class="btn" data-act="add" id="addPastCook">Add a date I cooked this</button><button class="btn ghost" data-act="done">Done</button></div>`);
   const save=async msg=>{ r.updated_at=new Date().toISOString(); const ok=await store.put("recipes",recipeId,r); if(state.view==="detail") renderDetail(); if(ok&&msg) toast(msg); };
   sheetActions(sh,{
     done:closeSheet,
     add:()=>pastCookSheet(recipeId),
+    edit:b=>editCookSheet(recipeId,+b.dataset.i),
     rate:async b=>{ r.rating=+b.dataset.n; sh.querySelectorAll('[data-act="rate"]').forEach(o=>o.classList.toggle("on",+o.dataset.n===r.rating)); await save(r.rating?`Rated ${r.rating} Michelin star${r.rating===1?"":"s"}`:"Rated: no stars"); },
     // removing is instant; the toast's Undo puts it back (2.6.1)
     rm:async b=>{ const i=+b.dataset.i; const c=r.cooks[i]; r.cooks=r.cooks.filter((_,k)=>k!==i);
@@ -1839,7 +1946,40 @@ function historySheet(recipeId){
         const rr=state.recipes[recipeId]; if(!rr) return; addCook(rr,c); rr.updated_at=new Date().toISOString();
         const back=await store.put("recipes",recipeId,rr); if(state.view==="detail") renderDetail();
         if(document.querySelector("#sheet.open .cooks, #sheet.open #addPastCook")) historySheet(recipeId);
-        if(back) toast(`Put back ${fmtDate(c.date)}`); }}); },
+        if(back) toast(`Added ${fmtDate(c.date)}`); }}); },
+  });
+}
+/* What a cook made, on its row in the cook log: "8 servings", or "2× batch" for a recipe
+   without servings, or nothing for one batch of a recipe without servings. */
+const cookMade=(r,c)=>cookServes(r.servings,c.mult);
+/* Change a logged cook's servings (2.8.0): tap its date in the cook log. Only the batch
+   changes (`mult`, servings ÷ the recipe's servings); its date, and whether it was added
+   later, stay as they were. A recipe without servings picks a batch instead. */
+function editCookSheet(recipeId,i){
+  const r=state.recipes[recipeId], c=r&&r.cooks&&r.cooks[i]; if(!c) return;
+  const per=Number(r.servings)>0?Number(r.servings):0, mult=Number(c.mult)>0?Number(c.mult):1;
+  let n=per?Math.max(1,Math.round(per*mult)):mult;
+  const shown=()=>per?`${fmtQty(n)} serving${n===1?"":"s"}`:`${fmtQty(n)}× batch`;
+  const sh=openSheet(`<h3>${esc(fmtDate(c.date))}</h3><p class="muted small sheet-lead">${esc(r.title||"Untitled")}${c.added?" · added later":""}</p>
+    <div class="field"><label>${per?"How many servings did you make?":"How big a batch did you make?"}</label>
+      <div class="row stepper"><button class="btn sq" data-act="minus" aria-label="Fewer">−</button><strong id="ecN" aria-live="polite">${esc(shown())}</strong><button class="btn sq" data-act="plus" aria-label="More">+</button></div>
+      ${per?`<p class="muted small">The recipe makes ${fmtQty(per)}.</p>`:""}</div>
+    <div class="row sheet-row"><button class="btn primary" data-act="save">Save</button><button class="btn ghost" data-act="back">Back</button></div>`);
+  const paint=()=>{ sh.querySelector("#ecN").textContent=shown(); };
+  const steps=PAST_MULTS, at=()=>steps.indexOf(n);
+  sheetActions(sh,{
+    minus:()=>{ if(per) n=Math.max(1,n-1); else n=steps[Math.max(0,(at()<0?steps.findIndex(x=>x>=n):at())-1)]; paint(); },
+    plus:()=>{ if(per) n=Math.min(per*10,n+1); else n=steps[Math.min(steps.length-1,(at()<0?steps.findIndex(x=>x>=n):at())+1)]; paint(); },
+    back:()=>historySheet(recipeId),
+    save:async()=>{
+      const was=cookMade(r,c);
+      c.mult=per?Math.round(n/per*1000)/1000:n;
+      r.updated_at=new Date().toISOString();
+      const ok=await store.put("recipes",recipeId,r);
+      if(state.view==="detail") renderDetail();
+      historySheet(recipeId);
+      if(ok&&cookMade(r,c)!==was) toast(`${fmtDate(c.date)} is now ${cookMade(r,c)||"1× batch"}`);
+    },
   });
 }
 /* A cook that happened without Cook this (2.6.0): any date up to today. It's marked
@@ -2030,11 +2170,12 @@ function openSheet(html){
   document.documentElement.classList.add("sheet-open"); // the page behind a sheet stays put
   document.getElementById("toast").classList.remove("show"); // a leftover toast would sit on top of the sheet
   s.addEventListener("click",e=>{ const b=e.target.closest("[data-act]"); if(!b||!s._acts) return; const fn=s._acts[b.dataset.act]; if(fn) fn(b,e); });
+  sheetSize?.disconnect(); sheetSize?.observe(s);
   nav.sync();
   return s;
 }
 function sheetActions(s,acts){ s._acts=acts; }
-function closeSheet(){ document.getElementById("sheet").classList.remove("open"); document.getElementById("sheetBg").classList.remove("open"); document.documentElement.classList.remove("sheet-open"); nav.sync(); }
+function closeSheet(){ document.getElementById("sheet").classList.remove("open"); document.getElementById("sheetBg").classList.remove("open"); document.documentElement.classList.remove("sheet-open"); sheetSize?.disconnect(); placeToast(); nav.sync(); }
 document.getElementById("sheetBg").onclick=closeSheet;
 
 /* A recipe is on a day at most once (2.6.5): its serves are changed on the meal
@@ -2925,7 +3066,7 @@ function renderReview(){
    used, what is AI costing, who's using it, what happened lately. Detail is one
    tap down: a person, AI usage and limits, all activity, the audit log, errors.
    Health shows only what the server can check; the rest says "Not monitored". */
-const ACT_WORDS={ recipe_added:"added", recipe_edited:"edited", recipe_deleted:"deleted", cook_logged:"cooked", cook_added:"added a past cook of", recipe_copied:"copied",
+const ACT_WORDS={ recipe_added:"added", recipe_edited:"edited", recipe_deleted:"deleted", cook_logged:"cooked", cook_added:"added a past cook of", cook_changed:"changed the servings for a cook of", recipe_copied:"copied",
   plan_changed:"changed the plan for", shop_changed:"changed the shopping list for", pantry_changed:"pantry:", pantry_removed:"took off the pantry:", profile_changed:"set their name to",
   ai_import:"imported a recipe with AI", ai_scan:"scanned the fridge", ai_ideas:"asked for recipe ideas", ai_write:"had a recipe written", ai_cover:"painted a cover", ai_dish:"guessed a recipe from a photo",
   signed_in:"signed in via", link_fetched:"fetched a link from" };
@@ -3016,6 +3157,7 @@ function adminHomeHtml({sum,act,at}){
     ${sum.attention.length?`<div class="adm-attn" role="status"><h3>Needs attention</h3><ul>${sum.attention.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`:`<p class="adm-ok">Nothing needs attention.</p>`}
     <div class="adm-metrics">${metric(t.users,"Users")}${metric(t.recipes,"Recipes")}${metric(m.calls,`AI calls · ${mon}`)}${metric(m.usd<0.01?"US$0":"US$"+m.usd.toFixed(2),`AI spend · ${mon}`)}${metric(fmtMB(t.storage_bytes),"Storage")}</div>
     <p class="adm-today">Today: ${plural(t.recipes_today,"new recipe")} · ${plural(t.active_today,"person","people")} active · ${plural(t.ai_calls_today,"AI call")}</p>
+    ${visitorsHtml(sum.visitors)}
     ${secHead("System health")}
     ${["auth","db","ai","images","storage","backups"].filter(k=>h[k]).map(k=>healthRow(h[k])).join("")}
     ${secHead("AI usage","ai")}
@@ -3042,6 +3184,46 @@ function adminHomeHtml({sum,act,at}){
     <div class="adm-row"><span>Last error</span><span>${sum.system.last_error?`${esc(whenShort(sum.system.last_error.at))} · ${esc(sum.system.last_error.code)}`:"None recorded"}</span></div>
     <h4 class="adm-h4">Signing in</h4>${signinHtml(sum.signin)}`;
 }
+/* People each day (2.8.0): sum.visitors is 30 days, oldest first, of {day, people, others}:
+   everyone who opened Bourdain that day, and how many of them weren't you. */
+const shortDay=k=>{ const d=new Date(k+"T00:00"); return `${DAYS[(d.getDay()+6)%7]} ${d.getDate()} ${MONTHS[d.getMonth()]}`; };
+const visRead=(d,isToday)=>`<b>${isToday?"Today":esc(shortDay(d.day))}</b> · ${plural(+d.people||0,"person","people")}${(+d.people||0)>0?(+d.others||0)===0?" · just you":` · ${+d.others} besides you`:""}`;
+function visitorsHtml(v){
+  if(!Array.isArray(v)||!v.length) return "";
+  const W=340, L=20, T=8, B=104, H=122, n=v.length, gap=2, bw=(W-L-gap*(n-1))/n;
+  const max=Math.max(...v.map(d=>+d.people||0), 1), tick=max<=4?1:max<=8?2:max<=20?5:10, top=Math.ceil(max/tick)*tick;
+  const y=x=>B-(B-T)*x/top, xs=i=>L+i*(bw+gap);
+  const grid=[]; for(let g=tick; g<=top; g+=tick) grid.push(`<line class="grid" x1="${L}" x2="${W}" y1="${y(g)}" y2="${y(g)}"/><text x="${L-5}" y="${y(g)+3.5}" text-anchor="end">${g}</text>`);
+  const bars=v.map((d,i)=>{ const p=+d.people||0, x=xs(i), h=B-y(p), r=Math.min(3,bw/2,h);
+    const col=`<rect class="col" data-i="${i}" x="${x-gap/2}" y="${T}" width="${bw+gap}" height="${B-T}" fill="transparent"/>`;
+    if(!p) return col;
+    return col+`<path class="bar${i===n-1?" today":""}" data-i="${i}" d="M${x},${B} V${B-h+r} Q${x},${B-h} ${x+r},${B-h} H${x+bw-r} Q${x+bw},${B-h} ${x+bw},${B-h+r} V${B} Z"/>`; }).join("");
+  const label=(i,t,anchor)=>`<text x="${xs(i)+(anchor==="end"?bw:anchor==="middle"?bw/2:0)}" y="${H-4}" text-anchor="${anchor}">${t}</text>`;
+  const last=v[n-1], week=v.slice(-7), avg=week.reduce((a,d)=>a+(+d.people||0),0)/week.length;
+  return `${secHead("People each day")}
+    <div class="vis" data-vis='${esc(JSON.stringify(v))}'>
+      <p class="vread" aria-live="polite">${visRead(last,true)}</p>
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="People who opened Bourdain each day, last ${n} days. Today ${+last.people||0}.">
+        ${grid.join("")}<line class="base" x1="${L}" x2="${W}" y1="${B}" y2="${B}"/><text x="${L-5}" y="${B+3.5}" text-anchor="end">0</text>
+        ${bars}${label(0,esc(shortDay(v[0].day).replace(/^\S+ /,"")),"start")}${label(n-1,"Today","end")}
+      </svg>
+      <p class="vsum">Last 7 days: about ${avg>=10?Math.round(avg):Math.round(avg*10)/10} a day · counts anyone who opened Bourdain, you included</p>
+      <table class="sr"><caption>People each day</caption><tr><th>Day</th><th>People</th><th>Besides you</th></tr>${v.map(d=>`<tr><td>${esc(shortDay(d.day))}</td><td>${+d.people||0}</td><td>${+d.others||0}</td></tr>`).join("")}</table>
+    </div>`;
+}
+// Reading a day: hover with a mouse, or tap or drag a finger across the bars. The line
+// above says which day; nothing is redrawn but two classes.
+const visPick=e=>{
+  const box=e.target.closest&&e.target.closest(".vis"); if(!box) return;
+  if(e.pointerType!=="mouse"&&e.type==="pointermove"&&!e.buttons&&e.pressure===0) return;
+  const svg=box.querySelector("svg"), r=svg.getBoundingClientRect(), v=JSON.parse(box.dataset.vis), n=v.length;
+  const L=20*r.width/340, i=Math.max(0,Math.min(n-1,Math.floor((e.clientX-r.left-L)/((r.width-L)/n))));
+  if(box._i===i) return; box._i=i;
+  box.querySelector(".vread").innerHTML=visRead(v[i],i===n-1);
+  box.querySelectorAll(".sel").forEach(x=>x.classList.remove("sel"));
+  box.querySelectorAll(`[data-i="${i}"]`).forEach(x=>x.classList.add("sel"));
+};
+addEventListener("pointermove",visPick); addEventListener("pointerdown",visPick);
 function adminPeopleHtml({sum}){
   return `<div class="adm-kicker">Admin</div><h2 class="adm-title">People</h2>
     <p class="adm-meta">${plural(sum.people.length,"person","people")} · tap someone for their usage, limits and account</p>${sum.people.map(personLine).join("")}`;
