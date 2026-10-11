@@ -25,7 +25,7 @@ try {
   check("recipe page: 'Cook this' and 'Not rated yet · Never cooked'", (await page.textContent("#cookThis")) === "Cook this" && /Not rated yet.*Never cooked/.test(await page.textContent("#cookStats")));
   await page.click("#multUp"); await page.click("#multUp"); // 2×
   await page.click("#cookThis"); await page.waitForSelector("#cookIng");
-  check("cooking screen: title, batch and scaled amounts", /Leek soup/.test(await page.textContent("#view-cook h2")) && /2× batch/.test(await page.textContent("#view-cook .kicker")) && /1000 ml/.test(await page.textContent("#cookIng")));
+  check("cooking screen: title, what you're making (2× of 2 = 4 servings, 2.8.1) and scaled amounts", /Leek soup/.test(await page.textContent("#view-cook h2")) && (await page.textContent("#cookAmt")) === "4 servings" && /1000 ml/.test(await page.textContent("#cookIng")), await page.textContent("#cookAmt"));
   check("section headings kept ('To finish')", /To finish/i.test(await page.textContent("#cookIng")));
   check("first step highlighted as the next one", await page.locator('[data-step="0"].current').count() === 1);
   check("screen kept awake while cooking", (await page.evaluate(() => window.__wake.requested)) >= 1);
@@ -47,7 +47,18 @@ try {
   const FLAME = "rgb(211, 7, 43)";
   check("'Still cooking' text and Continue button are Michelin red; button 44px", bar.text === FLAME && bar.title === FLAME && bar.btnBg === FLAME && bar.btnInk === "rgb(255, 255, 255)" && bar.h >= 44, JSON.stringify(bar));
   await page.click("#cookResume"); await page.waitForSelector("#cookIng");
-  check("continue: ticks and batch kept", (await page.locator("#cookIng .ck.done").count()) === 1 && (await page.locator("#cookSteps .ck.done").count()) === 1 && /2× batch/.test(await page.textContent("#view-cook .kicker")));
+  check("continue: ticks and batch kept", (await page.locator("#cookIng .ck.done").count()) === 1 && (await page.locator("#cookSteps .ck.done").count()) === 1 && (await page.textContent("#cookAmt")) === "4 servings");
+  // 2.8.1: change how much you're making while you cook
+  const tickedBefore = await page.locator("#cookIng .ck.done").count();
+  const lessBox = await page.locator("#cookLess").boundingBox();
+  check("2.8.1: − and + under the title are 44px", lessBox && lessBox.height >= 44 && lessBox.width >= 44, JSON.stringify(lessBox));
+  await page.click("#cookMore");
+  check("…+ makes it 5 servings and the amounts follow (500 ml stock × 2.5 = 1250 ml), ticks kept", (await page.textContent("#cookAmt")) === "5 servings" && /1250 ml/.test(await page.textContent("#cookIng")) && (await page.locator("#cookIng .ck.done").count()) === tickedBefore, await page.textContent("#cookIng"));
+  check("…no redraw: the page didn't jump to the top", (await page.evaluate(() => document.querySelector("#cookAmt") && state.view === "cook")));
+  await page.reload(); await page.waitForFunction(() => !store.loading); await page.click("#cookResume"); await page.waitForSelector("#cookAmt");
+  check("…kept through a reload", (await page.textContent("#cookAmt")) === "5 servings" && (await page.evaluate(() => cooking.get().mult)) === 2.5);
+  await page.click("#cookLess");
+  check("…− takes it back to 4", (await page.textContent("#cookAmt")) === "4 servings" && (await page.evaluate(() => cooking.get().mult)) === 2);
   await page.click("#cookBack");
   check("recipe page now says 'Continue cooking'", (await page.textContent("#cookThis")) === "Continue cooking");
   check("leaving the cooking screen lets the screen sleep", (await page.evaluate(() => window.__wake.released)) >= 1);
@@ -115,7 +126,7 @@ try {
   await s.put("plan", key, { date: key, entries: [{ recipeId: "pie", servings: 12 }] });
   await page.reload(); await page.waitForFunction(() => !store.loading);
   await page.click('#tabs button[data-view="plan"]'); await page.click(`[data-slot="${key}"]`); await page.click('#sheet [data-act="cook"]'); await page.waitForSelector("#cookIng");
-  check("'Cook it now' from the Plan scales to the planned 12 serves (2×)", /2× batch/.test(await page.textContent("#view-cook .kicker")) && /12 apple/.test(await page.textContent("#cookIng")), await page.textContent("#cookIng"));
+  check("'Cook it now' from the Plan scales to the planned 12 serves (2×)", (await page.textContent("#cookAmt")) === "12 servings" && /12 apple/.test(await page.textContent("#cookIng")), await page.textContent("#cookIng"));
 
   // --- finish while the server is down: queued, then synced
   await s.stop();
@@ -141,11 +152,14 @@ try {
   await page.fill("#pcDate", tomorrow); await page.click('#sheet [data-act="save"]'); await sleep(300);
   check("…a future date is refused, nothing saved", /in the future/.test(await page.textContent("#pcStatus")) && (await server("soup")).cooks.length === 1);
   const d40 = daysAgo(40);
-  await page.fill("#pcDate", d40); await page.selectOption("#pcMult", "2"); await page.click('#sheet [data-act="save"]');
+  check("2.8.1: adding a past cook asks how many servings, starting at the recipe's own 2", (await page.textContent("#pcN")) === "2 servings" && /How many servings did you make/.test(await page.textContent("#sheet")) && !(await page.$("#pcMult")));
+  await page.fill("#pcDate", d40); await page.click('#sheet [data-act="plus"]'); await page.click('#sheet [data-act="plus"]');
+  check("…+ + makes it 4", (await page.textContent("#pcN")) === "4 servings");
+  await page.click('#sheet [data-act="save"]');
   await page.waitForSelector("#sheet.open #addPastCook"); await sleep(400);
   r = await server("soup");
   const added = r.cooks.find((c) => c.date === d40);
-  check("…a cook 40 days ago is saved, marked as added, at the batch picked", r.cooks.length === 2 && added && added.added === true && added.mult === 2 && new Date(added.at).getHours() === 12, JSON.stringify(r.cooks));
+  check("…a cook 40 days ago is saved, marked as added, as the 2× batch those 4 servings are", r.cooks.length === 2 && added && added.added === true && added.mult === 2 && new Date(added.at).getHours() === 12, JSON.stringify(r.cooks));
   check("…kept in date order, so 'last cooked' is still today", r.cooks[r.cooks.length - 1].date === today && (await page.textContent("#cookStats")).includes(await page.evaluate((t) => fmtDate(t), today)), await page.textContent("#cookStats"));
   check("…the history sheet lists it as added later", /added later/.test(await page.textContent("#sheet .cooks")) && (await page.locator("#sheet .cooks li").count()) === 2);
   const d400 = daysAgo(400);

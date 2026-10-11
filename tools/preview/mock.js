@@ -57,7 +57,9 @@
       a3: R("Crunchwrap Supreme", { ago: 9, cover: COVERS.crunchwrap, tags: ["tex-mex"], ingredients: [I(4, "whole", "tortilla", "", "bakery")], steps: ["Fold and toast for 3 minutes each side."] }),
     };
     const mon = new Date(); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
-    const plan = {}; for (const [off, rid, sv] of [[0, "gyudon", 2], [1, "velvet", 4], [3, "mapo", 2], [5, "teritama", 1]]) { const x = new Date(mon); x.setDate(x.getDate() + off); plan[ymd(x)] = { date: ymd(x), entries: [{ recipeId: rid, servings: sv }] }; }
+    const plan = {}; const todayOff = (new Date().getDay() + 6) % 7, meals = [[0, "gyudon", 2], [1, "velvet", 4], [3, "mapo", 2], [5, "teritama", 1]];
+    if (!meals.some(([o]) => o === todayOff)) meals.push([todayOff, "curry", 4]); // a meal today too, so the Shop (today onwards) is never empty
+    for (const [off, rid, sv] of meals) { const x = new Date(mon); x.setDate(x.getDate() + off); plan[ymd(x)] = { date: ymd(x), entries: [{ recipeId: rid, servings: sv }] }; }
     const pantry = {}; [["jasmine rice", "pantry"], ["garlic", "produce"], ["soy sauce", "pantry"], ["coconut milk", "pantry"], ["brown onions", "produce"]].forEach(([item, aisle], i) => (pantry["p" + i] = { id: "p" + i, item, aisle, added: new Date().toISOString() }));
     return {
       users: { me: { id: ME, name: "Zein", photo: "veg:tomato", email: "you@example.com" }, sam: { id: "sam", name: "Sam Lee", photo: "veg:broccoli" }, alex: { id: "alex", name: "Alex Tran", photo: "veg:lemon" } },

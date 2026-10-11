@@ -42,6 +42,7 @@ html,body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none}
    app, height:100% stopped short of the home bar, so the page was cut off in a hard
    line under the floating tab bar; fixed to all four edges, it reaches the bottom. */
 body{position:fixed;inset:0;height:auto;padding-top:env(safe-area-inset-top,0px)} /* the notch, as html's padding gave it before */
+body.relayout{transform:translateZ(0)} /* 2.8.1, unnudge: a one-frame change that makes iPhone recompute where things are */
 html.sheet-open main{overflow:hidden}
 body{
   background:var(--paper); color:var(--ink);
@@ -590,6 +591,9 @@ body.aslist .rcard .tags{display:none}
 .sheet-hint{margin:8px 0 0}
 .stepper{align-items:center;gap:14px}
 .stepper strong{font-family:var(--sans);font-size:17px;min-width:110px;text-align:center}
+.cookamt{display:flex;align-items:center;gap:12px;margin:2px 0 8px;font-family:var(--sans)}
+.cookamt .lbl{font-size:13px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.cookamt strong{font-size:16px;min-width:104px;text-align:center}
 .cooks .x{border:0;background:none;color:var(--ink-3);font-size:18px;min-width:44px;min-height:44px}
 .sheet-lead{margin:0 0 6px}
 .sheet-sub{margin:16px 0 0}
@@ -1077,6 +1081,25 @@ function lowerIngredients(r){
 /* ---------- navigation ---------- */
 // Back to the top of the content (it's <main> that scrolls, never the page; 2.6.5)
 const toTop=()=>{ const m=document.getElementById("main"); if(m) m.scrollTop=0; };
+/* Turning the phone (2.8.1). The page itself never scrolls (only <main> does), but after
+   portrait → landscape → portrait iPhone can leave the page nudged down by a few dozen
+   pixels: everything is drawn in the right place, yet taps are matched as if it were
+   still nudged, so a tap on + landed on the sort row below it. After a rotation or a
+   resize, put the page back at 0 and make the browser lay the fixed page out again,
+   twice, since iPhone settles the new size a moment later. Not while a field has focus:
+   then iPhone moves the page on purpose, to keep the field above the keyboard. */
+const unnudge={
+  typing:()=>{ const a=document.activeElement; return !!a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName); },
+  reset(){ if(this.typing()) return; const d=document.documentElement, b=document.body;
+    if(window.scrollX||window.scrollY||d.scrollTop||b.scrollTop||d.scrollLeft||b.scrollLeft){ window.scrollTo(0,0); d.scrollTop=b.scrollTop=0; d.scrollLeft=b.scrollLeft=0; }
+    b.classList.add("relayout"); void b.offsetHeight; b.classList.remove("relayout"); },
+  soon(){ this.reset(); clearTimeout(this.t1); clearTimeout(this.t2); this.t1=setTimeout(()=>this.reset(),120); this.t2=setTimeout(()=>this.reset(),500); },
+};
+addEventListener("orientationchange",()=>unnudge.soon());
+addEventListener("resize",()=>unnudge.soon());
+window.visualViewport?.addEventListener("resize",()=>unnudge.soon());
+// …and when the keyboard goes away, for the same reason
+addEventListener("focusout",()=>setTimeout(()=>unnudge.reset(),300));
 function show(view){
   state.view=view;
   if(view!=="detail"&&view!=="cook") state.detailFrom=null; // set by the Timeline so the recipe's Back returns there
@@ -1864,16 +1887,19 @@ function renderCook(){
   wake.hold();
   const m=c.mult||1, steps=r.steps||[];
   const nextStep=steps.findIndex((_,i)=>!c.steps.includes(i));
-  let ing="", lastSec=null;
+  const ingHtml=mm=>{ let ing="", lastSec=null;
   (r.ingredients||[]).forEach((i,ix)=>{
     if((i.section||"")!==lastSec && i.section) ing+=`<li class="sec">${esc(i.section)}</li>`;
     lastSec=i.section||"";
-    const q=scaleQty(i.quantity,m), amount=[fmtQty(q), unitLabel(i.unit)].filter(Boolean).join(" ");
-    ing+=`<li><button class="ck ${c.ing.includes(ix)?"done":""}" data-ing="${ix}"><span class="box"></span><span class="txt">${amount?`<span class="q">${esc(amount)}</span> `:""}${esc(i.item||i.raw_text)}${i.prep?`, ${esc(i.prep)}`:""}${i.optional?` <span class="faint">(optional)</span>`:""}</span></button></li>`;
+    const q=scaleQty(i.quantity,mm), amount=[fmtQty(q), unitLabel(i.unit)].filter(Boolean).join(" ");
+    ing+=`<li><button class="ck ${(cooking.get()||c).ing.includes(ix)?"done":""}" data-ing="${ix}"><span class="box"></span><span class="txt">${amount?`<span class="q">${esc(amount)}</span> `:""}${esc(i.item||i.raw_text)}${i.prep?`, ${esc(i.prep)}`:""}${i.optional?` <span class="faint">(optional)</span>`:""}</span></button></li>`;
   });
+  return ing; };
+  const ing=ingHtml(m), amt=amountCtl(r,m);
   el.innerHTML=`
-    <div class="detail-head"><button class="btn small ghost" id="cookBack">‹ Recipe</button><span class="cookhead"><span class="kicker">Cooking${m!==1?` · ${m}× batch`:""}</span><button class="btn small" id="cookTimer">+ Timer</button></span></div>
+    <div class="detail-head"><button class="btn small ghost" id="cookBack">‹ Recipe</button><span class="cookhead"><span class="kicker">Cooking</span><button class="btn small" id="cookTimer">+ Timer</button></span></div>
     <h2>${esc(r.title)}</h2>
+    <div class="cookamt"><span class="lbl">Making</span><button class="btn sq" id="cookLess" aria-label="${amt.per?"One serving fewer":"Smaller batch"}">−</button><strong id="cookAmt" aria-live="polite">${esc(amt.text())}</strong><button class="btn sq" id="cookMore" aria-label="${amt.per?"One serving more":"Bigger batch"}">+</button></div>
     <div class="meta" id="cookProgress"></div>
     <div class="timerbar" id="timerBar"></div>
     <h3>Ingredients</h3><ul class="cooklist" id="cookIng">${ing||`<li class="faint" style="padding:10px 0">No ingredients listed.</li>`}</ul>
@@ -1892,6 +1918,12 @@ function renderCook(){
   el.querySelector("#cookIng").onclick=e=>{ const b=e.target.closest("[data-ing]"); if(b) toggle("ing",+b.dataset.ing,b); };
   el.querySelector("#cookSteps").onclick=e=>{ const b=e.target.closest("[data-step]"); if(b) toggle("steps",+b.dataset.step,b); };
   el.querySelector("#cookBack").onclick=()=>{ state.detailId=c.recipeId; show("detail"); };
+  // 2.8.1: change how much you're making mid-cook. The amounts change in place (ticks
+  // stay), and Finished cooking logs this amount.
+  const resize=d=>{ amt.step(d); const cc=cooking.get(); if(!cc) return; cc.mult=amt.mult(); cooking.set(cc);
+    el.querySelector("#cookAmt").textContent=amt.text(); el.querySelector("#cookIng").innerHTML=ingHtml(cc.mult)||`<li class="faint" style="padding:10px 0">No ingredients listed.</li>`; };
+  el.querySelector("#cookLess").onclick=()=>resize(-1);
+  el.querySelector("#cookMore").onclick=()=>resize(1);
   el.querySelector("#cookStop").onclick=()=>{
     const sh=openSheet(`<h3>Stop cooking?</h3><p class="muted small">Your ticks are cleared and this cook isn't logged.</p>
       <div class="row" style="margin-top:12px"><button class="btn danger" data-act="yes">Stop without saving</button><button class="btn ghost" data-act="no">Keep cooking</button></div>`);
@@ -1955,25 +1987,45 @@ const cookMade=(r,c)=>cookServes(r.servings,c.mult);
 /* Change a logged cook's servings (2.8.0): tap its date in the cook log. Only the batch
    changes (`mult`, servings ÷ the recipe's servings); its date, and whether it was added
    later, stay as they were. A recipe without servings picks a batch instead. */
+/* How much was made, in servings (or a batch for a recipe without servings), with − and +.
+   One control for the cooking screen, adding a past cook and changing a logged one (2.8.1).
+   It holds servings, not the batch, so a step is one serving; mult() turns it back into
+   the batch that's stored (`mult`). An odd start (a 1½× batch of 3) shows as 4½ servings
+   and steps to whole servings. */
+const BATCHES=[0.5,1,1.5,2,2.5,3,4,5,6,8,10];
+function amountCtl(r,mult){
+  const per=Number(r&&r.servings)>0?Number(r.servings):0, m=Number(mult)>0?Number(mult):1;
+  let n=per?Math.round(per*m*100)/100:m;
+  return {
+    per,
+    text:()=>per?`${fmtQty(n)} serving${n===1?"":"s"}`:`${fmtQty(n)}× batch`,
+    step(d){
+      if(per){ n=d>0?Math.min(per*10,Math.floor(n)+1):Math.max(1,Math.ceil(n)-1); return; }
+      let i=BATCHES.indexOf(n); if(i<0) i=Math.max(0,BATCHES.findIndex(x=>x>n)-(d>0?1:0));
+      n=BATCHES[Math.min(BATCHES.length-1,Math.max(0,i+d))];
+    },
+    mult:()=>per?Math.round(n/per*1000)/1000:n,
+    html:(id,label)=>`<div class="field"><label id="${id}L">${label??(per?"How many servings did you make?":"How big a batch did you make?")}</label>
+      <div class="row stepper" role="group" aria-labelledby="${id}L"><button class="btn sq" data-act="minus" aria-label="${per?"One serving fewer":"Smaller batch"}">−</button><strong id="${id}" aria-live="polite">${esc(per?`${fmtQty(n)} serving${n===1?"":"s"}`:`${fmtQty(n)}× batch`)}</strong><button class="btn sq" data-act="plus" aria-label="${per?"One serving more":"Bigger batch"}">+</button></div>
+      ${per?`<p class="muted small">The recipe makes ${fmtQty(per)}.</p>`:""}</div>`,
+  };
+}
+/* Change a logged cook's servings (2.8.0): tap its date in the cook log. Only the batch
+   changes (`mult`); its date, and whether it was added later, stay as they were. */
 function editCookSheet(recipeId,i){
   const r=state.recipes[recipeId], c=r&&r.cooks&&r.cooks[i]; if(!c) return;
-  const per=Number(r.servings)>0?Number(r.servings):0, mult=Number(c.mult)>0?Number(c.mult):1;
-  let n=per?Math.max(1,Math.round(per*mult)):mult;
-  const shown=()=>per?`${fmtQty(n)} serving${n===1?"":"s"}`:`${fmtQty(n)}× batch`;
+  const amt=amountCtl(r,c.mult);
   const sh=openSheet(`<h3>${esc(fmtDate(c.date))}</h3><p class="muted small sheet-lead">${esc(r.title||"Untitled")}${c.added?" · added later":""}</p>
-    <div class="field"><label>${per?"How many servings did you make?":"How big a batch did you make?"}</label>
-      <div class="row stepper"><button class="btn sq" data-act="minus" aria-label="Fewer">−</button><strong id="ecN" aria-live="polite">${esc(shown())}</strong><button class="btn sq" data-act="plus" aria-label="More">+</button></div>
-      ${per?`<p class="muted small">The recipe makes ${fmtQty(per)}.</p>`:""}</div>
+    ${amt.html("ecN")}
     <div class="row sheet-row"><button class="btn primary" data-act="save">Save</button><button class="btn ghost" data-act="back">Back</button></div>`);
-  const paint=()=>{ sh.querySelector("#ecN").textContent=shown(); };
-  const steps=PAST_MULTS, at=()=>steps.indexOf(n);
+  const paint=()=>{ sh.querySelector("#ecN").textContent=amt.text(); };
   sheetActions(sh,{
-    minus:()=>{ if(per) n=Math.max(1,n-1); else n=steps[Math.max(0,(at()<0?steps.findIndex(x=>x>=n):at())-1)]; paint(); },
-    plus:()=>{ if(per) n=Math.min(per*10,n+1); else n=steps[Math.min(steps.length-1,(at()<0?steps.findIndex(x=>x>=n):at())+1)]; paint(); },
+    minus:()=>{ amt.step(-1); paint(); },
+    plus:()=>{ amt.step(1); paint(); },
     back:()=>historySheet(recipeId),
     save:async()=>{
       const was=cookMade(r,c);
-      c.mult=per?Math.round(n/per*1000)/1000:n;
+      c.mult=amt.mult();
       r.updated_at=new Date().toISOString();
       const ok=await store.put("recipes",recipeId,r);
       if(state.view==="detail") renderDetail();
@@ -1986,20 +2038,21 @@ function editCookSheet(recipeId,i){
    `added`, so the server logs it as "cook added later" and the pilot's count of
    finished cooks stays honest; everywhere on the phone it counts like any other.
    Cooks are kept in date order, because "last cooked" reads the last one. */
-const PAST_MULTS=[0.5,1,1.5,2,3,4];
 function addCook(r,c){ r.cooks=[...(r.cooks||[]),c].sort((a,b)=>(a.date+(a.at||"")).localeCompare(b.date+(b.at||""))); }
 function pastCookSheet(recipeId){
   const r=state.recipes[recipeId]; if(!r) return;
-  const today=iso(new Date());
+  const today=iso(new Date()), amt=amountCtl(r,1);
   const sh=openSheet(`<h3>When did you cook it?</h3><p class="muted small sheet-lead">${esc(r.title)}</p>
     <div class="field"><label for="pcDate">Date</label><input class="input" type="date" id="pcDate" max="${today}" value="${today}"></div>
-    <div class="field"><label for="pcMult">Batch</label><select class="input" id="pcMult">${PAST_MULTS.map(m=>`<option value="${m}"${m===1?" selected":""}>${m===1?"1× (as written)":fmtQty(m)+"×"}</option>`).join("")}</select></div>
+    ${amt.html("pcN")}
     <p class="status" id="pcStatus"></p>
     <div class="row sheet-row"><button class="btn primary" data-act="save">Add this cook</button><button class="btn ghost" data-act="back">Back</button></div>`);
   sheetActions(sh,{
+    minus:()=>{ amt.step(-1); sh.querySelector("#pcN").textContent=amt.text(); },
+    plus:()=>{ amt.step(1); sh.querySelector("#pcN").textContent=amt.text(); },
     back:()=>historySheet(recipeId),
     save:async()=>{
-      const date=sh.querySelector("#pcDate").value, mult=+sh.querySelector("#pcMult").value||1, st=sh.querySelector("#pcStatus");
+      const date=sh.querySelector("#pcDate").value, mult=amt.mult(), st=sh.querySelector("#pcStatus");
       if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ st.className="status err"; st.textContent="Pick the date you cooked it."; return; }
       if(date>today){ st.className="status err"; st.textContent="That's in the future. Pick today or an earlier day."; return; }
       addCook(r,{date, at:new Date(date+"T12:00").toISOString(), mult, added:true});
@@ -3187,7 +3240,10 @@ function adminHomeHtml({sum,act,at}){
 /* People each day (2.8.0): sum.visitors is 30 days, oldest first, of {day, people, others}:
    everyone who opened Bourdain that day, and how many of them weren't you. */
 const shortDay=k=>{ const d=new Date(k+"T00:00"); return `${DAYS[(d.getDay()+6)%7]} ${d.getDate()} ${MONTHS[d.getMonth()]}`; };
-const visRead=(d,isToday)=>`<b>${isToday?"Today":esc(shortDay(d.day))}</b> · ${plural(+d.people||0,"person","people")}${(+d.people||0)>0?(+d.others||0)===0?" · just you":` · ${+d.others} besides you`:""}`;
+// "Today" only when it is today on this phone (2.8.1): the days are the server's, and a
+// server on another time zone (no TZ) once made the last bar "Today" a day early.
+const isPhoneToday=k=>k===iso(new Date());
+const visRead=d=>`<b>${isPhoneToday(d.day)?"Today":esc(shortDay(d.day))}</b> · ${plural(+d.people||0,"person","people")}${(+d.people||0)>0?(+d.others||0)===0?" · just you":` · ${+d.others} besides you`:""}`;
 function visitorsHtml(v){
   if(!Array.isArray(v)||!v.length) return "";
   const W=340, L=20, T=8, B=104, H=122, n=v.length, gap=2, bw=(W-L-gap*(n-1))/n;
@@ -3197,15 +3253,15 @@ function visitorsHtml(v){
   const bars=v.map((d,i)=>{ const p=+d.people||0, x=xs(i), h=B-y(p), r=Math.min(3,bw/2,h);
     const col=`<rect class="col" data-i="${i}" x="${x-gap/2}" y="${T}" width="${bw+gap}" height="${B-T}" fill="transparent"/>`;
     if(!p) return col;
-    return col+`<path class="bar${i===n-1?" today":""}" data-i="${i}" d="M${x},${B} V${B-h+r} Q${x},${B-h} ${x+r},${B-h} H${x+bw-r} Q${x+bw},${B-h} ${x+bw},${B-h+r} V${B} Z"/>`; }).join("");
+    return col+`<path class="bar${isPhoneToday(d.day)?" today":""}" data-i="${i}" d="M${x},${B} V${B-h+r} Q${x},${B-h} ${x+r},${B-h} H${x+bw-r} Q${x+bw},${B-h} ${x+bw},${B-h+r} V${B} Z"/>`; }).join("");
   const label=(i,t,anchor)=>`<text x="${xs(i)+(anchor==="end"?bw:anchor==="middle"?bw/2:0)}" y="${H-4}" text-anchor="${anchor}">${t}</text>`;
   const last=v[n-1], week=v.slice(-7), avg=week.reduce((a,d)=>a+(+d.people||0),0)/week.length;
   return `${secHead("People each day")}
     <div class="vis" data-vis='${esc(JSON.stringify(v))}'>
-      <p class="vread" aria-live="polite">${visRead(last,true)}</p>
+      <p class="vread" aria-live="polite">${visRead(last)}</p>
       <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="People who opened Bourdain each day, last ${n} days. Today ${+last.people||0}.">
         ${grid.join("")}<line class="base" x1="${L}" x2="${W}" y1="${B}" y2="${B}"/><text x="${L-5}" y="${B+3.5}" text-anchor="end">0</text>
-        ${bars}${label(0,esc(shortDay(v[0].day).replace(/^\S+ /,"")),"start")}${label(n-1,"Today","end")}
+        ${bars}${label(0,esc(shortDay(v[0].day).replace(/^\S+ /,"")),"start")}${label(n-1,isPhoneToday(last.day)?"Today":esc(shortDay(last.day).replace(/^\S+ /,"")),"end")}
       </svg>
       <p class="vsum">Last 7 days: about ${avg>=10?Math.round(avg):Math.round(avg*10)/10} a day · counts anyone who opened Bourdain, you included</p>
       <table class="sr"><caption>People each day</caption><tr><th>Day</th><th>People</th><th>Besides you</th></tr>${v.map(d=>`<tr><td>${esc(shortDay(d.day))}</td><td>${+d.people||0}</td><td>${+d.others||0}</td></tr>`).join("")}</table>
@@ -3219,7 +3275,7 @@ const visPick=e=>{
   const svg=box.querySelector("svg"), r=svg.getBoundingClientRect(), v=JSON.parse(box.dataset.vis), n=v.length;
   const L=20*r.width/340, i=Math.max(0,Math.min(n-1,Math.floor((e.clientX-r.left-L)/((r.width-L)/n))));
   if(box._i===i) return; box._i=i;
-  box.querySelector(".vread").innerHTML=visRead(v[i],i===n-1);
+  box.querySelector(".vread").innerHTML=visRead(v[i]);
   box.querySelectorAll(".sel").forEach(x=>x.classList.remove("sel"));
   box.querySelectorAll(`[data-i="${i}"]`).forEach(x=>x.classList.add("sel"));
 };

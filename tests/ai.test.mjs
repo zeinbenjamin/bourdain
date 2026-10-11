@@ -309,6 +309,14 @@ try {
   await page.click("#aBack");
   check("‹ Recipes goes back to the list", await page.evaluate(() => state.view === "recipes"));
 
+  // 2.8.1: the server's last day isn't always today on the phone (no TZ on the server): then
+  // the chart names that day instead of calling it "Today"
+  await page.route("**/api/admin/summary", async (rt) => { const res = await rt.fetch(), j = await res.json(); j.visitors = j.visitors.slice(0, -1); rt.fulfill({ response: res, json: j }); });
+  await page.evaluate(() => { state.admin = null; openAdmin(); }); await page.waitForSelector("#view-admin .vis");
+  const lag = await page.evaluate(() => ({ read: document.querySelector("#view-admin .vis .vread").textContent, end: [...document.querySelectorAll("#view-admin .vis svg text")].at(-1).textContent, red: document.querySelectorAll("#view-admin .vis .bar.today").length }));
+  const yday = await page.evaluate(() => { const d = new Date(); d.setDate(d.getDate() - 1); return shortDay(iso(d)); });
+  check("2.8.1: when the server's last day is yesterday here, the chart says so, not 'Today'", !/Today/.test(lag.read) && lag.read.startsWith(yday) && lag.end !== "Today" && lag.red === 0, JSON.stringify(lag));
+  await page.unroute("**/api/admin/summary");
   // --- not the owner: nothing opens, and the server's refusal is shown plainly
   await page.route("**/api/me", (rt) => rt.fulfill({ contentType: "application/json", body: JSON.stringify({ id: owner, email: "owner@example.com", name: "Test Owner", is_admin: false }) }));
   await page.reload(); await page.waitForFunction(() => !store.loading && store.me && store.me.is_admin === false);

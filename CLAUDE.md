@@ -153,8 +153,13 @@ the date), never `cook_logged`, and the owner's view counts them apart
 that sheet) is instant, and its toast has **Undo** (2.6.1), which puts it back with
 `addCook()`. **Changing a cook's servings** (2.8.0, `editCookSheet`): each date in that sheet
 is a button showing what it made (`cookMade()`, "4 servings"); it opens − / + servings
-(or a batch from `PAST_MULTS` for a recipe without servings) and saves only `mult`, so the
-date, `at` and `added` stay. The server logs it as `cook_changed` ("changed the servings
+and saves only `mult`, so the date, `at` and `added` stay. **How much was made** is one
+control everywhere (2.8.1, `amountCtl(r, mult)`): servings in whole steps (an odd start such
+as 4½ steps to whole ones), or a batch from `BATCHES` for a recipe without servings; it
+holds servings and `mult()` gives back the stored batch. It's in the cooking screen
+(**Making − 4 servings +** under the title, `#cookAmt`: it rewrites `cooking.mult` and only
+the ingredient list, so ticks stay and the page doesn't jump; Finished cooking logs it), in
+`pastCookSheet` (servings, not a batch menu) and in `editCookSheet`. The server logs it as `cook_changed` ("changed the servings
 for a cook of", with the date), not `recipe_edited`. The cooking screen (`state.view ===
 "cook"`, `renderCook`) toggles ticks in place instead of re-rendering, so the
 page never jumps while you cook. `wake` holds a Screen Wake Lock while it's open
@@ -365,7 +370,9 @@ heading, only when `store.me.is_admin`. There is deliberately no button.
   the last 30 days from `summary.visitors` (`visitorsByDay()`: `visits`, plus anyone with
   activity that day, which covers days before visits were recorded), today in `--flame`;
   hovering, tapping or dragging across it (`visPick`) reads a day in the line above, with
-  how many weren't the owner ("· just you"). Sub-screens' Back is "‹ Admin"; `adminGo()`
+  how many weren't the owner ("· just you"). "Today", and the red bar, only for the day
+  that is today on the phone (`isPhoneToday`, 2.8.1): the days are the server's, and a server
+  without `TZ` once made the last bar "Today" a day early. Sub-screens' Back is "‹ Admin"; `adminGo()`
   moves between them. Activity filters repaint only `#actList`, so the search
   box keeps focus.
 - **Health is real or it says so** (`systemHealth()` in `server.js`): the
@@ -517,8 +524,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v59"`
-in `public/sw.js` → `v60`, `v61`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v60"`
+in `public/sw.js` → `v61`, `v62`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -558,7 +565,13 @@ and then on some iPhones the fixed tab bar and sticky header drifted with the
 content during a fast swipe. Locking the page fixes both. Since 2.7.1 `body` is also
 `position: fixed; inset: 0` (with the notch's `safe-area-inset-top` as padding): in an iPhone home-screen app `height: 100%` stopped
 short of the home bar, so the page ended in a hard line under the floating tab bar. Reset with `toTop()`
-(`main.scrollTop = 0`), never `window.scrollTo`. An open sheet sets
+(`main.scrollTop = 0`), never `window.scrollTo`. The one exception is `unnudge` (2.8.1): after
+portrait → landscape → portrait iPhone could leave the locked page itself nudged down, drawn
+in place but hit-tested as if moved, so a tap on + landed on the sort row. On
+`orientationchange`, `resize` and `visualViewport` resize (and after a field loses focus) it
+puts the window back at 0 and forces a one-frame relayout (`body.relayout`), now and again at
+120ms and 500ms; never while an input has focus, since iPhone moves the page then to keep the
+field above the keyboard. Desktop Chromium has no such nudge, so the layout suite plays it. An open sheet sets
 `html.sheet-open`, which stops `<main>` scrolling behind it. Desktop Chromium
 can't show the drift, so check a layout change on an iPhone too.
 
