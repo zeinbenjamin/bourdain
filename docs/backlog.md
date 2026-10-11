@@ -47,7 +47,19 @@ the home bar gap and lazy pictures; these are left, most useful first.
 
 ## Requested by Zein
 
-Nothing open. Home cost vs eating out shipped in 2.5.0.
+For 2.9.0 (2026-10-11), in the preview first: Original / Metric / Imperial on a recipe's
+ingredients (cook mode and the shopping list follow it); one amount per ingredient on
+the shopping list when recipes measure it differently (3 cloves + 1 tbsp of garlic is
+6 cloves); the Shop as a Meals / Shopping list switch inside the Plan tab (renamed
+Week for now; the name is still to be workshopped).
+
+Later, not started:
+
+| Item | Notes |
+| --- | --- |
+| Turn the shopping list into a Coles or Woolworths cart | Neither has a public way to add to someone's cart. Filling one would mean driving a signed-in browser on their sites, which their terms don't allow and which breaks whenever they change a page. Feasible now: a "Find at Coles / Woolworths" link per item (their search pages), or Share list into their apps. Matching "500 g chicken breast" to one product is the hard part either way. |
+| Restaurants near you, with a price for the dish | Needs the phone's location (asked each time, or remembered) and a places service such as Google Places: a paid key on the server, and it gives a price level ($–$$$$) and ratings, not what a dish costs. No service has dish prices; menus change. So "places near you that serve this, $$" is doable; "$24 at this one" isn't, unless people supply it (next row). |
+| Prices people enter: what they paid for a dish, and where | Fits the savings: real prices beat the AI's casual-eatery guess. Keep it to one optional step in a place that already exists, e.g. a "What did you pay?" link under "about $X eating out" on the recipe page: price and place, nothing else. Other people's entries show as "Priya paid $22 at …", and once a dish has a few, the eating-out figure uses them. Since you can't write to someone else's recipe, the prices need their own collection on the server (with the security rules for others' input). Medium. In a small pilot there may be few entries, so try it as an experiment. |
 
 ## Admin actions not built (from the 2026-10-02 brief)
 
