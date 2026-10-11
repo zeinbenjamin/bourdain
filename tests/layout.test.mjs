@@ -350,6 +350,25 @@ try {
   await page.evaluate(() => closeSheet());
   await page.click('#tabs button[data-view="recipes"]');
 
+  // --- 2.8.1: after turning the phone, the page is put back where it's drawn (iPhone left
+  // it nudged, so a tap on + landed on the sort row below). Desktop Chromium doesn't nudge,
+  // so the nudge is played: the page reports 60px and we watch what the app does.
+  const turn = (typing) => page.evaluate(async (typing) => {
+    let y = 60, calls = 0; Object.defineProperty(window, "scrollY", { configurable: true, get: () => y });
+    const real = window.scrollTo; window.scrollTo = (a, b2) => { calls++; y = typeof a === "object" ? a.top : b2; };
+    if (typing) document.querySelector("#view-recipes input").focus(); else document.activeElement?.blur?.();
+    window.dispatchEvent(new Event("orientationchange")); await new Promise((r) => setTimeout(r, 700));
+    window.scrollTo = real; delete window.scrollY; return { y, calls }; }, typing);
+  await page.click('#tabs button[data-view="recipes"]');
+  const turned = await turn(false);
+  check("2.8.1: after turning the phone, a nudged page is put back at the top", turned.y === 0 && turned.calls >= 1, JSON.stringify(turned));
+  const typingTurn = await turn(true);
+  check("…but not while you're typing (iPhone moves it to keep the field above the keyboard)", typingTurn.y === 60 && typingTurn.calls === 0, JSON.stringify(typingTurn));
+  await page.evaluate(() => document.activeElement?.blur?.());
+  await page.setViewportSize({ width: 844, height: 390 }); await page.waitForTimeout(200); await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(700);
+  const plusAt = await page.locator("#btnManual").boundingBox();
+  check("…and after a real turn and back, a tap on + is on + (not the sort row)", await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest("#btnManual"), [plusAt.x + plusAt.width / 2, plusAt.y + plusAt.height / 2]));
+
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
 } catch (e) { finish(e); } finally { await b?.browser.close(); await s?.cleanup(); }

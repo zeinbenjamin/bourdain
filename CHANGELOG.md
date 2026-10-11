@@ -6,6 +6,12 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.8.1 — 2026-10-11
+- While you cook, change how many servings you're making: − and + under the recipe's name. The amounts change straight away, your ticks stay, and Finished cooking logs that amount.
+- "Add a date I cooked this" now asks how many servings you made, the same way as changing a cook you've logged, instead of a batch menu.
+- Fixed: on an iPhone with rotation lock off, after turning the phone sideways and back, a tap could land on the button below the one you meant (tapping + opened the sort menu).
+- Fixed: in the owner's "People each day" chart, the last day is only called "Today" when it is today on your phone.
+
 ## 2.8.0 — 2026-10-07
 - Slide along the tab bar: press any tab and slide your finger to another, then let go to open it. Everyone / Just me in the Archives slides the same way. Tapping works as before.
 - Change how many servings you made for a cook you've already logged: open the recipe's cook log (tap the line under its title) and tap the date. Works for cooks finished in cook mode and ones added later.
