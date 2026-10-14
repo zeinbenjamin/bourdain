@@ -2,7 +2,7 @@ import express from "express";
 import multer from "multer";
 import Database from "better-sqlite3";
 import sharp from "sharp";
-import { randomUUID, randomBytes, createPublicKey, verify as cryptoVerify } from "node:crypto";
+import { randomUUID, randomBytes, createPublicKey, createHash, verify as cryptoVerify } from "node:crypto";
 import { BlockList, isIP } from "node:net";
 import { lookup as dnsLookup } from "node:dns";
 import http from "node:http";
@@ -143,7 +143,25 @@ const readAll = (t, owner) => {
 /* ---------------- app ---------------- */
 const app = express();
 app.disable("x-powered-by");
-app.use((_req, res, next) => { res.set("X-Content-Type-Options", "nosniff").set("Referrer-Policy", "same-origin"); next(); });
+/* No other site may show Bourdain inside a frame (2.9.3), where it could lay invisible
+   buttons over its own page: X-Frame-Options for older browsers, frame-ancestors for the rest. */
+app.use((_req, res, next) => {
+  res.set("X-Content-Type-Options", "nosniff").set("Referrer-Policy", "same-origin")
+    .set("X-Frame-Options", "DENY").set("Content-Security-Policy", "frame-ancestors 'none'");
+  next();
+});
+/* What the page may load and run (2.9.3), sent report-only for now: the browser reports what
+   it would have blocked to /api/csp-report, which lands in the owner's Errors, and blocks
+   nothing. Only index.html's own inline script may run, by its hash, worked out here at
+   start-up; styles still need 'unsafe-inline' for the style="" attributes. Once a week of real
+   use reports nothing, send it as Content-Security-Policy instead. */
+const SCRIPT_HASHES = [...INDEX_HTML.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => `'sha256-${createHash("sha256").update(m[1], "utf8").digest("base64")}'`);
+const CSP = [
+  "default-src 'self'", `script-src 'self' ${SCRIPT_HASHES.join(" ")}`,
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com", "font-src https://fonts.gstatic.com",
+  "img-src 'self' data: blob:", "media-src 'self' blob:", "connect-src 'self'", "worker-src 'self'", "manifest-src 'self'",
+  "object-src 'none'", "base-uri 'none'", "form-action 'self'", "frame-ancestors 'none'", "report-uri /api/csp-report",
+].join("; ");
 
 app.get("/api/health", (_req, res) =>
   res.json({ ok: true, hasApiKey: Boolean(API_KEY), hasImageKey: Boolean(OPENAI_KEY), version: VERSION, commit: COMMIT, dataVersion: DATA_VERSION })
@@ -340,6 +358,21 @@ app.use("/api", async (req, res, next) => {
 // Read only after the check above (2.9.2), so a request that's refused is never read.
 app.use("/api/ai", express.json({ limit: "30mb" }));
 app.use(express.json({ limit: "2mb" }));
+
+// What the page's content policy would have blocked (2.9.3), into the owner's Errors (one per
+// directive a minute). Browsers send application/csp-report, or reports+json in a list.
+app.post("/api/csp-report", express.json({ type: ["application/csp-report", "application/reports+json", "application/json"], limit: "16kb" }), (req, res) => {
+  const list = Array.isArray(req.body) ? req.body.map((r) => r && r.body) : [req.body && (req.body["csp-report"] || req.body)];
+  for (const r of list.filter((x) => x && typeof x === "object").slice(0, 10)) {
+    const dir = String(r["effective-directive"] || r.effectiveDirective || r["violated-directive"] || "unknown").split(" ")[0].slice(0, 40);
+    const blocked = String(r["blocked-uri"] || r.blockedURL || "").slice(0, 120), where = String(r["source-file"] || r.sourceFile || r["document-uri"] || r.documentURL || "").slice(0, 120);
+    const line = r["line-number"] || r.lineNumber || "";
+    if (/^(chrome|moz|safari)(-web)?-extension/.test(blocked) || /^(chrome|moz|safari)(-web)?-extension/.test(where)) continue; // a browser extension, not Bourdain
+    console.warn(`content policy would block ${dir}: ${blocked || "inline"} (${where}${line ? ":" + line : ""})`);
+    recordError("csp", dir, `${blocked || "inline"} at ${where}${line ? ":" + line : ""}`);
+  }
+  res.status(204).end();
+});
 
 // The vegetable pictures in public/avatars (2.5), chosen as "veg:<name>".
 const VEG_AVATARS = ["tomato", "carrot", "onion", "garlic", "broccoli", "eggplant", "capsicum", "mushroom", "potato", "lemon", "avocado", "corn", "chilli", "ginger", "basil", "spring-onion", "spinach", "red-onion"];
@@ -1811,7 +1844,7 @@ function describe(err) {
    The app shell must be revalidated on every load, or a phone keeps the old
    app after a redeploy. no-cache still allows a cheap 304 via the ETag.   */
 const revalidate = (res) => res.set("Cache-Control", "no-cache");
-const sendIndex = (_req, res) => { revalidate(res); res.type("html").send(INDEX_HTML); }; // Express adds an ETag, so 304s still work
+const sendIndex = (_req, res) => { revalidate(res); res.set("Content-Security-Policy-Report-Only", CSP).type("html").send(INDEX_HTML); }; // Express adds an ETag, so 304s still work
 app.get(["/", "/index.html"], sendIndex);
 app.use(express.static(path.join(__dirname, "public"), {
   maxAge: "1h",

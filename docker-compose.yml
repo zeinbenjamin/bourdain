@@ -25,6 +25,16 @@ services:
     # appeared to come from Docker's gateway (172.16.2.1), so TRUSTED_NETS could
     # never match. The app listens on PORT on the NAS itself; nothing else may use it.
     network_mode: host
+    # Locked down (2.9.3): the app's own files can't be changed from inside, it can't gain
+    # privileges, and it holds no Linux capabilities. It writes only to /data (the datasets
+    # below) and /tmp. Tested with the image: photos, covers, saving, export, health.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       # The owner of everything already in the app, and its admin (2.0.0+). Use the
       # email you'll sign in with; changing it later renames the same account.

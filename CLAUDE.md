@@ -430,8 +430,8 @@ don't count); and `active`, distinct visitors this month, for AI cost per person
   isn't checked, and says so. Never add a green status the server can't check.
 - **Records**: `audit` (limit, cover-price and account changes with from → to,
   new people, deploys vs restarts from `last_boot`) is never pruned or edited;
-  `server_errors` (5xx, Claude/OpenAI failures, sign-in key failures; one per
-  area and code a minute) is kept 90 days.
+  `server_errors` (5xx, Claude/OpenAI failures, sign-in key failures, and since 2.9.3
+  content-policy reports, area `csp`; one per area and code a minute) is kept 90 days.
 - **Pausing** sets `users.disabled_at` (a column added on start, no data
   conversion): every request but `GET /api/export` gets 403 `account_disabled`,
   and the person is left out of people, the feed, search and copies.
@@ -500,7 +500,8 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   gesture and drafts kept through a restart, 2.7.4), `slide` (sliding along the tab bar
   and Everyone / Just me, 2.8.0), `audit` (the 2.9.2 security fixes: owner only by the
   connection's address, bodies read after sign-in, image formats and sizes, AI limits under
-  a burst, odd ways to write a private address), `units` (Recipe · Metric · US, plurals, Open recipe at
+  a burst, odd ways to write a private address; 2.9.3: framing refused, the content policy
+  and its reports, every screen with no report), `units` (Recipe · Metric · US, plurals, Open recipe at
   the planned servings, 2.9.0), `gates` (Pilot gates and the snapshot Backups row, 2.9.0), `preview` (the preview in
   Claude still builds and runs, `tools/preview`), `scan`, `video`.
 - `slowProxy` delays: `shell` (index.html), `state` (`/api/state`), `write`
@@ -574,8 +575,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v62"`
-in `public/sw.js` → `v63`, `v64`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v64"`
+in `public/sw.js` → `v65`, `v66`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -597,6 +598,12 @@ Without it the container crash-loops on SQLite open. The repo's
 **Redeploy needs `pull_policy: always`.** Without it TrueNAS restarts the image
 it already has, and the new build never arrives. That looks exactly like a
 deploy that didn't work, the same as a forgotten service worker bump.
+
+**The container is locked down (2.9.3)**: `read_only: true`, `tmpfs: /tmp`,
+`no-new-privileges`, `cap_drop: ALL` in `docker-compose.yml` (and the live YAML). The app
+writes only under `DATA_DIR` and `/tmp`; anything new that writes elsewhere fails with
+`EROFS`. **GitHub Actions are pinned to commit SHAs** in `publish.yml`, with the version in a
+comment; `.github/dependabot.yml` proposes updates weekly.
 
 **The container uses the host's network** (`network_mode: host`, no `ports:`)
 since 2.3.1. With Docker's port mapping every request seemed to come from
@@ -779,6 +786,18 @@ at 2 MB, except `/api/ai` (30 MB, for screenshots), and are read only after the 
 middleware (2.9.2), so a refused request is never read. The `Host` header never makes
 anyone the owner; it can only refuse.
 
+**Security headers (2.9.3).** Every response says no other site may frame it
+(`X-Frame-Options: DENY`, `Content-Security-Policy: frame-ancestors 'none'`, both enforced).
+`index.html` also carries a full policy (`CSP` in `server.js`) as **report-only**: scripts
+only by the hash of the page's one inline script (`SCRIPT_HASHES`, worked out at start-up),
+styles `'unsafe-inline'` (for the `style=""` attributes) plus Google Fonts, `connect-src
+'self'`, `img-src 'self' data: blob:`, `object-src 'none'`, `base-uri 'none'`. Browsers post
+what it would block to `/api/csp-report` (into `server_errors`, area `csp`; extensions
+ignored). So: **no inline event handlers** (`onclick=""`, `onload=""`) and no second inline
+`<script>`: the fonts' media switch is in the script (`#fontcss`). Once real use reports
+nothing, change the header in `sendIndex` to `Content-Security-Policy`. The `audit` suite walks
+every screen and expects no reports.
+
 **Adding fields is safe; renaming is not.** Old recipes simply lack new fields —
 treat missing as empty. Renaming an existing field orphans every stored recipe
 and needs a migration script plus a snapshot first.
@@ -811,7 +830,11 @@ Four routes in, most to least reliable:
    `youtubeText`): oEmbed for the title and channel, plus `shortDescription`
    from the watch page (sent with a consent cookie). Only the description is
    read, so a recipe that's only spoken needs a screen recording.
-3. **Screenshots** — sent to the model as images.
+3. **Screenshots** — sent to the model as images, through `forReading()`: a 1568px JPEG,
+   or the original when that's smaller and Claude reads its type (`CLAUDE_READS`: JPEG,
+   PNG, WebP, GIF). Anything else, such as an iPhone HEIC, always goes as the JPEG; one the
+   phone can't open is `image_unreadable`, with a message (2.9.3). Pantry scans and dish
+   guesses use it too.
 4. **Screen recording** (`videoToSheets`, reworked in 2.5.8) — the browser
    samples about 3 frames a second (up to 120), compares 120px-wide greyscale
    copies block by block (so a small caption counts even when the rest is still),
