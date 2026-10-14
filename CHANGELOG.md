@@ -6,6 +6,10 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.9.1 — 2026-10-14
+- The shopping list names each meal once under an ingredient, with its amount for the whole week. A recipe planned on several days, or one that uses an ingredient twice, was listed again for every day and every line.
+- Those amounts read as kitchen fractions ("⅓ tbsp", not "0.4 tbsp").
+
 ## 2.9.0 — 2026-10-14
 - The tab bar is now Plan, Recipes, +, Pantry, Archives. The + opens Add a recipe from any page, over whatever you were looking at.
 - The shopping list has moved into the Plan tab: switch between Meals and Shopping list under the dates. The Plan tab reopens on whichever one you were last on; tap Plan again to get back to Meals.

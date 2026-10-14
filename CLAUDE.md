@@ -221,7 +221,7 @@ under; since 2.7.9 `shopRows` shows one row per item across families, its keys
 joined with `KEY_SEP` "§" and its amounts with " + ", and ticking it ticks every key) and show in the recipe's own unit when every line uses the same unit
 (`shopAmount`). Since 2.9.0, when the lines use different units (cloves and a tbsp of
 garlic) they're converted (`EACH_G`, `ML_G`) and added into one amount marked "about", with
-each recipe's own amount after its name (`shopLabel`); counts are plural ("2 packets"), and
+each recipe's own amount after its name (`shopLabel`; once per recipe, added up over its days and lines, in kitchen fractions: `partsText`, `partAmount`, 2.9.1); counts are plural ("2 packets"), and
 with US units chosen the list shows lb/oz. Otherwise amounts are in g/kg or ml/L, rounded up to what you'd buy (`buyAmount`, 2.7.9:
 whole counts, g/ml in 5/10/25/50 steps, spoons in quarters). Pantry items (an `itemKey` match) stay in
 their aisle, ticked, with a `.ptag` "from pantry" (inline-block, so the
@@ -563,8 +563,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v61"`
-in `public/sw.js` → `v62`, `v63`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v62"`
+in `public/sw.js` → `v63`, `v64`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after

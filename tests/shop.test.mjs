@@ -146,6 +146,16 @@ try {
   check("…and the edit form shows them as Meat & seafood and Other, not Produce", sel[2] === "meat & seafood" && sel[3] === "other" && sel[0] === "produce", JSON.stringify(sel));
   await page.click("#revBack");
 
+  // --- 2.9.1: each recipe's own amount once, however many days it's planned and lines it uses
+  await R("scal", "Scallion chicken", 2, [I(1, "whole", "ginger", "produce"), I(0.5, "whole", "ginger", "produce")]);
+  await R("gyu", "Gyudon", 2, [I(0.4, "tbsp", "ginger", "produce")]);
+  for (const d of ["2026-10-27", "2026-10-28", "2026-10-29"]) await s.put("plan", d, { date: d, entries: [{ recipeId: "scal", servings: 2 }] });
+  await s.put("plan", "2026-10-30", { date: "2026-10-30", entries: [{ recipeId: "gyu", servings: 2 }] });
+  await page.reload(); await page.waitForFunction(() => !store.loading); await toShop();
+  await page.evaluate(() => { state.week = mondayOf(new Date(2026, 9, 26, 12)); renderShop(); }); await sleep(200);
+  v = await shop();
+  check("2.9.1: under an item, each meal once with its own amount for the week (3 days × 2 lines of ginger is 4½), not a line for every day and every line", v.rows.ginger?.from === "Scallion chicken (4½), Gyudon (⅓ tbsp)", v.rows.ginger?.from);
+
   // --- 2.9.0: the Plan tab reopens the side you were on; tapping it again goes to Meals
   await page.click('#tabs button[data-view="plan"]'); await page.click('.view.active [data-weekview="shop"]');
   await page.click('#tabs button[data-view="recipes"]'); await page.click('#tabs button[data-view="plan"]');
