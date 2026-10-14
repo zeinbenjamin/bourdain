@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Loaded without blocking the first paint: on a slow connection the app shows in
      Georgia/Helvetica first and switches to the real fonts when they arrive. -->
-<link media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&family=Libre+Franklin:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<link id="fontcss" media="print" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&family=Libre+Franklin:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
 <style>
 :root{
   --paper:#FFFFFF; --card:#FFFFFF; --ink:#121212; --ink-2:#363636; --ink-3:#727272;
@@ -787,6 +787,9 @@ body.aslist .rcard .tags{display:none}
 <div class="toast" id="toast"></div>
 
 <script>
+// The fonts load without holding up the page (media="print" until they arrive), switched on
+// here rather than by an onload attribute on the tag, which the content policy wouldn't allow (2.9.3).
+{ const f=document.getElementById("fontcss"); if(f){ if(f.sheet) f.media="all"; else f.addEventListener("load",()=>{ f.media="all"; }); } }
 /* ---------- constants ---------- */
 const AISLES = ["produce","meat & seafood","dairy & eggs","bakery","pantry","spices","frozen","drinks","other"];
 // One of the nine, for an aisle stored by an older version or someone else's app ("meat", "dairy").

@@ -90,15 +90,20 @@ Later, not started:
 
 2.9.2 fixed the audit's P0 and P1 items (Sharp, the owner decided only by address, bodies
 read after sign-in, image formats and sizes, AI limits under a burst; regression tests in
-the `audit` suite). Port 8080's reachability from outside is a check on the NAS and router,
-not in the code. The P2 hardening items wait for Zein's go-ahead, after a closer review:
+the `audit` suite). 2.9.3 did the hardening Zein chose: framing refused, a report-only
+content policy, Actions pinned with Dependabot, a secret scan of all 177 commits (nothing
+found: only the placeholders in `docker-compose.yml`), and the container locked down.
 
 | Item | Notes |
 | --- | --- |
-| Content Security Policy and anti-framing headers | Needs checking against the contexts the app runs in a frame. |
-| Pin GitHub Actions to commit SHAs | With the version in a comment. |
-| Secret scan of the whole git history | Read-only. |
-| Review Docker networking, file permissions, secrets and every way in | Partly a check on the NAS. |
+| Turn the content policy from report-only to enforcing | After a week of real use with no `csp` rows in the owner's Errors. One word in `sendIndex`. |
+| Copy the container lockdown into the live TrueNAS YAML | `read_only`, `tmpfs`, `security_opt`, `cap_drop` from `docker-compose.yml`. |
+| HSTS | Cloudflare → SSL/TLS → Edge Certificates → HSTS. Not in the code. |
+| Check port 8080 can't be reached from outside | From mobile data, `http://<public-ip>:8080/api/health` should time out. |
+| Pin the Node base image by digest | Optional; would need Dependabot for Docker too. |
+
+Accepted 2026-10-14: the API keys stay as environment variables in the TrueNAS YAML
+(visible to TrueNAS admins only).
 
 ## Low-risk items from the 2026-09-30 security review
 

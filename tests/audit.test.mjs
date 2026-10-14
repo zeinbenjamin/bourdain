@@ -8,10 +8,12 @@ import { crc32, deflateSync } from "node:zlib";
 import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
-import { suite, startServer, CF_ENV, viaCf, OWNER_EMAIL_FOR_TESTS, sleep } from "./lib.mjs";
+import { createHash } from "node:crypto";
+import Database from "better-sqlite3";
+import { suite, startServer, openBrowser, openApp, CF_ENV, viaCf, OWNER_EMAIL_FOR_TESTS, sleep } from "./lib.mjs";
 
 const { check, finish } = suite("audit");
-let s;
+let s, b;
 // A raw request, so Host and X-Forwarded-For can be anything, and a big body can be sent
 // without waiting for it to go: we only want to know how (and how soon) the server answers.
 const raw = (port, { method = "GET", path: p = "/api/me", headers = {}, body } = {}) => new Promise((resolve) => {
@@ -123,5 +125,51 @@ try {
   const ftp = await fetchUrl("ftp://example.com/x"), file = await fetchUrl("file:///etc/passwd");
   check("…and anything but http and https", ftp.status >= 400 && file.status >= 400 && ![ftp, file].some((x) => x.status === 200), JSON.stringify([ftp, file]));
   check("no 5xx from any of it", !/ 5\d\d:/.test(got.join(" ")));
+
+  // --- 2.9.3: framing refused, and a content policy (report-only for now)
+  const page0 = await fetch(s.url + "/"), html = await page0.text(), api0 = await fetch(s.url + "/api/me");
+  const csp = page0.headers.get("content-security-policy-report-only") || "";
+  check("2.9.3: no other site may frame Bourdain (X-Frame-Options DENY and frame-ancestors 'none', enforced), on the page and the API", [page0, api0].every((r) => r.headers.get("x-frame-options") === "DENY" && r.headers.get("content-security-policy") === "frame-ancestors 'none'"), JSON.stringify([...page0.headers]));
+  const inline = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => "'sha256-" + createHash("sha256").update(m[1], "utf8").digest("base64") + "'");
+  check("…the page's content policy lets only its own script run, by its hash, with no 'unsafe-inline' for scripts", inline.length === 1 && csp.includes(`script-src 'self' ${inline[0]}`) && !/script-src[^;]*unsafe-inline/.test(csp) && /object-src 'none'/.test(csp) && /base-uri 'none'/.test(csp) && /connect-src 'self'/.test(csp) && /report-uri \/api\/csp-report/.test(csp), csp);
+  check("…and no inline event handlers left in the page (the policy wouldn't allow them)", !/\son[a-z]+="/i.test(html));
+  b = await openBrowser();
+  const { page, errors } = b;
+  await b.ctx.route(/fonts\.googleapis\.com/, (r) => r.fulfill({ status: 200, contentType: "text/css", body: "/* fonts */" }));
+  await page.addInitScript(() => { window.__csp = []; document.addEventListener("securitypolicyviolation", (e) => window.__csp.push(`${e.violatedDirective} ${e.blockedURI} ${e.sourceFile}:${e.lineNumber}`)); });
+  const ph = await upload(s.url, jpeg);
+  await s.put("recipes", "dal", { title: "Dal", servings: 4, photos: [ph.j.id], tags: ["easy"], steps: ["Simmer the lentils for 20 mins."], ingredients: [{ raw_text: "1 cup lentils", quantity: 1, unit: "cup", item: "lentils", aisle: "pantry" }], created_at: "2026-10-01" });
+  const today = new Date(); const k = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  await s.put("plan", k, { date: k, entries: [{ recipeId: "dal", servings: 4 }] });
+  await openApp(page, s.url);
+  // every screen once: the recipe with its photo, cook mode with a timer, the Plan and its list, Pantry, Archives, the + sheet, the import form with a screenshot, the version sheet and the owner's view
+  await page.click('.rcard[data-id="dal"]'); await page.waitForSelector("#cookThis");
+  await page.waitForFunction(() => [...document.querySelectorAll("#view-detail img")].some((i) => i.complete && i.naturalWidth > 0), null, { timeout: 5000 }).catch(() => {});
+  await page.click("#cookThis"); await page.waitForSelector("#cookIng"); await page.click("#cookBack");
+  await page.evaluate(() => cooking.clear());
+  await page.click('#tabs button[data-view="plan"]'); await page.click('.view.active [data-weekview="shop"]'); await page.click('.view.active [data-weekview="plan"]');
+  await page.click('#tabs button[data-view="pantry"]'); await page.click('#tabs button[data-view="timeline"]');
+  await page.click('#tabs button[data-view="add"]'); await page.click('#sheet [data-act="import"]');
+  await page.setInputFiles("#srcImgs", { name: "shot.png", mimeType: "image/png", buffer: png });
+  await page.waitForFunction(() => state.images.length === 1); await page.waitForSelector("#thumbs img");
+  await page.click("#impBack"); await page.click("#brand"); await page.waitForSelector("#sheet.open");
+  await page.evaluate(() => openAdmin()); await page.waitForSelector('.adm-a[data-go="gates"]');
+  await sleep(500);
+  check("(it was the app all along, not a blank page)", /\/$/.test(page.url()) && (await page.evaluate(() => typeof state)) === "object", page.url());
+  const seen = await page.evaluate(() => window.__csp);
+  check("…and nothing in the app would be blocked by it: every screen once, photos, a screenshot, cook mode, the owner's view", seen.length === 0, JSON.stringify(seen));
+  check("…the fonts still switch on without an onload attribute", (await page.getAttribute("#fontcss", "media")) === "all");
+  // what it would catch: a script slipped into the page, and a picture from somewhere else
+  await page.evaluate(() => { const sc = document.createElement("script"); sc.textContent = "window.__slipped = 1"; document.body.appendChild(sc); const im = new Image(); im.src = "https://example.com/x.png"; });
+  await page.waitForFunction(() => window.__csp.length >= 2, null, { timeout: 5000 }).catch(() => {});
+  const caught = await page.evaluate(() => window.__csp);
+  check("…what it would catch: a script slipped into the page and a picture from another site (reported, not yet blocked)", caught.some((x) => /^script-src/.test(x)) && caught.some((x) => /^img-src https:\/\/example\.com/.test(x)), JSON.stringify(caught));
+  for (let i = 0; i < 30 && !/content policy would block script-src/.test(s.log()); i++) await sleep(200);
+  const d = new Database(path.join(s.data, "bourdain.db")), rows = d.prepare("SELECT code, message FROM server_errors WHERE area = 'csp'").all(); d.close();
+  check("…the browser's report reaches the server and is kept for the owner's Errors", /content policy would block script-src/.test(s.log()) && rows.some((r) => /^script-src/.test(r.code)), JSON.stringify(rows));
+  const junk = await fetch(s.url + "/api/csp-report", { method: "POST", headers: { "content-type": "application/csp-report" }, body: "not json" });
+  const ext = await fetch(s.url + "/api/csp-report", { method: "POST", headers: { "content-type": "application/csp-report" }, body: JSON.stringify({ "csp-report": { "violated-directive": "img-src", "blocked-uri": "chrome-extension://abc/x.png", "document-uri": s.url } }) });
+  check("…a report that isn't JSON is refused as bad JSON, and one from a browser extension is ignored", junk.status === 400 && ext.status === 204, JSON.stringify([junk.status, ext.status]));
+  check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
-} catch (e) { finish(e); } finally { await s?.cleanup(); }
+} catch (e) { finish(e); } finally { await b?.browser.close(); await s?.cleanup(); }

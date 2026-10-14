@@ -1,0 +1,8 @@
+# Proposes updates to the pinned GitHub Actions in .github/workflows as pull requests,
+# once a week (2.9.3). Review and merge them like any other change.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

@@ -9,6 +9,9 @@ Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 ## 2.9.3 — 2026-10-14
 - Photos from an iPhone saved as HEIC are now always turned into a JPEG before Claude reads them, for imports, pantry scans and dish guesses. Before, a small HEIC could be sent as it was and the import failed.
 - A photo the phone can't open now says so, with what to do instead, rather than failing without a word.
+- Other websites can no longer show Bourdain inside their own pages, where they could trick you into tapping its buttons.
+- Bourdain now tells the browser exactly which code it's allowed to run. For now the browser only reports anything else, into Errors in the owner's view, rather than blocking it; once a week of use shows nothing, it will block it.
+- Behind the scenes: the build that makes the app image only uses exact, checked versions of its tools, and the recommended TrueNAS settings lock the app's container down. Both are in the setup notes.
 
 ## 2.9.2 — 2026-10-14
 - Security fixes from the 2.9.0 audit. Nothing changes in how you use the app.
