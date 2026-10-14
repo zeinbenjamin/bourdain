@@ -62,7 +62,7 @@ a{color:inherit}
 
 /* Header */
 .top{
-  position:sticky; top:env(safe-area-inset-top,0px); z-index:5;
+  position:sticky; top:0; z-index:5; /* 2.9.0: body already pads for the notch; an inset here too pushed the header down over the page where the page is drawn under the status bar */
   background:var(--paper);
   display:flex; align-items:baseline; justify-content:space-between; gap:12px;
   padding:12px 18px 8px; border-bottom:1px solid var(--rule);
@@ -226,6 +226,10 @@ body.aslist .rcard .tags{display:none}
 .actions.quad .btn{min-height:44px;padding:0 10px}
 
 /* Plan */
+.weekseg{margin:0 0 14px}
+.tabs button[data-view="add"] svg{stroke:none}
+.tabs button[data-view="add"] svg circle{fill:var(--ink)}.tabs button[data-view="add"] svg path{stroke:#fff;stroke-width:2.4;fill:none}
+.seg.units{grid-template-columns:repeat(3,1fr);margin:4px 0 6px}
 .weeknav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .weeknav .wkt{display:block;font-family:var(--serif);font-size:22px;font-weight:700;letter-spacing:-.01em;line-height:1.1}
 .weeknav .btn{width:44px;height:44px;padding:0;flex:none;font-size:20px;line-height:1}
@@ -272,6 +276,24 @@ body.aslist .rcard .tags{display:none}
 .av.veg img{object-fit:contain;padding:8%;box-sizing:border-box}
 .pf-or{margin:0 0 6px}
 .costline{font-family:var(--sans);font-size:14px;margin:6px 0 10px;padding:8px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.nutri{font-family:var(--sans);margin:0 0 10px;padding:0 0 10px;border-bottom:1px solid var(--line)}
+.nutri .macros{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:8px}
+.nutri .macros div{display:flex;flex-direction:column}
+.nutri .macros b{font-family:var(--serif);font-size:22px;font-weight:700;line-height:1.1}
+.nutri .macros b small{font-family:var(--sans);font-size:13px;font-weight:500;margin-left:1px}
+.nutri .macros span{font-size:12px;color:var(--ink-3)}
+.nutmore summary{list-style:none;display:inline-flex;align-items:center;min-height:44px;font-size:13px;font-weight:600;cursor:pointer;color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+.nutmore summary::-webkit-details-marker{display:none}
+.nutmore .hide,.nutmore[open] .show{display:none}.nutmore[open] .hide{display:inline}
+.nutmore table{width:100%;border-collapse:collapse;font-size:14px;margin:2px 0 10px}
+.nutmore th,.nutmore td{padding:6px 0;border-bottom:1px solid var(--line);text-align:left;font-weight:500}
+.nutmore td{text-align:right;font-variant-numeric:tabular-nums}.nutmore tr.sub th{padding-left:14px;font-weight:400;color:var(--ink-2)}
+.nutmore .split{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--line)}
+.nutmore .split span:nth-child(1),.splitkey .p{background:var(--ink)}.nutmore .split span:nth-child(2),.splitkey .c{background:#9a9a9a}.nutmore .split span:nth-child(3),.splitkey .f{background:var(--flame)}
+.splitkey{font-size:12px;color:var(--ink-2);margin:6px 0 4px}.splitkey i{display:inline-block;width:9px;height:9px;border-radius:2px;margin:0 4px 0 8px;vertical-align:-1px}.splitkey i:first-child{margin-left:0}.splitkey span{color:var(--ink-3)}
+.nutmore small{display:block;font-size:12px;color:var(--ink-3)}
+.slot .kc{display:block;font-family:var(--sans);font-size:12px;font-weight:400;color:var(--ink-3);margin-top:2px}
+.daynut{font-family:var(--sans);font-size:12px;color:var(--ink-2);padding:4px 0 2px;line-height:1.4}
 .costline small{display:block;font-size:12px;color:var(--ink-3);margin-top:3px}
 .savings{font-family:var(--sans);font-size:13px;color:var(--ink-2);margin:-8px 0 16px}
 .guessnote{font-family:var(--sans);font-size:13px;line-height:1.45;border-left:3px solid var(--ink);padding:6px 0 6px 10px;margin:4px 0 14px}
@@ -296,9 +318,10 @@ body.aslist .rcard .tags{display:none}
 .av.sm{width:32px;height:32px;font-size:15px}
 .av.md{width:44px;height:44px;font-size:19px}
 .av.lg{width:72px;height:72px;font-size:30px}
-.people{display:flex;gap:6px;overflow-x:auto;margin:0 -4px 12px;padding:2px 4px 4px;scrollbar-width:none}
+.people{display:flex;gap:6px;overflow-x:auto;margin:-3px -5px 12px;padding:5px 5px 4px;scrollbar-width:none}
 .people::-webkit-scrollbar{display:none}
 .person{flex:none;width:64px;display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:0;padding:0;color:var(--ink);font-family:var(--sans);font-size:11px;font-weight:500;min-height:44px}
+.person.new .av{box-shadow:0 0 0 2px var(--paper),0 0 0 4px var(--flame)}
 .person span:last-child{max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:999px;padding:3px;margin:0 0 16px}
 .seg button{min-height:44px;border:0;background:none;border-radius:999px;font-family:var(--sans);font-size:13px;font-weight:500;color:var(--ink-2)}
@@ -335,6 +358,10 @@ body.aslist .rcard .tags{display:none}
 .adm-ok{font-family:var(--sans);font-size:12px;color:var(--ink-3);margin:0 0 12px}
 .adm-metrics{display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--rule);border-bottom:1px solid var(--line)}
 .adm-metrics.four{grid-template-columns:repeat(4,1fr)}
+.ghead{font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);margin:16px 0 4px}
+.gbad{color:var(--flame)}
+.gcook>span:first-child{display:flex;align-items:center;gap:8px}
+.gweeks{display:flex;align-items:center;gap:3px}.gweeks i{width:14px;height:14px;border-radius:3px;background:var(--line)}.gweeks i.on{background:var(--ink)}.gweeks b{font-weight:600;margin-left:8px;min-width:42px;text-align:right}
 .adm-m{padding:10px 4px;text-align:center;min-width:0}
 .adm-m+.adm-m{border-left:1px solid var(--line)}
 .adm-m b{display:block;font-family:var(--serif);font-size:20px;font-weight:700;line-height:1.15;overflow-wrap:anywhere}
@@ -664,6 +691,7 @@ body.aslist .rcard .tags{display:none}
       <button class="wk" id="thisWeek" aria-label="Back to this week"><span class="wkt" id="weekTitle"></span><span class="note" id="weekNote">(this week)</span></button>
       <button class="btn small" id="nextWeek" aria-label="Next week">›</button>
     </div>
+    <div class="seg weekseg" role="group" aria-label="Meals or shopping list"><button data-weekview="plan">Meals</button><button data-weekview="shop">Shopping list</button></div>
     <div class="days" id="days"></div>
     <p class="hint" id="planHint"></p>
   </section>
@@ -675,6 +703,7 @@ body.aslist .rcard .tags{display:none}
       <button class="wk" data-week="0" aria-label="Back to this week"><span class="wkt" id="shopWeekTitle"></span><span class="note">(this week)</span></button>
       <button class="btn small" data-week="1" aria-label="Next week">›</button>
     </div>
+    <div class="seg weekseg" role="group" aria-label="Meals or shopping list"><button data-weekview="plan">Meals</button><button data-weekview="shop">Shopping list</button></div>
     <div id="shopList"></div>
     <div class="addline">
       <input class="input" id="manualItem" placeholder="Add something else (e.g. 2 lemons)">
@@ -713,6 +742,7 @@ body.aslist .rcard .tags{display:none}
         <label for="srcUrl">Link to the recipe</label>
         <div class="row" style="flex-wrap:nowrap">
           <input class="input" id="srcUrl" type="url" placeholder="https://…" style="flex:1">
+          <button class="btn" id="btnPaste" hidden>Paste</button>
           <button class="btn primary" id="btnFetch" hidden>Fetch &amp; read</button>
         </div>
         <ul class="srcicons" aria-label="Links that work"><li data-src="web"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.6 3.9 5.6 3.9 9s-1.3 6.4-3.9 9c-2.6-2.6-3.9-5.6-3.9-9S9.4 5.6 12 3z"/></svg><span>Recipe sites</span></li><li data-src="instagram"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r=".6" fill="currentColor"/></svg><span>Instagram</span></li><li data-src="tiktok"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 3.5v11.2a3.6 3.6 0 1 1-3.6-3.6"/><path d="M13.5 3.5c.4 2.6 2.2 4.4 4.8 4.7"/></svg><span>TikTok</span></li><li data-src="youtube"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="4"/><path d="M10.2 9.2v5.6l4.8-2.8z" fill="currentColor"/></svg><span>YouTube</span></li></ul>
@@ -742,12 +772,12 @@ body.aslist .rcard .tags{display:none}
 <nav class="tabs" id="tabs">
   <button data-view="plan">
     <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Plan</button>
-  <button data-view="pantry">
-    <svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M5 12h14M10 7v2M10 15v2"/></svg>Pantry</button>
   <button data-view="recipes" class="on">
     <svg viewBox="0 0 24 24"><path d="M4 4h12a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2V4z"/><path d="M4 4v14a2 2 0 0 0 2 2h12"/><path d="M8 8h6M8 12h6"/></svg>Recipes</button>
-  <button data-view="shop">
-    <svg viewBox="0 0 24 24"><path d="M6 8h12l-1 12H7L6 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>Shop</button>
+  <button data-view="add" aria-label="Add a recipe">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="11"/><path d="M12 7v10M7 12h10"/></svg>Add</button>
+  <button data-view="pantry">
+    <svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M5 12h14M10 7v2M10 15v2"/></svg>Pantry</button>
   <button data-view="timeline">
     <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></svg>Archives</button>
 </nav>
@@ -768,6 +798,53 @@ const UNITS = ["","g","kg","ml","l","tsp","tbsp","cup","whole","clove","slice","
    would orphan old recipes) but shown as "L", which can't be mistaken for a 1.
    "whole" is the count unit and reads as nothing: "2 eggs", not "2 whole eggs". */
 const unitLabel=u=>{ u=String(u||""); return u==="l"?"L":u==="whole"?"":u; };
+// 2.9.0: count units take a plural with more than one ("8 cloves", "2 cans"); measures don't ("2 tbsp", "500 g").
+const PLURAL={clove:"cloves",slice:"slices",can:"cans",packet:"packets",bunch:"bunches",pinch:"pinches",stalk:"stalks",cube:"cubes",cup:"cups",lb:"lb"};
+const unitFor=(q,u)=>{ const l=unitLabel(u), n=Number(q); return PLURAL[l]&&isFinite(n)&&n>1?PLURAL[l]:l; };
+/* Recipe, Metric or US units (2.9.0). Remembered per phone; the recipe page has the switch,
+   and cook mode and the shopping list follow it. Recipe is the recipe's own units, as
+   stored (inside, "orig"). Metric turns cups into ml, or grams for dry goods (DRY); spoons
+   stay, since they're metric measures too. US ("imperial" inside) turns g/kg into oz/lb and
+   ml/L into cups, or spoons under ¼ cup. Counts (2 cloves, 1 bunch) never change. Imports
+   already turned ounces into grams, so Recipe for a US recipe shows grams; the line as
+   written is still in raw_text. */
+const units={
+  KEY:"bourdain.units", ALL:["orig","metric","imperial"], NAMES:{orig:"Recipe",metric:"Metric",imperial:"US"},
+  get(){ try{ const v=localStorage.getItem(this.KEY); return this.ALL.includes(v)?v:"orig"; }catch(_){ return "orig"; } },
+  set(v){ try{ localStorage.setItem(this.KEY,v); }catch(_){} },
+  segHtml(){ const cur=this.get(); return `<div class="seg units" role="group" aria-label="Units">${this.ALL.map(v=>`<button data-units="${v}" class="${v===cur?"on":""}" aria-pressed="${v===cur}">${this.NAMES[v]}</button>`).join("")}</div>`; },
+};
+const near=(x,step)=>Math.max(step,Math.round(x/step)*step);
+// [quantity, unit] in the chosen system. q is already scaled; null stays null.
+// Dry goods measured in cups show in grams in Metric (2.9.0), from ML_G; liquids stay in ml.
+const DRY=new Set(["rice","jasmine rice","flour","plain flour","cornflour","sugar","brown sugar","salt","parmesan","cheese"]);
+function measure(q,u,sys=units.get(),item){
+  u=String(u||"").toLowerCase(); if(q==null||sys==="orig") return [q,u];
+  const n=Number(q); if(!isFinite(n)) return [q,u];
+  const ml = u==="ml"?n : u==="l"?n*1000 : (sys==="metric"&&u==="cup")?n*250 : null;
+  const g  = u==="g"?n : u==="kg"?n*1000 : null;
+  if(sys==="metric"){
+    if(u==="cup"&&item&&(DRY.has(item)||DRY.has(itemKey(item)))&&mlG(item)){ const g=n*250*mlG(item); return g>=1000?[+(g/1000).toFixed(2),"kg"]:[near(g,5),"g"]; }
+    if(ml!=null) return ml>=1000?[+(ml/1000).toFixed(2),"l"]:[ml>=50?near(ml,5):Math.round(ml),"ml"];
+    return [q,u];
+  }
+  if(g!=null){ const oz=g/28.35; return oz>=16?[near(oz/16,0.25),"lb"]:[near(oz,oz<2?0.25:0.5),"oz"]; }
+  if(ml!=null){ if(ml>=60) return [near(ml/240,0.25),"cup"]; if(ml>=15) return [near(ml/15,0.5),"tbsp"]; return [near(ml/5,0.25),"tsp"]; }
+  return [q,u];
+}
+const amountText=(q,u,sys,item)=>{ const [qq,uu]=measure(q,u,sys,item); return [fmtQty(qq),unitFor(qq,uu)].filter(Boolean).join(" "); };
+/* About how much one of each weighs, and how heavy a millilitre is, for the things
+   recipes measure in more than one way (2.9.0): the shopping list adds "3 cloves" and
+   "1 tbsp, minced" of garlic into one amount. Grams; anything not here stays as "… + …". */
+const EACH_G={ garlic:{clove:5,whole:50}, onion:{whole:150}, "brown onion":{whole:150}, "red onion":{whole:150}, "white onion":{whole:150}, shallot:{whole:40},
+  egg:{whole:55}, lemon:{whole:100}, lime:{whole:65}, tomato:{whole:120}, potato:{whole:200}, "sweet potato":{whole:300}, carrot:{whole:120}, capsicum:{whole:160},
+  zucchini:{whole:200}, cucumber:{whole:250}, avocado:{whole:170}, chilli:{whole:5}, "red chilli":{whole:5}, "spring onion":{whole:15,bunch:100}, coriander:{bunch:60},
+  parsley:{bunch:60}, basil:{bunch:40}, mint:{bunch:40}, "chicken breast":{whole:250}, "chicken thigh":{whole:120}, butter:{slice:10}, ginger:{whole:30} };
+const ML_G={ garlic:1, ginger:1, butter:0.95, flour:0.53, "plain flour":0.53, cornflour:0.55, sugar:0.85, "brown sugar":0.9, rice:0.85, "jasmine rice":0.85, oil:0.92,
+  "olive oil":0.92, "vegetable oil":0.92, "sesame oil":0.92, honey:1.4, "soy sauce":1.15, "fish sauce":1.2, milk:1.03, cream:1, water:1, stock:1, "chicken stock":1,
+  "beef stock":1, "coconut milk":1, salt:1.2, parmesan:0.4, cheese:0.4, yoghurt:1.05, "greek yoghurt":1.05, "peanut butter":1.05, "tomato paste":1.1, vinegar:1, mirin:1.05 };
+const eachG=(item,u)=>{ const k=EACH_G[item]||EACH_G[itemKey(item)]; return k&&k[u||"whole"]; };
+const mlG=item=>ML_G[item]||ML_G[itemKey(item)];
 const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -1108,7 +1185,9 @@ function show(view){
   const tab = view==="person" ? (state.personFrom==="timeline"?"timeline":"recipes") : view==="admin" ? "recipes"
     : view==="theirs" ? (state.theirs?.from==="person" ? (state.personFrom==="timeline"?"timeline":"recipes") // a friend's recipe, from their profile (2.7.5)
       : {recipes:"recipes",detail:"recipes"}[state.theirs?.from]||"timeline")
-    : (view==="detail"||view==="cook"||view==="import") ? (state.detailFrom||"recipes") : view;
+    : (view==="detail"||view==="cook"||view==="import") ? (state.detailFrom||"recipes") : view==="shop" ? "plan" : view;
+  if(view==="plan"||view==="shop") state.weekView=view; // 2.9.0: the Plan tab holds Meals and the Shopping list
+  document.querySelectorAll("[data-weekview]").forEach(b=>{ const on=b.dataset.weekview===view; b.classList.toggle("on",on); b.setAttribute("aria-pressed",on); });
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.view===tab));
   const sub=document.getElementById("topSub");
   const now=new Date(); sub.textContent = `${DAYS[(now.getDay()+6)%7]} ${now.getDate()} ${MONTHS[now.getMonth()]}`;
@@ -1185,7 +1264,11 @@ let draftTimer=null;
 const keepDraft=()=>{ clearTimeout(draftTimer); draftTimer=setTimeout(()=>drafts.save(),400); };
 document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden") drafts.save(); });
 addEventListener("pagehide",()=>drafts.save());
-document.getElementById("tabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(b) show(b.dataset.view); });
+document.getElementById("tabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
+  if(b.dataset.view==="add"){ addSheet(); return; } // 2.9.0: the + tab opens the sheet, not a page
+  // The Plan tab opens whichever of Meals and the Shopping list you were last on; tapping it again while there goes to Meals.
+  show(b.dataset.view==="plan" ? (state.view==="shop"||state.view==="plan" ? "plan" : state.weekView||"plan") : b.dataset.view); });
+document.addEventListener("click",e=>{ const b=e.target.closest("[data-weekview]"); if(b&&b.dataset.weekview!==state.view) show(b.dataset.weekview); });
 /* Slide to choose (2.8.0): the tab bar and any .seg switch. A tap is left to the
    ordinary click; only a press that moves 8px sideways becomes a slide. Letting go
    clicks the button under the finger, so each control keeps its own click handler.
@@ -1327,10 +1410,19 @@ function setHtml(el,html){
 }
 /* The People row (2.7.3, on the Archives before): you, then everyone else with a
    name; tap one for their profile and recipes. Only once someone else has a name. */
+const peopleSeen={
+  key(){ return store.key("bourdain.peopleSeen"); },
+  all(){ try{ return JSON.parse(localStorage.getItem(this.key())||"{}")||{}; }catch(_){ return {}; } },
+  mark(id){ const a=this.all(), p=(people.list||[]).find(x=>x.id===id); // the later of now and their last activity, in case the server clock is ahead
+    a[id]=new Date(Math.max(Date.now(),Date.parse(p&&p.last_active)||0)).toISOString(); try{ localStorage.setItem(this.key(),JSON.stringify(a)); }catch(_){} },
+  // New: active since you last opened them; someone you've never opened counts if active in the last week.
+  isNew(p){ const t=Date.parse(p&&p.last_active); if(!t) return false; const seen=Date.parse(this.all()[p.id]);
+    return seen ? t>seen : Date.now()-t<7*864e5; },
+};
 function peopleRowHtml(){
   if(!people.others().length) return "";
   const meP=people.list?.find(p=>p.me)||(store.me?{id:store.me.id,name:store.me.name,photo:store.me.photo,me:true}:null);
-  return `<div class="people" role="list">${[meP,...people.others()].filter(Boolean).map(p=>`<button class="person" role="listitem" data-person="${esc(p.id)}" aria-label="${p.me?"You":esc(p.name)}">${avatar(p,"md")}<span>${p.me?"You":esc(firstName(p.name))}</span></button>`).join("")}</div>`;
+  return `<div class="people" role="list">${[meP,...people.others()].filter(Boolean).map(p=>`<button class="person ${!p.me&&peopleSeen.isNew(p)?"new":""}" role="listitem" data-person="${esc(p.id)}" aria-label="${p.me?"You":esc(p.name)+(peopleSeen.isNew(p)?", something new":"")}">${avatar(p,"md")}<span>${p.me?"You":esc(firstName(p.name))}</span></button>`).join("")}</div>`;
 }
 // Search: every word typed has to be somewhere in the recipe: its title, description,
 // tags or ingredients (2.7.3: tags are found by searching, with no row of tag buttons).
@@ -1384,12 +1476,15 @@ function addSheet(){
     ${open?`<button class="opt" data-act="resume">Carry on with ${name}<small>You haven't saved it yet</small></button>`:""}
     <button class="opt" data-act="import">Import a recipe<small>${open?`Replaces ${name}`:"From a link, pasted text, screenshots or a screen recording"}</small></button>
     <button class="opt" data-act="guess">Guess from a photo of a dish<small>${open?`Replaces ${name}`:"Bourdain suggests a recipe and says how sure it is"}</small></button>
+    <button class="opt" data-act="pantry">Cook from the pantry<small>${open?`Replaces ${name} if you pick an idea`:"Ideas from what you have in, then Bourdain writes the one you pick"}</small></button>
     <button class="opt" data-act="manual">Write one yourself<small>${open?`Replaces ${name}`:"Start from a blank recipe"}</small></button>`);
   sheetActions(s,{
     resume:()=>{ closeSheet(); show("import"); },
     import:()=>{ closeSheet(); state.editingId=null; state.draft=null; state.draftManual=false; show("import"); drafts.save(); },
     manual:()=>{ closeSheet(); state.editingId=null; state.draft=blankRecipe(); state.draftManual=true; show("import"); },
     guess:()=>guessFromPhoto(),
+    // the pantry's "Cook from what I have", from here; with nothing in the pantry yet, it says so
+    pantry:()=>{ closeSheet(); show("pantry"); if(!Object.keys(state.pantry||{}).length){ toast("Add what you have in first, then tap Cook from what I have."); document.getElementById("pantryAdd")?.focus(); return; } setTimeout(()=>document.getElementById("cookFrom")?.click(),50); },
   });
 }
 document.getElementById("btnManual").onclick=addSheet;
@@ -1407,6 +1502,7 @@ function recipeMediaHtml(r){
     ${guessHtml(r.guess,false)}
     ${r.description?`<p class="muted">${esc(r.description)}</p>`:""}
     ${costHtml(r)}
+    ${nutritionHtml(r)}
     <div class="tags" style="margin-top:8px;display:flex;gap:4px;flex-wrap:wrap">${(r.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>
     ${r.cover?`<img class="hero cover" src="${coverUrl(r.cover)}" alt="">`:r.photos&&r.photos.length?`<img class="hero" src="${photoUrl(r.photos[0])}" alt="">`:""}
     ${r.cover ? (r.photos&&r.photos.length?photosHtml(r.photos,false):"") : (r.photos&&r.photos.length>1?photosHtml(r.photos.slice(1),false):"")}`;
@@ -1416,6 +1512,7 @@ function recipeMethodHtml(r){
     <div class="scaler"><span class="lab">Batch</span>
       <span class="ctl"><button id="multDown" aria-label="Smaller batch">−</button><span class="amt" id="multAmt"></span><button id="multUp" aria-label="Bigger batch">+</button></span>
     </div>
+    <div id="unitsSeg"></div>
     <ul class="ing" id="ingList"></ul>
     <h3>Method</h3><ol class="steps">${(r.steps||[]).map(s=>`<li>${esc(s)}</li>`).join("")}</ol>
     ${r.notes?`<h3>Notes</h3><p>${esc(r.notes)}</p>`:""}`;
@@ -1428,15 +1525,17 @@ function wireIngredients(el,r){
       if ((i.section||"")!==lastSec && i.section){ out+=`<li class="sec">${esc(i.section)}</li>`; }
       lastSec=i.section||"";
       const q=scaleQty(i.quantity,m);
-      out+=`<li><span class="q ${m!==1&&q!=null?"scaled":""}">${esc(fmtQty(q))} ${esc(unitLabel(i.unit))}</span><span>${esc(i.item||i.raw_text)}${i.prep?`<span class="prep">, ${esc(i.prep)}</span>`:""}${i.optional?` <span class="faint">(optional)</span>`:""}</span></li>`;
+      out+=`<li><span class="q ${m!==1&&q!=null?"scaled":""}">${esc(amountText(q,i.unit,undefined,i.item))}</span><span>${esc(i.item||i.raw_text)}${i.prep?`<span class="prep">, ${esc(i.prep)}</span>`:""}${i.optional?` <span class="faint">(optional)</span>`:""}</span></li>`;
     });
     el.querySelector("#ingList").innerHTML=out;
+    el.querySelector("#unitsSeg").innerHTML=units.segHtml();
     const serves=r.servings?Math.round(r.servings*m*100)/100:null;
     el.querySelector("#multAmt").innerHTML=`${m}×${serves?`<small>${fmtQty(serves)} serves</small>`:""}`;
     el.querySelector("#multDown").disabled=m<=0.5;
     el.querySelector("#multUp").disabled=m>=10;
   };
   paintIng();
+  el.querySelector("#unitsSeg").onclick=e=>{ const b=e.target.closest("[data-units]"); if(!b) return; units.set(b.dataset.units); paintIng(); };
   el.querySelector("#multDown").onclick=()=>{ state.mult=Math.max(0.5,(state.mult||1)-0.5); paintIng(); };
   el.querySelector("#multUp").onclick=()=>{ state.mult=Math.min(10,(state.mult||1)+0.5); paintIng(); };
 }
@@ -1499,7 +1598,12 @@ const people={
     return this.loading;
   },
   stale(){ return Date.now()-this.at>60000; }, // failures count too, so an unreachable server isn't asked on every render
-  others(){ return (this.list||[]).filter(p=>!p.me); },
+  // 2.9.0: anyone with something new since you last opened their page comes first, newest
+  // first, with a red ring; then everyone else, most recently active first. "Active" is when
+  // they last added a recipe or finished a cook (the server's last_active), never when they
+  // last opened the app. When you last opened each person stays on this phone (peopleSeen).
+  others(){ const t=p=>Date.parse(p.last_active)||0, list=(this.list||[]).filter(p=>!p.me);
+    return list.sort((a,b)=>(peopleSeen.isNew(b)-peopleSeen.isNew(a))||(t(b)-t(a))); },
   byId(id){ return (this.list||[]).find(p=>p.id===id); },
 };
 // A person's photo, or their initial on grey. sizes: xs (18), sm (32), md (44), lg (72)
@@ -1600,7 +1704,7 @@ function renderTheirs(){
 
 /* A person's profile: their recipes (read-only for anyone else) and recent cooks. */
 // A profile remembers the tab it was opened from (Recipes, or Archives through a feed recipe), for Back.
-function openPerson(id){ state.personFrom=document.querySelector("#tabs button.on")?.dataset.view||"recipes"; state.personId=id; state.person=null; show("person"); }
+function openPerson(id){ peopleSeen.mark(id); state.personFrom=document.querySelector("#tabs button.on")?.dataset.view||"recipes"; state.personId=id; state.person=null; show("person"); }
 function renderPerson(){
   const el=document.getElementById("view-person"), id=state.personId;
   const cached=state.person&&state.person.person.id===id ? state.person : null;
@@ -1891,7 +1995,7 @@ function renderCook(){
   (r.ingredients||[]).forEach((i,ix)=>{
     if((i.section||"")!==lastSec && i.section) ing+=`<li class="sec">${esc(i.section)}</li>`;
     lastSec=i.section||"";
-    const q=scaleQty(i.quantity,mm), amount=[fmtQty(q), unitLabel(i.unit)].filter(Boolean).join(" ");
+    const q=scaleQty(i.quantity,mm), amount=amountText(q,i.unit,undefined,i.item);
     ing+=`<li><button class="ck ${(cooking.get()||c).ing.includes(ix)?"done":""}" data-ing="${ix}"><span class="box"></span><span class="txt">${amount?`<span class="q">${esc(amount)}</span> `:""}${esc(i.item||i.raw_text)}${i.prep?`, ${esc(i.prep)}`:""}${i.optional?` <span class="faint">(optional)</span>`:""}</span></button></li>`;
   });
   return ing; };
@@ -2085,10 +2189,12 @@ function renderPlan(){
     const d=addDays(state.week,i), k=iso(d), day=planDay(k);
     const slots=day.entries.map((e,ix)=>{
       const r=state.recipes[e.recipeId];
-      return `<button class="slot" data-slot="${k}" data-ix="${ix}">${miniThumb(r)}<span class="t">${esc(r?(r.title||"Untitled"):"(deleted recipe)")}</span></button>`;
+      const n=nutOf(e);
+      return `<button class="slot" data-slot="${k}" data-ix="${ix}">${miniThumb(r)}<span class="t">${esc(r?(r.title||"Untitled"):"(deleted recipe)")}${n?`<span class="kc">${num(n.kcal,5000).toLocaleString("en-AU")} kcal a serve</span>`:""}</span></button>`;
     }).join("");
+    const t=nutSum(day.entries), dn=day.entries.length>1&&t.n?`<div class="daynut">Day: ${nutLine(t)}${t.missing?` (${t.missing} not worked out yet)`:""}</div>`:"";
     return `<div class="day ${k===today?"today":""} ${day.entries.length?"":"nomeal"}"><div class="dn"><span class="w">${n}</span><span class="d">${d.getDate()}</span></div>
-      <div class="slots">${slots}</div><button class="addslot" data-add="${k}" aria-label="Add a meal to ${n} ${d.getDate()}">+</button></div>`;
+      <div class="slots">${slots}${dn}</div><button class="addslot" data-add="${k}" aria-label="Add a meal to ${n} ${d.getDate()}">+</button></div>`;
   }).join(""));
   el.onclick=async e=>{
     const a=e.target.closest("[data-add]"); if(a){ pickRecipe(a.dataset.add); return; }
@@ -2115,7 +2221,7 @@ function savingsHtml(mine,ym,y){
   for(const e of mine){ if(!e.date.startsWith(y)) continue; const r=state.recipes[e.recipeId], sv=r&&cookSaved(r.cost,r.servings,e.mult);
     if(sv==null){ missing++; continue; } counted++; year+=sv; if(e.date.startsWith(ym)) month+=sv; }
   if(!counted) return "";
-  return `<p class="savings">Cooking at home saved you about <b>${esc(aud(month))}</b> this month and <b>${esc(aud(year))}</b> this year, against eating out.${missing?` <span class="faint">${missing} cook${missing===1?"":"s"} not estimated yet.</span>`:""}</p>`;
+  return `<p class="savings">Cooking at home came to about <b>${esc(aud(month))}</b> less than eating out this month, and <b>${esc(aud(year))}</b> this year.${missing?` <span class="faint">${missing} cook${missing===1?"":"s"} not estimated yet.</span>`:""}</p>`;
 }
 function timelineEntries(){
   const out=[];
@@ -2158,17 +2264,15 @@ function renderTimeline(){
     .sort((a,b)=>b.date.localeCompare(a.date)||String(b.at).localeCompare(String(a.at)));
   const now=new Date(), ym=iso(now).slice(0,7), y=ym.slice(0,4);
   const ids=Object.keys(state.recipes), tried=new Set(mine.map(e=>e.recipeId));
-  const count={}; for(const e of mine) count[e.recipeId]=(count[e.recipeId]||0)+1;
-  const top=Object.entries(count).filter(([,n])=>n>1).sort((a,b)=>b[1]-a[1]||lastCooked(state.recipes[b[0]]).localeCompare(lastCooked(state.recipes[a[0]]))).slice(0,3);
   const title=r=>esc(r.title||"Untitled");
   const card=(id,right,sub)=>{ const r=state.recipes[id]; return `<button class="slot" data-open="${esc(id)}">${miniThumb(r)}<span class="t">${title(r)}${sub?`<span class="tl-sub">${sub}</span>`:""}</span>${right||""}</button>`; };
   const entry=e=>{
     if(e.mine){ const r=state.recipes[e.recipeId];
       const sv=cookSaved(r.cost,r.servings,e.mult);
-      const sub=[everyone?`${avatar(meP,"xs")}You`:"", r.rating?stars(r.rating):"", esc(cookServes(r.servings,e.mult)), sv!=null?`about ${esc(aud(sv))} saved`:""].filter(Boolean).join(" · ");
+      const sub=[everyone?`${avatar(meP,"xs")}You`:"", r.rating?stars(r.rating):"", esc(cookServes(r.servings,e.mult)), sv!=null?`about ${esc(aud(sv))} under eating out`:""].filter(Boolean).join(" · ");
       return card(e.recipeId,"",sub); }
     const sv=cookSaved(e.cost,e.servings,e.mult);
-    const sub=[`${avatar(e.who,"xs")}${esc(e.who.name||"Someone")}`, e.rating?stars(e.rating):"", esc(cookServes(e.servings,e.mult)), sv!=null?`about ${esc(aud(sv))} saved`:""].filter(Boolean).join(" · ");
+    const sub=[`${avatar(e.who,"xs")}${esc(e.who.name||"Someone")}`, e.rating?stars(e.rating):"", esc(cookServes(e.servings,e.mult)), sv!=null?`about ${esc(aud(sv))} under eating out`:""].filter(Boolean).join(" · ");
     return `<button class="slot" data-owner="${esc(e.owner)}" data-rid="${esc(e.recipeId)}">${miniThumb({title:e.title,cover:e.cover,photos:e.firstPhoto?[e.firstPhoto]:[]})}<span class="t">${esc(e.title||"Untitled")}<span class="tl-sub">${sub}</span></span></button>`;
   };
   // group by month, then by day
@@ -2180,7 +2284,6 @@ function renderTimeline(){
       <div class="stat"><b>${tried.size}<small class="of"> / ${ids.length}</small></b><span>Recipes tried</span></div>
     </div>
     ${savingsHtml(mine,ym,y)}
-    ${top.length?`<h3 class="tl-head">Most cooked</h3><div class="tl-top">${top.map(([id,n])=>card(id,`<span class="n">${n}×</span>`,state.recipes[id].rating?stars(state.recipes[id].rating):"")).join("")}</div>`:""}
     ${everyone&&feed.failed?`<p class="hint feedhint">Showing just your cooks. Can't reach the server for everyone else's right now.</p>`:""}
     ${months.map(g=>{ const [yy,mm]=g.m.split("-").map(Number);
       return `<h3 class="tl-head">${MONTHS_LONG[mm-1]}${String(yy)===y?"":" "+yy}</h3><div class="feed">${g.days.map(d=>{ const dt=new Date(d.date+"T00:00");
@@ -2205,7 +2308,7 @@ function slotSheet(k,ix){
   const bump=async n=>{ en.servings=Math.max(1,en.servings+n); sh.querySelector("#svN").textContent=en.servings; await savePlanDay(k,day); renderPlan(); };
   sheetActions(sh,{
     minus:()=>bump(-1), plus:()=>bump(1), done:closeSheet,
-    open:()=>{ closeSheet(); if(state.detailId!==en.recipeId) state.mult=1; state.detailId=en.recipeId; show("detail"); },
+    open:()=>{ closeSheet(); const r2=state.recipes[en.recipeId]; state.detailId=en.recipeId; state.mult=r2&&r2.servings?Math.max(0.5,Math.round(en.servings/r2.servings*2)/2):1; show("detail"); }, // at the planned servings (2.9.0)
     cook:()=>{ closeSheet(); const r2=state.recipes[en.recipeId]; state.detailId=en.recipeId; state.mult=r2&&r2.servings?Math.max(0.5,Math.round(en.servings/r2.servings*2)/2):1; startCooking(en.recipeId); },
     remove:async()=>{ day.entries.splice(ix,1); const ok=await savePlanDay(k,day); closeSheet(); renderPlan(); if(ok) toast("Removed"); },
   });
@@ -2286,10 +2389,11 @@ function buildList(days=shopDays()){
         const item=String(ing.item||ing.raw_text||"").trim().toLowerCase(); if(!item) return;
         const fam=family(ing.unit); const key=item+"|"+fam;
         const q = ing.quantity==null||ing.quantity===""? null : Number(ing.quantity)*f;
-        if(!items[key]) items[key]={key,item,fam,qty:0,own:0,units:new Set(),unknown:false,aisle:aisleOf(ing.aisle),from:new Set(),optional:!!ing.optional};
+        if(!items[key]) items[key]={key,item,fam,qty:0,own:0,units:new Set(),unknown:false,aisle:aisleOf(ing.aisle),from:new Set(),parts:[],optional:!!ing.optional};
         const it=items[key];
         if(q==null||!isFinite(q)) it.unknown=true; else { it.qty+=toBase(q,ing.unit); it.own+=q; it.units.add(String(ing.unit||"").toLowerCase()); }
         it.from.add(r.title||"Untitled"); if(!ing.optional) it.optional=false;
+        if(q!=null&&isFinite(q)) it.parts.push(`${r.title||"Untitled"} (${fmtQty(Math.round(q*100)/100)}${unitFor(q,ing.unit)?" "+unitFor(q,ing.unit):""})`);
       });
     });
   }
@@ -2299,8 +2403,10 @@ function buildList(days=shopDays()){
 // (3 tbsp stays 3 tbsp), else added up in g/kg or ml/L.
 function shopAmount(it){
   if(it.unknown&&!it.qty) return "";
-  const [q,u]=it.units.size===1?[it.own,[...it.units][0]]:fromBase(it.qty,it.fam);
-  return `${fmtQty(buyAmount(q,u))}${unitLabel(u)?" "+unitLabel(u):""}`;
+  const [q0,u0]=it.units.size===1?[it.own,[...it.units][0]]:fromBase(it.qty,it.fam);
+  // In US units, ounces and cups (2.9.0); Recipe and Metric stay in what the shop sells, g/kg and ml/L.
+  const [q,u]=units.get()==="imperial"?measure(buyAmount(q0,u0),u0,"imperial"):[q0,u0];
+  const b=buyAmount(q,u); return `${fmtQty(b)}${unitFor(b,u)?" "+unitFor(b,u):""}`;
 }
 // What you'd actually buy (2.7.9): scaling a recipe gave "6⅔ clove garlic" and "666⅔ ml".
 // Things you count round up to whole ones; grams and millilitres to a sensible step;
@@ -2311,8 +2417,26 @@ function buyAmount(q,u){
   if(u===""||["whole","clove","slice","can","packet","bunch"].includes(u)) return up(n,1);
   if(u==="g"||u==="ml") return up(n, n<50?5 : n<250?10 : n<1000?25 : 50);
   if(u==="kg"||u==="l") return Math.round(up(n,0.05)*100)/100;
-  if(["tsp","tbsp","cup"].includes(u)) return up(n,0.25);
+  if(["tsp","tbsp","cup","lb"].includes(u)) return up(n,0.25);
+  if(u==="oz") return up(n,n<2?0.25:0.5);
   return Math.round(n*100)/100;
+}
+/* One amount for an ingredient the week uses in different ways (2.9.0): "3 cloves + 1 tbsp"
+   garlic becomes "about 6 cloves". Everything is weighed (EACH_G, ML_G, a 15 ml tbsp) and
+   given back in the simplest thing to buy: the count, when one of the recipes counts it and
+   we know what one weighs (garlic in cloves, onions whole); else grams. "about" says it was
+   converted, and the row lists each recipe's own amount. A part we can't weigh is added on
+   with " + ", as before. In US units it's ounces and pounds. */
+function shopLabel(list){
+  if(list.length===1) return shopAmount(list[0]);
+  const item=list[0].item, grams=x=>x.fam==="mass"?x.qty : x.fam==="vol"?(mlG(item)?x.qty*mlG(item):null) : (eachG(item,x.fam.slice(6))?x.qty*eachG(item,x.fam.slice(6)):null);
+  const ok=list.filter(x=>x.qty>0&&grams(x)!=null), rest=list.filter(x=>!ok.includes(x));
+  if(ok.length<2) return list.map(shopAmount).filter(Boolean).join(" + ");
+  const total=ok.reduce((n,x)=>n+grams(x),0), count=ok.find(x=>x.fam.startsWith("count:"));
+  let main;
+  if(count){ const u=count.fam.slice(6), b=buyAmount(total/eachG(item,u),u); main=`${fmtQty(b)}${unitFor(b,u)?" "+unitFor(b,u):""}`; }
+  else main=shopAmount({qty:total,fam:"mass",units:new Set()});
+  return ["about "+main,...rest.map(shopAmount)].filter(Boolean).join(" + ");
 }
 const KEY_SEP="§"; // between the keys of one Shop row (an item in more than one unit)
 function shopWeek(){ const k=iso(state.week); const sw=state.shop[k]||(state.shop[k]={week:k}); sw.checked=sw.checked||{}; sw.need=sw.need||{}; sw.manual=Array.isArray(sw.manual)?sw.manual:[]; return sw; }
@@ -2324,7 +2448,8 @@ function shopRows(){
   // garlic) were separate rows. Ticks are still kept per unit (item|family), so old ones still apply.
   const byItem={}; for(const it of buildList()) (byItem[it.item]=byItem[it.item]||[]).push(it);
   return [...Object.values(byItem).map(list=>{ const it=list[0], keys=list.map(x=>x.key), pantry=have.has(itemKey(it.item));
-      return {key:keys.join(KEY_SEP),label:list.map(shopAmount).filter(Boolean).join(" + "),item:it.item,aisle:it.aisle,from:[...new Set(list.flatMap(x=>[...x.from]))].join(", "),optional:list.every(x=>x.optional),manual:false,pantry,
+      return {key:keys.join(KEY_SEP),label:shopLabel(list),item:it.item,aisle:it.aisle,from:list.length>1?list.flatMap(x=>x.parts).join(", "):[...new Set(list.flatMap(x=>[...x.from]))].join(", "), // measured differently: each recipe's own amount (2.9.0)
+        optional:list.every(x=>x.optional),manual:false,pantry,
         done:pantry?keys.every(k=>!sw.need[k]):keys.every(k=>sw.checked[k])}; }),
     ...sw.manual.map(m=>({key:"m:"+m.id,label:m.qty?`${fmtQty(m.qty)}${unitLabel(m.unit)?" "+unitLabel(m.unit):""}`:"",item:String(m.item||""),aisle:m.aisle||"other",from:"",manual:true,id:m.id,done:!!sw.checked["m:"+m.id]}))];
 }
@@ -2582,7 +2707,7 @@ function renderImport(){
   if(state.draft){ form.hidden=true; rev.hidden=false; renderReview(); return; }
   form.hidden=false; rev.hidden=true;
   document.getElementById("imgField").style.display = "";
-  document.getElementById("btnFetch").hidden = false;
+  linkSlot();
   renderThumbs();
 }
 function renderThumbs(){ const t=document.getElementById("thumbs"); t.innerHTML=state.images.map((f,i)=>`<span class="tw"><img src="${URL.createObjectURL(f)}" alt="Image ${i+1}"><button class="x" data-rmi="${i}" aria-label="Remove image ${i+1}"><span>×</span></button></span>`).join(""); }
@@ -2697,9 +2822,30 @@ function videoToSheets(file,maxSheets,onProgress){
     v.load();
   });
 }
-document.getElementById("btnClear").onclick=()=>{ document.getElementById("srcUrl").value=""; document.getElementById("srcText").value=""; state.images=[]; renderThumbs(); const s=document.getElementById("importStatus"); s.className="status"; s.textContent=""; drafts.save(); };
+document.getElementById("btnClear").onclick=()=>{ document.getElementById("srcUrl").value=""; linkSlot(); document.getElementById("srcText").value=""; state.images=[]; renderThumbs(); const s=document.getElementById("importStatus"); s.className="status"; s.textContent=""; drafts.save(); };
 
 let parseCtl=null;
+/* Paste from clipboard (2.9.0): one tap instead of press-and-hold, Paste. A link (also one
+   inside shared text, "Check out this reel https://…") goes in the link box and is fetched
+   straight away; anything else goes in the recipe text. iPhone asks first with its own small
+   Paste bubble. Where the clipboard can't be read (an http address, or the phone says no),
+   it says how to paste by hand. */
+// Which of the two shows. Without a clipboard to read (an http address), Fetch & read always shows, as before 2.9.0.
+function canPaste(){ return Boolean(navigator.clipboard&&navigator.clipboard.readText&&window.isSecureContext); }
+function linkSlot(){ const has=!!document.getElementById("srcUrl").value.trim(), paste=canPaste()&&!has;
+  document.getElementById("btnPaste").hidden=!paste; document.getElementById("btnFetch").hidden=paste; }
+document.getElementById("srcUrl").addEventListener("input",linkSlot);
+document.getElementById("btnPaste").onclick=async()=>{
+  let t="";
+  try{ if(!navigator.clipboard||!navigator.clipboard.readText) throw new Error("no clipboard"); t=String(await navigator.clipboard.readText()||"").trim(); }
+  catch(_){ toast("Bourdain can't read the clipboard here. Press and hold in the link box and choose Paste."); return; }
+  if(!t){ toast("The clipboard is empty. Copy the link or the recipe first."); return; }
+  const link=(t.match(/https?:\/\/[^\s<>"']+/)||[])[0];
+  if(link){ const u=document.getElementById("srcUrl"); u.value=link.replace(/[).,;!?]+$/,""); u.dispatchEvent(new Event("input",{bubbles:true}));
+    const go=document.getElementById("btnFetch"); if(!go.hidden) go.click(); else toast("Link pasted."); return; }
+  const box=document.getElementById("srcText"); box.value=box.value.trim()?box.value.trim()+"\n\n"+t:t; box.dispatchEvent(new Event("input",{bubbles:true}));
+  toast("Pasted into the recipe text. Tap Read recipe when you're ready.");
+};
 document.getElementById("btnFetch").onclick=async()=>{
   const url=document.getElementById("srcUrl").value.trim();
   const status=document.getElementById("importStatus"); const btn=document.getElementById("btnFetch");
@@ -2951,10 +3097,16 @@ function cookSaved(cost,servings,mult){
   const serves=(Number(servings)>0?Number(servings):Number(cost.serves)||2)*(Number(mult)>0?Number(mult):1);
   return Math.max(0,(outOf(cost)-Number(cost.home_per_serve))*serves);
 }
+/* The cost estimate (2.5), worked out in the background one recipe at a time and saved on
+   it quietly. Since 2.9.0 the same call also returns nutrition, so a recipe costs one AI
+   call, not two. Both are kept with a hash of the servings and ingredients, so editing
+   those redoes them. A recipe costed before 2.9.0 is asked once more, for its nutrition.
+   A server that sends no nutrition is noted ({none:true}), so it isn't asked again. */
 const costs={
   queue:[], busy:false, failed:{}, off:false,
   hash(r){ return hashStr(JSON.stringify([Number(r.servings)||null,(Array.isArray(r.ingredients)?r.ingredients:[]).map(i=>[i&&i.quantity!=null?Number(i.quantity):null,(i&&i.unit)||"",(i&&(i.item||i.raw_text))||""])])); },
-  needs(r){ return Boolean(r&&r.title&&(Array.isArray(r.ingredients)?r.ingredients:[]).some(i=>i&&(i.item||i.raw_text))&&(!r.cost||r.cost.hash!==this.hash(r))); },
+  needs(r){ if(!(r&&r.title&&(Array.isArray(r.ingredients)?r.ingredients:[]).some(i=>i&&(i.item||i.raw_text)))) return false; const h=this.hash(r);
+    return !r.cost||r.cost.hash!==h||!r.nutrition||r.nutrition.hash!==h; },
   ok(){ return !this.off&&Boolean(store.me&&store.me.ai)&&store.online&&!signin.out; },
   want(id){ const r=state.recipes[id]; if(!this.needs(r)||this.queue.includes(id)||Date.now()-(this.failed[id]||0)<3600000) return; this.queue.push(id); this.run(); },
   sweep(){ // cooked recipes first: they're what the Archives add up
@@ -2972,7 +3124,8 @@ const costs={
       const est=await store.ai("cost",{ title:r.title, servings:r.servings,
         ingredients:(r.ingredients||[]).filter(i=>i&&(i.item||i.raw_text)).map(i=>[i.quantity!=null?fmtQty(i.quantity):"",unitLabel(i.unit),i.item||i.raw_text,i.prep?`(${i.prep})`:""].filter(Boolean).join(" ")) });
       const now=state.recipes[id]; if(!now||this.hash(now)!==h) return; // changed while it was worked out: the next pass redoes it
-      now.cost={...est, hash:h, at:new Date().toISOString()};
+      const at=new Date().toISOString(), {nutrition:nu,...cost}=est||{};
+      now.cost={...cost, hash:h, at}; now.nutrition=nu&&typeof nu==="object"?{...nu, hash:h, at}:{none:true, hash:h, at};
       store.enqueue("recipes",id,now); store.flush(); // quietly, without a "Saved" toast
       if(state.view==="timeline") renderTimeline(); else if(state.view==="detail"&&state.detailId===id) renderDetail();
     }catch(e){
@@ -2981,6 +3134,35 @@ const costs={
     }finally{ this.busy=false; if(this.queue.length&&!this.off) setTimeout(()=>this.run(),800); }
   },
 };
+/* Nutrition (2.9.0): Claude's estimate for one serve, made in the same call as the cost.
+   Shown on the recipe page under the cost: energy and the three macros large; Show more
+   detail opens what an Australian label lists and where the energy comes from. Numbers go
+   through num(), since another person's recipe may hold anything. */
+const num=(v,max)=>{ const n=Math.round(Number(v)); return n>=0&&n<=max?n:null; };
+function nutritionOk(n){ return n&&num(n.kcal,5000)!=null&&["protein_g","carbs_g","fat_g"].every(k=>num(n[k],1000)!=null); }
+function nutritionHtml(r){
+  const n=r&&r.nutrition; if(!nutritionOk(n)) return "";
+  const g=(k,mx=1000)=>num(n[k],mx), au=v=>v.toLocaleString("en-AU");
+  const cell=(v,unit,label)=>`<div><b>${esc(v)}<small>${unit}</small></b><span>${label}</span></div>`;
+  // The detail (2.9.0): what an Australian nutrition label lists, per serve, and where the energy comes from.
+  const kcal=g("kcal",5000), rows=[["Energy",`${au(Math.round(kcal*4.184))} kJ (${au(kcal)} kcal)`],["Protein",`${g("protein_g")} g`],["Fat, total",`${g("fat_g")} g`],
+    ["– saturated",g("sat_fat_g")!=null?`${g("sat_fat_g")} g`:""],["Carbohydrate",`${g("carbs_g")} g`],["– sugars",g("sugar_g",500)!=null?`${g("sugar_g",500)} g`:""],
+    ["Dietary fibre",g("fibre_g",200)!=null?`${g("fibre_g",200)} g`:""],["Sodium",g("sodium_mg",20000)!=null?`${au(g("sodium_mg",20000))} mg`:""]].filter(([,v])=>v);
+  const e=[g("protein_g")*4,g("carbs_g")*4,g("fat_g")*9], tot=e.reduce((a,b)=>a+b,0)||1, pc=e.map(x=>Math.round(x/tot*100));
+  return `<div class="nutri" aria-label="Nutrition for one serve"><div class="macros">${cell(au(kcal),"","kcal a serve")}${cell(g("protein_g"),"g","protein")}${cell(g("carbs_g"),"g","carbs")}${cell(g("fat_g"),"g","fat")}</div>
+    <details class="nutmore"><summary><span class="show">Show more detail</span><span class="hide">Show less</span></summary>
+      <table>${rows.map(([k,v])=>`<tr class="${k.startsWith("–")?"sub":""}"><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join("")}</table>
+      <div class="split" aria-label="Where the energy comes from"><span style="width:${pc[0]}%"></span><span style="width:${pc[1]}%"></span><span style="width:${pc[2]}%"></span></div>
+      <p class="splitkey"><i class="p"></i>Protein ${pc[0]}% <i class="c"></i>Carbs ${pc[1]}% <i class="f"></i>Fat ${pc[2]}% <span>of the energy</span></p>
+      <small>One serve, estimated from the ingredients, so a guide rather than a label.</small></details></div>`;
+}
+/* The Plan with nutrition (2.9.0): each meal's kcal a serve under its name, and a day with
+   two or more meals gets a total (a serve of each). No week-wide figure: with one dinner a
+   day it read as daily intake. Meals without an estimate yet are left out and counted. */
+function nutOf(e){ const r=state.recipes[e.recipeId], n=r&&r.nutrition; return nutritionOk(n)?n:null; }
+function nutSum(entries){ const t={kcal:0,protein_g:0,carbs_g:0,fat_g:0,n:0,missing:0};
+  for(const e of entries){ const n=nutOf(e); if(!n){ t.missing++; continue; } t.n++; for(const k of ["kcal","protein_g","carbs_g","fat_g"]) t[k]+=num(n[k],5000); } return t; }
+const nutLine=t=>`${Math.round(t.kcal).toLocaleString("en-AU")} kcal · ${Math.round(t.protein_g)} g protein · ${Math.round(t.carbs_g)} g carbs · ${Math.round(t.fat_g)} g fat`;
 function costHtml(r){
   const c=r&&r.cost; if(!costOk(c)) return "";
   return `<div class="costline"><span>About <b>${esc(aud(c.home_per_serve))}</b> a serve to make · about <b>${esc(aud(outOf(c)))}</b> eating out</span>
@@ -3204,7 +3386,7 @@ function adminHomeHtml({sum,act,at}){
   const t=sum.totals, m=sum.month, h=sum.health, now=new Date(at), mon=MONTHS[+sum.day.slice(5,7)-1];
   const metric=(v,l)=>`<div class="adm-m"><b>${esc(v)}</b><span>${esc(l)}</span></div>`;
   const feats=LIMIT_GROUPS.map(g=>{ const k=m.byKind.find(x=>x.grp===g)||{calls:0,usd:0}; return `<div class="adm-row"><span>${LIMIT_NAMES[g]}</span><span>${plural(k.calls,"call")} · ${usd(k.usd)}</span></div>`; }).join("");
-  const b=sum.ai.budget, shown=sum.people.slice(0,5);
+  const b=sum.ai.budget;
   return `<div class="adm-kicker">Admin</div><h2 class="adm-title">System overview</h2>
     <p class="adm-meta">${DAYS[(now.getDay()+6)%7]} ${now.getDate()} ${MONTHS[now.getMonth()]} ${now.getFullYear()} · Refreshed ${whenShort(at).replace("today ","")} · Only you can see this</p>
     ${sum.attention.length?`<div class="adm-attn" role="status"><h3>Needs attention</h3><ul>${sum.attention.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`:`<p class="adm-ok">Nothing needs attention.</p>`}
@@ -3217,13 +3399,12 @@ function adminHomeHtml({sum,act,at}){
     <p class="adm-sum">${plural(m.calls,"call")} · ${usd(m.usd)} estimated${b.combined>0?` · ${pct(m.usd,b.combined)}% of ${usd(b.combined)} allowance`:""}</p>
     ${feats}
     <p class="muted small adm-note">Estimates from recorded usage; provider invoices may differ.</p>
-    ${secHead("People",null,sum.people.length)}
-    ${shown.map(personLine).join("")}
-    ${sum.people.length>shown.length?`<button class="adm-link wide" data-go="people">All ${sum.people.length} people →</button>`:""}
     ${secHead("Recent activity","activity")}
     ${act.length?act.slice(0,5).map(actLine).join(""):`<p class="muted small">Nothing yet.</p>`}
     ${secHead("Admin")}
     <div class="adm-actions">
+      ${sum.gates?`<button class="adm-a" data-go="gates">Pilot gates<small>${esc(gatesLine(sum.gates))}</small></button>`:""}
+      <button class="adm-a" data-go="people">People<small>${plural(sum.people.length,"person","people")} · usage, limits and accounts</small></button>
       <button class="adm-a" data-go="activity">All activity and sign-ins<small>Filter by person, kind of event and date</small></button>
       <button class="adm-a" data-go="ai">AI usage, limits and prices<small>By feature, provider and person; change the limits</small></button>
       <button class="adm-a" data-go="audit">Audit log<small>Every change made here, and deploys</small></button>
@@ -3244,6 +3425,33 @@ const shortDay=k=>{ const d=new Date(k+"T00:00"); return `${DAYS[(d.getDay()+6)%
 // server on another time zone (no TZ) once made the last bar "Today" a day early.
 const isPhoneToday=k=>k===iso(new Date());
 const visRead=d=>`<b>${isPhoneToday(d.day)?"Today":esc(shortDay(d.day))}</b> · ${plural(+d.people||0,"person","people")}${(+d.people||0)>0?(+d.others||0)===0?" · just you":` · ${+d.others} besides you`:""}`;
+/* Pilot gates (2.9.0): the friends-pilot tests from docs/strategy.md and the due diligence
+   report's Gate 1, worked out by the server from what it already stores (no new tracking):
+   - imports in the last 30 days by source, "worked" meaning the recipe reached the review
+     screen; the target is 90%;
+   - for each person but the owner, which of the last 6 weeks (Monday to Sunday) they
+     finished a cook in (added past cooks don't count); the test is 5 people in 4 of 6 weeks;
+   - AI cost per person active this month. */
+// One line for the Admin button: how the two tests stand.
+function gatesLine(g){ const all=(g.imports||[]).reduce((t,x)=>({ok:t.ok+x.ok,total:t.total+x.total}),{ok:0,total:0}), c=g.cooking||[];
+  return `Imports ${all.total?Math.round(all.ok/all.total*100)+"%":"none yet"} · ${c.filter(p=>p.weeks.filter(Boolean).length>=4).length} of ${c.length} cooking 4 of 6 weeks`; }
+function adminGatesHtml({sum}){ return `<div class="adm-kicker">Admin</div><h2 class="adm-title">Pilot gates</h2>${gatesHtml(sum.gates,sum.people,sum.month,false)}`; }
+function gatesHtml(g,people,m,head=true){
+  if(!g) return "";
+  const pc=(a,b)=>b?Math.round(a/b*100):0, all=(g.imports||[]).reduce((t,x)=>({ok:t.ok+x.ok,total:t.total+x.total}),{ok:0,total:0});
+  const imp=(g.imports||[]).map(x=>`<div class="adm-row"><span>${esc(x.source)}</span><span class="${x.total&&pc(x.ok,x.total)<90?"gbad":""}">${x.total?`${x.ok} of ${x.total} · ${pc(x.ok,x.total)}%`:"none yet"}</span></div>`).join("");
+  const cooks=(g.cooking||[]), met=cooks.filter(p=>p.weeks.filter(Boolean).length>=4).length;
+  const who=id=>(people||[]).find(p=>p.id===id)||{id,name:"Someone"};
+  const rows=cooks.map(p=>{ const n=p.weeks.filter(Boolean).length; return `<div class="adm-row gcook"><span>${avatar(who(p.id),"xs")}${esc(who(p.id).name||"Someone")}</span><span class="gweeks" aria-label="${n} of the last 6 weeks">${p.weeks.map(w=>`<i class="${w?"on":""}"></i>`).join("")}<b class="${n>=4?"":"gbad"}">${n} of 6</b></span></div>`; }).join("");
+  return `${head?secHead("Pilot gates"):""}
+    <p class="adm-meta">The friends pilot's tests, from your strategy and the due diligence report's Gate 1.</p>
+    <h4 class="ghead">Imports, last 30 days</h4>
+    <div class="adm-row"><span><b>All sources</b></span><span><b class="${all.total&&pc(all.ok,all.total)<90?"gbad":""}">${all.ok} of ${all.total} · ${pc(all.ok,all.total)}%</b> · target 90%</span></div>${imp}
+    <h4 class="ghead">Cooking, last 6 weeks</h4>${rows||`<p class="adm-sum">Nobody else has cooked yet.</p>`}
+    <p class="adm-sum">${met} of ${cooks.length} ${cooks.length===1?"person":"people"} besides you cooked in 4 or more of the last 6 weeks. The test: 5 people outside your household.</p>
+    <h4 class="ghead">AI cost</h4>
+    <div class="adm-row"><span>Per active person, ${MONTHS_LONG[new Date().getMonth()]}</span><span>${g.active?usd(m.usd/g.active):"—"} · ${plural(g.active,"person","people")}</span></div>`;
+}
 function visitorsHtml(v){
   if(!Array.isArray(v)||!v.length) return "";
   const W=340, L=20, T=8, B=104, H=122, n=v.length, gap=2, bw=(W-L-gap*(n-1))/n;
@@ -3387,14 +3595,14 @@ function paintActivity(){
 }
 function renderAdmin(){
   const el=document.getElementById("view-admin"), a=state.admin, scr=state.adminScreen||"home", sub=scr!=="home";
-  const head=`<div class="detail-head"><button class="btn small ghost" id="aBack">${sub?"‹ Admin":"‹ Recipes"}</button>${!sub&&a&&!a.error?`<button class="btn small" id="aRefresh">Refresh</button>`:""}</div>`;
+  const head=`<div class="detail-head"><button class="btn small ghost" id="aBack">${!sub?"‹ Recipes":scr==="person"&&state.adminFromPeople?"‹ People":"‹ Admin"}</button>${!sub&&a&&!a.error?`<button class="btn small" id="aRefresh">Refresh</button>`:""}</div>`;
   const wire=()=>{
     el.querySelector("#aBack").onclick=()=>{ if(sub) adminGo(scr==="person"&&state.adminFromPeople?"people":"home",{adminFromPeople:false}); else show("recipes"); };
     const r=el.querySelector("#aRefresh"); if(r) r.onclick=()=>{ state.admin=null; renderAdmin(); };
   };
   if(!a){ el.innerHTML=head+`<div class="empty"><span class="spin"></span>Loading…</div>`; wire(); loadAdmin(); return; }
   if(a.error){ el.innerHTML=head+`<div class="empty">${esc(adminFail(a.error))}</div>`; wire(); return; }
-  const screens={ home:adminHomeHtml, people:adminPeopleHtml, person:adminPersonHtml, ai:adminAiHtml, activity:adminActivityHtml, audit:adminAuditHtml, errors:adminErrorsHtml };
+  const screens={ home:adminHomeHtml, gates:adminGatesHtml, people:adminPeopleHtml, person:adminPersonHtml, ai:adminAiHtml, activity:adminActivityHtml, audit:adminAuditHtml, errors:adminErrorsHtml };
   el.innerHTML=head+(screens[scr]||adminHomeHtml)(a); wire();
   el.onclick=async e=>{
     const go=e.target.closest("[data-go]"); if(go){ adminGo(go.dataset.go); return; }

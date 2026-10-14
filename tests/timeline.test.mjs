@@ -43,9 +43,7 @@ try {
   check("stats: this year", stats[1] === String(all.filter((c) => c.date.startsWith(yr)).length), stats.join(" | "));
   check("stats: recipes tried 5 of 6", stats[2] === "5/6", stats[2]);
 
-  const top = await page.$$eval(".tl-top .slot", (xs) => xs.map((x) => [x.dataset.open, x.querySelector(".n").textContent]));
-  check("most cooked: top 3, most first, counts shown", JSON.stringify(top.map((t) => t[0])) === JSON.stringify(["stew", "soup", top[2]?.[0]]) && top.length === 3 && top[0][1] === "4×" && top[1][1] === "3×" && top[2][1] === "2×" && ["katsu", "toast"].includes(top[2][0]), JSON.stringify(top));
-  check("most cooked: tie broken by most recent (katsu yesterday beats toast 2 days ago)", top[2][0] === "katsu", JSON.stringify(top));
+  check("2.9.0: no Most cooked list: after the stats and savings come the cooks", !(await page.$(".tl-top")) && !/Most cooked/.test(await page.textContent("#view-timeline")));
 
   const feed = await page.evaluate(() => [...document.querySelectorAll(".feed .day")].map((d) => ({ d: d.querySelector(".d").textContent, ids: [...d.querySelectorAll("[data-open]")].map((x) => x.dataset.open) })));
   const days = [...new Set(all.map((c) => c.date))].sort().reverse();
@@ -55,7 +53,7 @@ try {
   const heads = await page.$$eval(".tl-head", (hs) => hs.map((h) => h.textContent));
   const lastYear = new Date(today); lastYear.setDate(lastYear.getDate() - 400);
   const longMonth = (x) => x.toLocaleString("en-GB", { month: "long" });
-  check("month headings: this year's without the year, older ones with it", heads[0] === "Most cooked" && heads[1].toLowerCase() === longMonth(today).toLowerCase() && heads[heads.length - 1].toLowerCase() === `${longMonth(lastYear)} ${lastYear.getFullYear()}`.toLowerCase(), heads.join(" | "));
+  check("month headings: this year's without the year, older ones with it", heads[0].toLowerCase() === longMonth(today).toLowerCase() && heads[heads.length - 1].toLowerCase() === `${longMonth(lastYear)} ${lastYear.getFullYear()}`.toLowerCase(), heads.join(" | "));
   const soupRow = await page.textContent('.feed .day:nth-of-type(2) [data-open="soup"]');
   check("feed: servings made (4 serves × a 2× batch = 8 servings), not the batch", /8 servings/.test(soupRow) && !/batch/.test(soupRow), soupRow);
   check("feed: a 1× cook shows the recipe's servings", /4 servings/.test(await page.textContent('.feed [data-open="soup"] >> nth=-1')));
@@ -83,14 +81,13 @@ try {
   check("from Recipes it still says '‹ Recipes'", (await page.textContent("#back")).trim() === "‹ Recipes");
 
   // --- a finished cook shows up, a removed one goes
-  await page.click('#tabs button[data-view="timeline"]'); await page.click('.tl-top [data-open="soup"]');
+  await page.click('#tabs button[data-view="timeline"]'); await page.click('.feed [data-open="soup"] >> nth=0');
   await page.click("#cookThis"); await page.click("#cookFinish");
   await page.waitForSelector('#sheet.open [data-act="save"]'); await page.click('#sheet [data-act="save"]'); await sleep(500);
   await page.click('#tabs button[data-view="timeline"]');
   const firstDay = await page.evaluate(() => [...document.querySelector(".feed .day").querySelectorAll("[data-open]")].map((x) => x.dataset.open));
   check("finishing a cook puts it at the top, today", firstDay.includes("soup") && firstDay.includes("rice"), JSON.stringify(firstDay));
-  check("most cooked updates (soup now 4×)", /4×/.test(await page.textContent('.tl-top [data-open="soup"]')));
-  await page.click('.tl-top [data-open="soup"]'); await page.click("#cookStats");
+  await page.click('.feed [data-open="soup"] >> nth=0'); await page.click("#cookStats");
   await page.waitForSelector('#sheet.open [data-act="rm"]');
   await page.locator('#sheet [data-act="rm"]').first().click(); await sleep(500);
   await page.evaluate(() => closeSheet()); await page.click("#back");

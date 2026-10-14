@@ -356,10 +356,18 @@ app.put("/api/me", (req, res) => {
 const person = (u, viewer) => ({ id: u.id, name: u.name, photo: u.photo || null, me: u.id === viewer });
 const named = () => db.prepare("SELECT * FROM users WHERE name IS NOT NULL AND name != '' AND disabled_at IS NULL ORDER BY created_at").all();
 const recipesOf = (owner) => readAll("recipes", owner);
+/* 2.9.0: last_active is when someone last added a recipe or a cook, from what everyone can
+   already see. Never when they last opened the app. The phone sorts the People row by it. */
+const lastActive = (rs) => {
+  let t = 0;
+  for (const r of rs) { if (!r) continue; t = Math.max(t, Date.parse(r.created_at) || 0);
+    for (const c of Array.isArray(r.cooks) ? r.cooks : []) if (c && c.date) t = Math.max(t, Date.parse(c.at) || Date.parse(c.date + "T12:00:00") || 0); }
+  return t ? new Date(Math.min(t, Date.now() + 864e5)).toISOString() : null; // a cook "at" in the future (a phone's clock) is capped at a day
+};
 app.get("/api/people", (req, res) => {
   res.json(named().map((u) => {
     const rs = Object.values(recipesOf(u.id));
-    return { ...person(u, req.user.id), recipes: rs.length, cooks: rs.reduce((n, r) => n + ((r && r.cooks) || []).filter((c) => c && c.date).length, 0) };
+    return { ...person(u, req.user.id), recipes: rs.length, cooks: rs.reduce((n, r) => n + ((r && r.cooks) || []).filter((c) => c && c.date).length, 0), last_active: lastActive(rs) };
   }));
 });
 app.get("/api/people/:id", (req, res) => {
@@ -540,10 +548,10 @@ app.put("/api/:col(recipes|plan|pantry|shop)/:id", sameDataVersion, (req, res) =
     const resized = !cooked && !fresh.length ? cooksOf(doc).filter((c) => multOf.has(`${c.date}|${c.at}`) && multOf.get(`${c.date}|${c.at}`) !== (Number(c.mult) || 1)) : [];
     const onlyCooks = (r) => { const { cooks, cost, updated_at, ...rest } = r || {}; return JSON.stringify(rest); };
     const changedCook = resized.length > 0 && was && onlyCooks(was) === onlyCooks(doc);
-    const sameApart = (a, b) => { const strip = ({ cost, updated_at, ...rest } = {}) => JSON.stringify(rest); return strip(a) === strip(b); };
+    const sameApart = (a, b) => { const strip = ({ cost, nutrition, updated_at, ...rest } = {}) => JSON.stringify(rest); return strip(a) === strip(b); };
     const title = doc.title || "Untitled";
     if (!(was && sameApart(was, doc))) logActivity(req.user.id, !prev ? "recipe_added" : addedLater ? "cook_added" : cooked ? "cook_logged" : changedCook ? "cook_changed" : "recipe_edited",
-      addedLater ? `${title} (${fresh.map((c) => String(c.date).slice(0, 10)).join(", ")})` : changedCook ? `${title} (${resized.map((c) => String(c.date).slice(0, 10)).join(", ")})` : title); // a new cost estimate isn't an edit
+      addedLater ? `${title} (${fresh.map((c) => String(c.date).slice(0, 10)).join(", ")})` : changedCook ? `${title} (${resized.map((c) => String(c.date).slice(0, 10)).join(", ")})` : title); // a new cost or nutrition estimate isn't an edit
   } else if (col === "plan") logActivity(req.user.id, "plan_changed", id);
   else if (col === "shop") logActivity(req.user.id, "shop_changed", id); // the week it's for, never what's on it (2.7.0)
   else if (col === "pantry") logActivity(req.user.id, "pantry_changed", doc.item || id);
@@ -748,12 +756,22 @@ const STAPLE_PRICES = "chicken thigh fillet $14/kg; chicken breast $13/kg; whole
 const COST_PROMPT = (m) => `You estimate food costs for a recipe app used in Australia. All prices in Australian dollars including GST, at typical 2025-26 Sydney/Melbourne prices.
 1. Home cost: what the ingredients this recipe uses cost at Coles or Woolworths at regular prices (not specials). Count only the amount used: 2 tbsp of soy sauce costs cents, not a bottle. Count staples (oil, salt, spices) at their small used cost. Where there's no quantity, assume a typical amount for the recipe. Use these reference prices where they apply: ${STAPLE_PRICES}.
 2. Eating out: what one serve of this dish, or the closest comparable dish, costs eaten in at a casual eatery or takeaway counter in Australia. No delivery, no weekend or card surcharges. Price it at its course: a starter, snack or side against entrée or snack plates, a dessert against desserts, not against mains.
-Reply with ONLY a JSON object: {"course": "main"|"starter"|"snack"|"side"|"dessert"|"drink", "comparable": string (the dish as a menu would call it), "home_total": number (the whole recipe as written), "casual_per_serve": number, "basis": string (one short sentence on what drives the cost)}
+3. Nutrition: for ONE serve (the recipe divided by its servings), estimate energy and nutrients from the ingredients and amounts, at typical values (Australian food composition where you know it). Count what's eaten: frying oil mostly stays in the pan, marinades mostly don't get eaten.
+Reply with ONLY a JSON object: {"course": "main"|"starter"|"snack"|"side"|"dessert"|"drink", "comparable": string (the dish as a menu would call it), "home_total": number (the whole recipe as written), "casual_per_serve": number, "basis": string (one short sentence on what drives the cost), "nutrition": {"kcal": number, "protein_g": number, "carbs_g": number, "fat_g": number, "sat_fat_g": number, "sugar_g": number, "fibre_g": number, "sodium_mg": number} (one serve)}
 
 RECIPE: ${clip(m.title, 200)}
 Serves: ${Number(m.servings) > 0 ? Number(m.servings) : "not given (assume 2)"}
 Ingredients:
 ${(Array.isArray(m.ingredients) ? m.ingredients : []).slice(0, 60).map((i) => "- " + clip(i, 120)).join("\n")}`;
+/* Nutrition for one serve (2.9.0). Each number is kept only if it's plausible; without
+   energy and the three macros there's no nutrition, and the phone notes it as none. */
+const NUTRIENTS = { kcal: 5000, protein_g: 1000, carbs_g: 1000, fat_g: 1000, sat_fat_g: 1000, sugar_g: 500, fibre_g: 200, sodium_mg: 20000 };
+function nutritionOf(n) {
+  if (!n || typeof n !== "object") return null;
+  const out = {};
+  for (const [k, max] of Object.entries(NUTRIENTS)) { const v = Number(n[k]); if (Number.isFinite(v) && v >= 0 && v <= max) out[k] = Math.round(v); }
+  return ["kcal", "protein_g", "carbs_g", "fat_g"].every((k) => k in out) ? out : null;
+}
 const money = (v) => { const n = Number(v); return n >= 0 && n < 5000 ? Math.round(n * 100) / 100 : null; };
 const COURSES = ["main", "starter", "snack", "side", "dessert", "drink"];
 AI_JOBS.dish = { group: "import", images: 3, prompt: () => DISH_PROMPT,
@@ -773,9 +791,20 @@ AI_JOBS.cost = { group: "cost", images: 0, maxTokens: 2000, prompt: COST_PROMPT,
     if (home === null || casual === null) throw new UpstreamError(422, "invalid_json", "the cost estimate wasn't a set of prices");
     return { currency: "AUD", course: COURSES.includes(j.course) ? j.course : "main", comparable: clip(j.comparable, 120), basis: clip(j.basis, 300), serves,
       home_total: home, home_per_serve: Math.round((home / serves) * 100) / 100, casual_per_serve: casual,
-      out_per_serve: casual }; // 2.5.2: casual prices only (it was the average of casual and mid-range)
+      out_per_serve: casual, // 2.5.2: casual prices only (it was the average of casual and mid-range)
+      ...(nutritionOf(j.nutrition) ? { nutrition: nutritionOf(j.nutrition) } : {}) };
   } };
 const LIMIT_GROUPS = ["import", "scan", "ideas", "cover", "cost"];
+/* Where an import came from (2.9.0), kept with the call so the owner's pilot gates can show
+   which sources work. Only the kind of source, never the link. */
+const SOURCE_SITES = [[/(^|\.)instagram\.com$/, "Instagram"], [/(^|\.)tiktok\.com$/, "TikTok"], [/(^|\.)(youtube\.com|youtu\.be)$/, "YouTube"]];
+const siteSource = (host) => (SOURCE_SITES.find(([re]) => re.test(String(host || "").toLowerCase())) || [null, "Recipe sites"])[1];
+function importSource(kind, m, images) {
+  if (kind === "dish") return "Guess from a photo";
+  if (kind !== "import") return null;
+  let host = ""; try { host = new URL(String(m && m.url)).hostname; } catch {}
+  return host ? siteSource(host) : images > 0 ? "Screenshots and recordings" : "Pasted text";
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS ai_usage (id INTEGER PRIMARY KEY AUTOINCREMENT, user TEXT NOT NULL, at TEXT NOT NULL, day TEXT NOT NULL,
@@ -839,22 +868,27 @@ const allowanceOf = (user, group) => { const a = allowanceFor(user); return a.ex
 /* Runs one AI job for req.user: checks the limits, allows one at a time per
    person, and records the call if it reached Claude or OpenAI (a call that never
    left the server, like a missing key, isn't counted: it cost nothing). */
-async function runAi(req, res, kind, group, up, job) {
+async function runAi(req, res, kind, group, up, job, source = null) {
   const blocked = aiBlock(req.user, group);
   if (blocked) { res.status(blocked.status).json(blocked.body); return { blocked: true }; }
   const solo = group !== "cost";
   if (solo) aiInFlight.add(req.user.id);
   up.meter = { reached: false, input: 0, output: 0, images: 0 };
   let outcome = "ok";
-  try { return { value: await job() }; }
+  try {
+    const value = await job();
+    // "No recipe found" / "no dish": Claude answered, but nothing reached the review screen (2.9.0)
+    if ((kind === "import" || kind === "dish") && value && typeof value.error === "string") outcome = "no_recipe";
+    return { value };
+  }
   catch (err) { outcome = err instanceof UpstreamError ? err.code : up.clientGone() ? "stopped" : "error"; throw err; }
   finally {
     if (solo) aiInFlight.delete(req.user.id);
     const m = up.meter;
     if (m.reached) {
       const p = prices(), usd = (m.input * p.claude[0] + m.output * p.claude[1]) / 1e6 + m.images * p.image_usd;
-      db.prepare(`INSERT INTO ai_usage (user, at, day, kind, grp, model, input_tokens, output_tokens, images, est_usd, outcome)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(req.user.id, new Date().toISOString(), localDay(), kind, group, MODEL, m.input, m.output, m.images, Math.round(usd * 1e6) / 1e6, outcome);
+      db.prepare(`INSERT INTO ai_usage (user, at, day, kind, grp, model, input_tokens, output_tokens, images, est_usd, outcome, source)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(req.user.id, new Date().toISOString(), localDay(), kind, group, MODEL, m.input, m.output, m.images, Math.round(usd * 1e6) / 1e6, outcome, source);
       if (kind !== "cost") logActivity(req.user.id, "ai_" + kind, outcome === "ok" ? "" : outcome); // background estimates would drown the log
     }
   }
@@ -881,7 +915,7 @@ app.post("/api/ai", async (req, res) => {
       const json = parseJsonReply(text);
       if (json === undefined) throw Object.assign(new UpstreamError(422, "invalid_json", "model did not return JSON"), { raw: text.slice(0, 500) });
       return job.finish ? job.finish(json, material && typeof material === "object" ? material : {}) : json;
-    });
+    }, importSource(kind, material, images.length));
     if (r.blocked) return;
     res.json({ json: r.value, allowance: allowanceOf(req.user, job.group) });
   } catch (err) {
@@ -970,7 +1004,8 @@ async function systemHealth() {
       : { label: "Photo storage", status: "ok", text: "Operational", detail: `${gb(free)} free on the dataset` };
   } catch (err) { h.storage = { label: "Photo storage", status: "problem", text: "Not writable", detail: err.message }; }
   // Claude and OpenAI: the last real call (a stop by the person says nothing either way)
-  const recent = db.prepare("SELECT at, kind, outcome FROM ai_usage WHERE outcome != 'stopped' ORDER BY id DESC LIMIT 50").all();
+  const recent = db.prepare("SELECT at, kind, outcome FROM ai_usage WHERE outcome != 'stopped' ORDER BY id DESC LIMIT 50").all()
+    .map((r) => (r.outcome === "no_recipe" ? { ...r, outcome: "ok" } : r)); // Claude answered; there was just no recipe in it
   const lastClaude = recent.find((r) => r.outcome === "ok" || !IMAGE_CODES(r.outcome));
   const lastImage = recent.find((r) => r.kind === "cover" && (r.outcome === "ok" || IMAGE_CODES(r.outcome)));
   const fromLast = (label, keySet, last, none) => !keySet ? { label, status: "off", text: "Not configured", detail: none }
@@ -979,14 +1014,66 @@ async function systemHealth() {
     : { label, status: "problem", text: "Last call failed", detail: `${last.outcome}, ${whenText(last.at)}` };
   h.ai = fromLast("AI (Claude)", Boolean(API_KEY), lastClaude, "No ANTHROPIC_API_KEY on the server");
   h.images = fromLast("Cover pictures (OpenAI)", Boolean(OPENAI_KEY), lastImage, "No OPENAI_API_KEY on the server");
-  h.backups = { label: "Backups", status: "unknown", text: "Not monitored", detail: "ZFS snapshots run on TrueNAS; Bourdain can't see them" };
+  h.backups = await snapshotHealth();
   return h;
+}
+/* Backups (2.9.0): TrueNAS's ZFS snapshots, as the container sees them. A dataset mounted at
+   its root has them in a hidden .zfs/snapshot folder, which the container can list but not
+   open (checked on the NAS, 2026-10-14), so this reads names, not contents. The newest one's
+   time comes from its TrueNAS name, auto-YYYY-MM-DD_HH-MM, in the NAS's local time. Green
+   within 26 hours, a warning to 50, a problem after that or with none. Datasets with no .zfs
+   folder (not ZFS, or the tests) stay "Not monitored", never green. An off-site copy isn't
+   something it can see, and it says so. */
+const SNAPSHOT_SETS = [["Database", DATA_DIR], ["Photos", PHOTO_DIR]];
+const snapshotTime = (name) => { const x = /(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})/.exec(name); return x ? new Date(+x[1], +x[2] - 1, +x[3], +x[4], +x[5]) : null; };
+async function snapshotHealth(now = Date.now()) {
+  const sets = [];
+  for (const [label, dir] of SNAPSHOT_SETS) {
+    let names = null; try { names = await readdir(path.join(dir, ".zfs", "snapshot")); } catch {}
+    const times = (names || []).map(snapshotTime).filter((t) => t && !isNaN(t)).sort((a, b) => b - a);
+    sets.push({ label, seen: names !== null, newest: times[0] || null, kept: times.length });
+  }
+  if (!sets.some((x) => x.seen)) return { label: "Backups", status: "unknown", text: "Not monitored", detail: "No ZFS snapshots visible to Bourdain (no .zfs folder in its datasets)" };
+  const age = (x) => (x.newest ? (now - x.newest) / 3600_000 : Infinity), worst = sets.reduce((w, x) => (age(x) > age(w) ? x : w));
+  const when = (d) => { const days = Math.round((new Date(now).setHours(0, 0, 0, 0) - new Date(d).setHours(0, 0, 0, 0)) / 864e5);
+    const t = d.toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" }); return days <= 0 ? `today, ${t}` : days === 1 ? `yesterday, ${t}` : `${days} days ago`; };
+  const parts = sets.map((x) => `${x.label} ${x.newest ? when(x.newest) : "none found"} (${x.kept} kept)`).join(" · ");
+  const h = age(worst), status = h <= 26 ? "ok" : h <= 50 ? "warn" : "problem";
+  return { label: "Backups", status, text: status === "ok" ? "Snapshots daily" : status === "warn" ? "Snapshot overdue" : worst.newest ? "No recent snapshot" : "No snapshots found",
+    detail: `ZFS snapshots on the NAS. ${parts}. An off-site copy isn't checked` };
 }
 const monthUse = (where, args) => db.prepare(`SELECT grp, COUNT(*) AS calls, COALESCE(SUM(est_usd), 0) AS usd FROM ai_usage WHERE day LIKE ? ${where} GROUP BY grp`).all(localDay().slice(0, 7) + "%", ...args);
 /* People each day (2.8.0): for each of the last `n` days, oldest first, how many people
    opened Bourdain (`people`) and how many of them weren't the owner (`others`). From
    `visits`, plus anyone with activity that day, which covers the days before 2.8.0
    recorded visits (activity alone misses someone who only looked around). */
+/* Pilot gates (2.9.0): the friends pilot's tests (docs/strategy.md, and Gate 1 of the due
+   diligence report), from what the server already keeps. No new tracking on the phones.
+   - imports: the last 30 days by source. Worked = Claude read a recipe out of it (it reached
+     the review screen); failed = any other answer, plus link fetches that came back with
+     nothing. Calls from before 2.9.0 have no source and are counted on their own.
+   - cooking: for each named person but the owner, which of the last 6 weeks (Monday to
+     Sunday) they finished a cook in. Past cooks added later don't count.
+   - active: people who opened Bourdain this month, for AI cost per person. */
+const GATE_SOURCES = ["Recipe sites", "Instagram", "TikTok", "YouTube", "Screenshots and recordings", "Pasted text", "Guess from a photo"];
+function pilotGates(people) {
+  const since = new Date(Date.now() - 30 * 864e5).toISOString(), rows = new Map(GATE_SOURCES.map((x) => [x, { source: x, ok: 0, total: 0 }]));
+  const add = (src, ok) => { const r = rows.get(src) || rows.set(src, { source: src, ok: 0, total: 0 }).get(src); r.total++; if (ok) r.ok++; };
+  for (const r of db.prepare("SELECT source, outcome FROM ai_usage WHERE kind IN ('import', 'dish') AND outcome != 'stopped' AND at >= ?").all(since))
+    add(r.source || "Before 2.9.0 (source not kept)", r.outcome === "ok");
+  for (const r of db.prepare("SELECT target FROM activity WHERE action = 'link_fetched' AND at >= ?").all(since)) {
+    const [site, outcome = ""] = String(r.target || "").split(" · ");
+    if (!/^read/.test(outcome)) add(siteSource(site), false);
+  }
+  const mon = new Date(); mon.setHours(12, 0, 0, 0); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+  const starts = [5, 4, 3, 2, 1, 0].map((w) => { const d = new Date(mon); d.setDate(d.getDate() - 7 * w); return localDay(d); });
+  const cooking = people.filter((p) => !p.is_admin && !p.paused && p.name).map((p) => {
+    const days = Object.values(readAll("recipes", p.id)).flatMap((r) => (r && Array.isArray(r.cooks) ? r.cooks : []).filter((c) => c && c.date && c.added !== true).map((c) => String(c.date).slice(0, 10)));
+    return { id: p.id, weeks: starts.map((st, i) => days.some((d) => d >= st && (i === 5 || d < starts[i + 1]))) };
+  });
+  const active = db.prepare("SELECT COUNT(DISTINCT user) AS n FROM visits WHERE day LIKE ?").get(localDay().slice(0, 7) + "%").n;
+  return { imports: [...rows.values()].filter((x) => GATE_SOURCES.includes(x.source) || x.total), cooking, active };
+}
 function visitorsByDay(n) {
   const days = [], d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() - (n - 1));
   for (let i = 0; i < n; i++) { days.push(localDay(d)); d.setDate(d.getDate() + 1); }
@@ -1023,7 +1110,7 @@ app.get("/api/admin/summary", requireAdmin, async (req, res, next) => {
     const limited = people.filter((p) => !p.paused && !(p.is_admin && p.limits.admin_exempt));
     const budget = { combined: limited.reduce((n, p) => n + p.limits.monthly_usd, 0), people: limited.length };
     const failures = db.prepare(`SELECT a.at, a.kind, a.outcome, u.name, u.email FROM ai_usage a LEFT JOIN users u ON u.id = a.user
-                                 WHERE a.outcome NOT IN ('ok', 'stopped') ORDER BY a.id DESC LIMIT 10`).all().map((r) => ({ at: r.at, kind: r.kind, code: r.outcome, name: r.name || r.email || "?" }));
+                                 WHERE a.outcome NOT IN ('ok', 'stopped', 'no_recipe') ORDER BY a.id DESC LIMIT 10`).all().map((r) => ({ at: r.at, kind: r.kind, code: r.outcome, name: r.name || r.email || "?" }));
     const disk = await photoDiskUse();
     const totals = {
       users: people.length, recipes: db.prepare("SELECT COUNT(*) AS n FROM recipes").get().n,
@@ -1032,7 +1119,7 @@ app.get("/api/admin/summary", requireAdmin, async (req, res, next) => {
       active_today: people.filter((p) => p.last_seen && p.last_seen >= since).length,
       ai_calls_today: db.prepare("SELECT COUNT(*) AS n FROM ai_usage WHERE day = ?").get(day).n,
     };
-    const visitors = visitorsByDay(30);
+    const visitors = visitorsByDay(30), gates = pilotGates(people);
     const health = await systemHealth();
     const lastError = db.prepare("SELECT at, area, code, message FROM server_errors ORDER BY id DESC LIMIT 1").get() || null;
     const errorsToday = db.prepare("SELECT COUNT(*) AS n FROM server_errors WHERE at >= ?").get(since).n;
@@ -1044,7 +1131,7 @@ app.get("/api/admin/summary", requireAdmin, async (req, res, next) => {
       if (p.limits.storage_mb > 0 && p.storage_bytes >= 0.9 * p.limits.storage_mb * 1024 * 1024) attention.push(`${p.name || p.email} has used ${Math.round((100 * p.storage_bytes) / (p.limits.storage_mb * 1024 * 1024))}% of their photo storage`);
     }
     if (errorsToday) attention.push(`${errorsToday} error${errorsToday === 1 ? "" : "s"} recorded today`);
-    res.json({ day, people, totals, health, attention, visitors,
+    res.json({ day, people, totals, health, attention, visitors, gates,
       month: { calls: byKind.reduce((n, r) => n + r.calls, 0), usd: total, byKind },
       ai: { providers: { anthropic: Math.min(anthropic, total), openai: Math.max(0, total - anthropic), images }, budget, failures },
       system: { version: VERSION, commit: COMMIT, data_version: DATA_VERSION, started_at: STARTED_AT, last_error: lastError, errors_today: errorsToday },
@@ -1702,6 +1789,7 @@ process.on("unhandledRejection", (err) => { console.error("unhandled rejection",
 
 // Added in 2.4 for pausing an account: a new column, so no data conversion.
 if (!columns("users").includes("disabled_at")) db.exec("ALTER TABLE users ADD COLUMN disabled_at TEXT");
+if (!columns("ai_usage").includes("source")) db.exec("ALTER TABLE ai_usage ADD COLUMN source TEXT"); // 2.9.0: where an import came from
 { // a new version or build since the last start is a deploy; otherwise a restart
   const last = getSetting("last_boot");
   if (!last || last.version !== VERSION || last.commit !== COMMIT) audit(null, "deployed", `v${VERSION} (${COMMIT})${last ? `, was v${last.version} (${last.commit})` : ""}`);

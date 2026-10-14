@@ -28,12 +28,19 @@ try {
     return p && { top: Math.round(p.top - r.top - bw), bottom: Math.round(r.bottom - bw - p.bottom), left: Math.round(p.left - r.left - bw), right: Math.round(r.right - bw - p.right) }; }, sel);
 
   // --- the tab bar
-  const rec = await at('#tabs [data-view="recipes"]'), shop = await at('#tabs [data-view="shop"]'), bar = await at("#tabs");
-  await press(rec.x, rec.y); await glide(rec.x, shop.x, rec.y);
+  // 2.9.0: Plan · Recipes · + · Pantry · Archives
+  const rec = await at('#tabs [data-view="recipes"]'), pan = await at('#tabs [data-view="pantry"]'), bar = await at("#tabs");
+  await press(rec.x, rec.y); await glide(rec.x, pan.x, rec.y);
   const mid = await page.evaluate(() => ({ pill: !!document.querySelector("#tabs .slidepill"), near: document.querySelector("#tabs button.near")?.dataset.view, view: state.view }));
-  check("sliding from Recipes to Shop: a pill follows, Shop lights up, nothing opens yet", mid.pill && mid.near === "shop" && mid.view === "recipes", JSON.stringify(mid));
+  check("sliding from Recipes to Pantry: a pill follows, Pantry lights up, nothing opens yet", mid.pill && mid.near === "pantry" && mid.view === "recipes", JSON.stringify(mid));
   await M.up(); await sleep(400);
-  check("…letting go opens Shop, and the pill is gone (the tab draws itself again)", (await view()) === "shop" && !(await page.evaluate(() => document.querySelector(".slidepill, .sliding"))));
+  check("…letting go opens Pantry, and the pill is gone (the tab draws itself again)", (await view()) === "pantry" && !(await page.evaluate(() => document.querySelector(".slidepill, .sliding"))));
+  // 2.9.0: let go on + and the Add a recipe sheet opens over the page, which stays as it was
+  const add = await at('#tabs [data-view="add"]');
+  await press(pan.x, pan.y); await glide(pan.x, add.x, pan.y); await M.up(); await sleep(400);
+  check("2.9.0: sliding onto + and letting go opens Add a recipe, over Pantry", await page.isVisible("#sheet.open") && /Add a recipe/.test(await page.textContent("#sheet.open h3")) && (await view()) === "pantry");
+  await page.evaluate(() => closeSheet()); await sleep(300);
+  const shop = pan; // the far side of the bar from Plan, for the end-gap checks
   // the pill's gap from the bar's edge at each end is the same as above and below it
   await press(shop.x, shop.y); await glide(shop.x, bar.l - 30, shop.y);
   const left = await gaps("#tabs"); await M.up(); await sleep(400);
@@ -54,23 +61,28 @@ try {
 
   // --- Everyone / Just me
   await page.mouse.click(tl.x, tl.y); await page.waitForSelector("#view-timeline .seg"); await sleep(300);
-  const who = () => page.evaluate(() => document.querySelector(".seg button.on")?.dataset.who);
-  const ev = await at('.seg [data-who="everyone"]'), me = await at('.seg [data-who="me"]'), seg = await at(".seg");
+  const who = () => page.evaluate(() => document.querySelector("#view-timeline .seg button.on")?.dataset.who);
+  const ev = await at('#view-timeline .seg [data-who="everyone"]'), me = await at('#view-timeline .seg [data-who="me"]'), seg = await at("#view-timeline .seg");
   check("the Archives open on Everyone", (await who()) === "everyone");
   await press(ev.x, ev.y); await glide(ev.x, seg.r + 30, ev.y);
-  const segRight = await gaps(".seg"); await M.up(); await sleep(400);
+  const segRight = await gaps("#view-timeline .seg"); await M.up(); await sleep(400);
   check("sliding Everyone → Just me switches, and is remembered on the phone", (await who()) === "me" && (await page.evaluate(() => localStorage.getItem("bourdain.archivesWho"))) === "me");
   check("…its pill keeps the switch's 3px on all sides at the end", segRight && segRight.right === 3 && segRight.top === 3 && segRight.bottom === 3, JSON.stringify(segRight));
   await page.mouse.click(ev.x, ev.y); await sleep(300);
   check("…a tap still switches back", (await who()) === "everyone");
   await press(ev.x, ev.y); await glide(ev.x, ev.x + 14, ev.y, -80); await M.up(); await sleep(300);
-  check("a mostly up-and-down drag that starts on the switch is a scroll, not a choice", (await who()) === "everyone" && !(await page.evaluate(() => document.querySelector(".seg.sliding"))));
+  check("a mostly up-and-down drag that starts on the switch is a scroll, not a choice", (await who()) === "everyone" && !(await page.evaluate(() => document.querySelector("#view-timeline .seg.sliding"))));
   // the Archives redraw while you slide (the feed arrives): the slide carries on with the new switch
   await press(ev.x, ev.y); await glide(ev.x, ev.x + 40, ev.y);
-  await page.evaluate(() => { const el = document.querySelector(".seg"); el.replaceWith(el.cloneNode(true)); });
+  await page.evaluate(() => { const el = document.querySelector("#view-timeline .seg"); el.replaceWith(el.cloneNode(true)); });
   await glide(ev.x + 40, me.x, ev.y); await M.up(); await sleep(400);
   check("…a redraw mid-slide doesn't lose it: letting go on Just me still switches", (await who()) === "me" && !(await page.evaluate(() => document.querySelector(".slidepill"))));
 
+  // 2.9.0: Meals | Shopping list slides the same way
+  await page.click('#tabs button[data-view="plan"]'); await page.click('.view.active [data-weekview="plan"]'); await page.waitForSelector("#view-plan.active .weekseg"); await sleep(300);
+  const meals = await at('#view-plan [data-weekview="plan"]'), list = await at('#view-plan [data-weekview="shop"]');
+  await press(meals.x, meals.y); await glide(meals.x, list.x, meals.y); await M.up(); await sleep(400);
+  check("2.9.0: sliding Meals to Shopping list opens the shopping list", (await view()) === "shop");
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
 } catch (e) { finish(e); } finally { await b?.browser.close(); await s?.cleanup(); }

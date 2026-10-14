@@ -301,7 +301,8 @@ try {
   const gaps = {};
   await page.setViewportSize({ width: 390, height: 420 }); // short, so every one of these scrolls
   for (const [tab, sel] of [["recipes", "#rlist .rcard"], ["plan", "#planHint"], ["pantry", "#pantryList > *, #view-pantry .actions"], ["shop", "#view-shop .shopacts"]]) {
-    await page.click(`#tabs button[data-view="${tab}"]`); await page.waitForTimeout(150);
+    if (tab === "shop") { await page.click('#tabs button[data-view="plan"]'); await page.click('.view.active [data-weekview="shop"]'); } else await page.click(`#tabs button[data-view="${tab}"]`);
+    await page.waitForTimeout(150);
     gaps[tab] = await page.evaluate(async (q) => { const m = document.getElementById("main"); m.scrollTop = m.scrollHeight; await new Promise((r) => setTimeout(r, 100));
       const last = [...document.querySelectorAll(q)].filter((e) => e.offsetParent).at(-1).getBoundingClientRect(), t = document.getElementById("tabs").getBoundingClientRect();
       return m.scrollHeight > m.clientHeight ? Math.round(t.top - last.bottom) : "no scroll"; }, sel);
@@ -317,10 +318,14 @@ try {
     check(`…on an iPad (${name}) it stays 500px wide, centred under the content`, tb.w === 500 && Math.abs(tb.left - tb.right) <= 1 && tb.bottom === 10, JSON.stringify(tb));
   }
   await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(100);
-  // The Shop tab: its add box is 16px like every other field, and its buttons are 44px
-  await page.click('#tabs button[data-view="shop"]');
+  // The Shopping list: its add box is 16px like every other field, and its buttons are 44px
+  await page.click('#tabs button[data-view="plan"]'); await page.click('.view.active [data-weekview="shop"]');
   const shopF = await page.evaluate(() => ({ px: parseFloat(getComputedStyle(document.getElementById("manualItem")).fontSize), btns: [...document.querySelectorAll("#view-shop .shopacts .btn, #view-shop .weeknav .btn")].map((b) => Math.round(b.getBoundingClientRect().height)) }));
   check("Shop: the add box is 16px (no iPhone zoom) and its buttons are 44px tall", shopF.px >= 16 && shopF.btns.length === 4 && shopF.btns.every((h) => h >= 44), JSON.stringify(shopF));
+  // 2.9.0: the Meals / Shopping list switch sits under the dates, its halves 44px tall
+  const wkSeg = await page.evaluate(() => { const v = document.getElementById("view-shop"), nav = v.querySelector(".weeknav").getBoundingClientRect(), seg = v.querySelector(".weekseg").getBoundingClientRect();
+    return { below: seg.top >= nav.bottom - 1, gap: Math.round(seg.top - nav.bottom), h: [...v.querySelectorAll(".weekseg button")].map((b) => Math.round(b.getBoundingClientRect().height)) }; });
+  check("2.9.0: Meals | Shopping list sits under the week's dates, each half 44px tall", wkSeg.below && wkSeg.gap <= 16 && wkSeg.h.length === 2 && wkSeg.h.every((h) => h >= 44), JSON.stringify(wkSeg));
   await page.click('#tabs button[data-view="recipes"]');
 
   // --- 2.7.9: every button you tap while cooking or planning is at least 44px
@@ -341,7 +346,7 @@ try {
   await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(100);
   await page.click("#revBack");
   await page.evaluate(async () => { const d = new Date(), iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; state.plan[iso] = { date: iso, entries: [{ recipeId: "a", servings: 4 }] }; await store.put("plan", iso, state.plan[iso]); });
-  await page.click('#tabs button[data-view="plan"]'); await page.waitForTimeout(150);
+  await page.click('#tabs button[data-view="plan"]'); await page.click('.view.active [data-weekview="plan"]'); await page.waitForTimeout(150);
   t44 = { week: await hs("#view-plan .weeknav .btn") };
   await page.click("#view-plan .slot"); await page.waitForSelector("#sheet.open");
   t44.serves = await hs('#sheet [data-act="minus"], #sheet [data-act="plus"]');
@@ -369,6 +374,8 @@ try {
   const plusAt = await page.locator("#btnManual").boundingBox();
   check("…and after a real turn and back, a tap on + is on + (not the sort row)", await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest("#btnManual"), [plusAt.x + plusAt.width / 2, plusAt.y + plusAt.height / 2]));
 
+  const topAt = await page.evaluate(() => getComputedStyle(document.querySelector(".top")).top);
+  check("2.9.0: the header sticks at the very top of the page (the page already pads for the notch, so no second inset)", topAt === "0px", topAt);
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
 } catch (e) { finish(e); } finally { await b?.browser.close(); await s?.cleanup(); }

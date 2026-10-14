@@ -30,7 +30,7 @@
         steps: ["Toss the chicken with the bicarb and leave for 20 minutes, then rinse.", "Coat with cornflour and a little soy sauce.", "Stir-fry the chicken for 3-4 minutes and set aside.", "Fry the garlic and capsicum for 2 minutes, return the chicken, add the rest of the soy and toss."],
         cost: cost(4.5, 21, "Velvet chicken stir-fry"), cooks: [cook(1), cook(8), cook(20)] }),
       curry: R("Japanese Ground Beef Curry", { ago: 3, cover: COVERS.curry, rating: 2, tags: ["japanese", "beef", "curry"],
-        ingredients: [I(500, "g", "beef mince", "", "meat & seafood"), I(1, "whole", "onion", "diced"), I(1, "whole", "carrot", "diced"), I(4, "cube", "japanese curry roux", "", "pantry"), I(500, "ml", "water", "", "other")],
+        ingredients: [I(500, "g", "beef mince", "", "meat & seafood"), I(1, "whole", "onion", "diced"), I(1, "whole", "carrot", "diced"), I(1, "tbsp", "garlic", "minced"), I(4, "cube", "japanese curry roux", "", "pantry"), I(500, "ml", "water", "", "other")],
         steps: ["Brown the mince with the onion and carrot for 6 minutes.", "Add the water and simmer for 10 minutes.", "Stir in the roux until thick, about 5 minutes."], cost: cost(4, 17, "Keema curry"), cooks: [cook(0), cook(15)] }),
       mapo: R("Mapo Tofu with Ground Beef", { ago: 4, cover: COVERS.mapo, servings: 2, rating: 1, tags: ["chinese", "tofu"],
         ingredients: [I(300, "g", "silken tofu", "cubed", "dairy & eggs"), I(150, "g", "beef mince", "", "meat & seafood"), I(1.5, "tbsp", "doubanjiang", "", "pantry"), I(1, "tsp", "sichuan pepper", "ground", "spices"), I(2, "clove", "garlic")],
@@ -52,14 +52,15 @@
       s3: R("Turkish Manti", { ago: 6, cover: COVERS.manti, source_type: "photo", tags: ["turkish"], ingredients: [I(250, "g", "lamb mince", "", "meat & seafood")], steps: ["Fill and fold.", "Boil for 8 minutes."] }),
     };
     const alex = {
-      a1: R("Chicken Rice with Ginger Scallion Sauce", { ago: 2, cover: COVERS["chicken-rice"], tags: ["chicken"], ingredients: [I(2, "whole", "chicken thigh", "", "meat & seafood"), I(1, "bunch", "spring onion")], steps: ["Poach the chicken for 25 minutes.", "Pour hot oil over the ginger and scallion."], cooks: [cook(0), cook(6)], rating: 2 }),
+      a1: R("Chicken Rice with Ginger Scallion Sauce", { ago: 2, cooks: [cook(0)], cover: COVERS["chicken-rice"], tags: ["chicken"], ingredients: [I(2, "whole", "chicken thigh", "", "meat & seafood"), I(1, "bunch", "spring onion")], steps: ["Poach the chicken for 25 minutes.", "Pour hot oil over the ginger and scallion."], cooks: [cook(0), cook(6)], rating: 2 }),
       a2: R("Kingfish Crudo with Mandarin and Jalapeño", { ago: 5, cover: COVERS.crudo, source_type: "web", tags: ["seafood"], ingredients: [I(300, "g", "kingfish", "sashimi grade", "meat & seafood")], steps: ["Slice thinly and dress."], cooks: [cook(4)] }),
       a3: R("Crunchwrap Supreme", { ago: 9, cover: COVERS.crunchwrap, tags: ["tex-mex"], ingredients: [I(4, "whole", "tortilla", "", "bakery")], steps: ["Fold and toast for 3 minutes each side."] }),
     };
     const mon = new Date(); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
     const plan = {}; const todayOff = (new Date().getDay() + 6) % 7, meals = [[0, "gyudon", 2], [1, "velvet", 4], [3, "mapo", 2], [5, "teritama", 1]];
-    if (!meals.some(([o]) => o === todayOff)) meals.push([todayOff, "curry", 4]); // a meal today too, so the Shop (today onwards) is never empty
-    for (const [off, rid, sv] of meals) { const x = new Date(mon); x.setDate(x.getDate() + off); plan[ymd(x)] = { date: ymd(x), entries: [{ recipeId: rid, servings: sv }] }; }
+    // Today always has the curry and the velvet chicken, so the shopping list (today onwards) is never empty, and shows garlic in cloves and a tablespoon added up (2.9.0).
+    const today_ = meals.filter(([o]) => o !== todayOff); today_.push([todayOff, "curry", 4], [todayOff, "velvet", 4]);
+    for (const [off, rid, sv] of today_) { const x = new Date(mon); x.setDate(x.getDate() + off); const k = ymd(x); (plan[k] = plan[k] || { date: k, entries: [] }).entries.push({ recipeId: rid, servings: sv }); }
     const pantry = {}; [["jasmine rice", "pantry"], ["garlic", "produce"], ["soy sauce", "pantry"], ["coconut milk", "pantry"], ["brown onions", "produce"]].forEach(([item, aisle], i) => (pantry["p" + i] = { id: "p" + i, item, aisle, added: new Date().toISOString() }));
     return {
       users: { me: { id: ME, name: "Zein", photo: "veg:tomato", email: "you@example.com" }, sam: { id: "sam", name: "Sam Lee", photo: "veg:broccoli" }, alex: { id: "alex", name: "Alex Tran", photo: "veg:lemon" } },
@@ -88,6 +89,18 @@
     for (let i = 29; i >= 0; i--) { const day = ymd(day_(i)), p = i < pilot.length ? pilot[pilot.length - 1 - i] : (i % 6 === 3 ? 0 : 1); out.push({ day, people: p, others: Math.max(0, p - 1) }); }
     return out; };
   const day_ = (n) => { const x = new Date(); x.setDate(x.getDate() - n); return x; };
+  function snapshotHealth(sets) {
+    const when = (name) => { const x = /auto-(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})/.exec(name || ""); return x ? new Date(+x[1], +x[2] - 1, +x[3], +x[4], +x[5]) : null; };
+    const fmt = (d) => { const today = new Date(); today.setHours(0, 0, 0, 0); const day = new Date(d); day.setHours(0, 0, 0, 0); const n = Math.round((today - day) / 864e5);
+      const t = d.toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit" }); return n === 0 ? `today, ${t}` : n === 1 ? `yesterday, ${t}` : `${n} days ago`; };
+    const each = Object.entries(sets).map(([k, names]) => { const ds = (names || []).map(when).filter(Boolean).sort((a, b) => b - a); return { k, newest: ds[0] || null, kept: ds.length }; });
+    const worst = each.reduce((w, e) => (!e.newest ? 1e12 : Date.now() - e.newest) > (w.age ?? -1) ? { ...e, age: !e.newest ? 1e12 : Date.now() - e.newest } : w, {});
+    const h = worst.age / 36e5, status = h <= 26 ? "ok" : h <= 50 ? "warn" : "problem";
+    const parts = each.map((e) => `${e.k === "database" ? "Database" : "Photos"} ${e.newest ? fmt(e.newest) : "none found"} (${e.kept} kept)`).join(" · ");
+    return { label: "Backups", status, text: status === "ok" ? "Snapshots daily" : status === "warn" ? "Snapshot overdue" : worst.newest ? "No recent snapshot" : "No snapshots found",
+      detail: `ZFS snapshots on the NAS. ${parts}. An off-site copy isn't checked.`,
+      attention: worst.newest ? `The newest ${worst.k} snapshot is from ${fmt(worst.newest)}. Check the snapshot task in TrueNAS.` : `Bourdain can't find any ${worst.k} snapshots. Check the snapshot task in TrueNAS.` };
+  }
   function summary() {
     const sum = JSON.parse(JSON.stringify(ADMIN.summary || {})), tmpl = (sum.people || [])[0] || {};
     sum.day = ymd(new Date());
@@ -96,6 +109,19 @@
         recipes: rs.length, cooks: rs.reduce((n, r) => n + (r.cooks || []).filter((c) => !c.added).length, 0), cooks_added: rs.reduce((n, r) => n + (r.cooks || []).filter((c) => c.added).length, 0), copies: rs.filter((r) => r.copied_from).length }; });
     Object.assign(sum.totals || (sum.totals = {}), { users: sum.people.length, recipes: sum.people.reduce((n, p) => n + p.recipes, 0), active_today: 1 });
     sum.visitors = visitors();
+    // Backups (2.9.0): what the server will do, run on made-up snapshot names. The real server lists
+    // DATA_DIR/.zfs/snapshot and DATA_DIR/photos/.zfs/snapshot once a day (the container can list them but
+    // not open them, checked on the NAS 14 Oct) and reads each newest snapshot's time from its TrueNAS
+    // name, auto-YYYY-MM-DD_HH-MM. Green within 26 hours; a warning to 50; after that, or none, a problem.
+    const snapNames = [6, 5, 4, 3, 2, 1, 0].map((n) => { const d = day_(n); return `auto-${ymd(d)}_00-00`; });
+    sum.health.backups = snapshotHealth({ database: snapNames, photos: snapNames });
+    if (sum.health.backups.status !== "ok") sum.attention = [...(sum.attention || []), sum.health.backups.attention];
+    // Pilot gates (2.9.0): imports made up for the demo; the cooking weeks are worked out from the demo people's real cooks
+    const monday = (x) => { const d = new Date(x); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d; }, thisMon = monday(new Date());
+    const weeksOf = (uid) => [5, 4, 3, 2, 1, 0].map((w) => { const a = new Date(thisMon); a.setDate(a.getDate() - 7 * w); const z = new Date(a); z.setDate(z.getDate() + 7);
+      return Object.values(recipesOf(uid)).some((r) => (r.cooks || []).some((c) => c && !c.added && new Date(c.date + "T12:00") >= a && new Date(c.date + "T12:00") < z)); });
+    sum.gates = { imports: [{ source: "Recipe sites", ok: 18, total: 19 }, { source: "Instagram", ok: 9, total: 12 }, { source: "TikTok", ok: 4, total: 4 }, { source: "YouTube", ok: 3, total: 3 }, { source: "Screenshots and recordings", ok: 6, total: 6 }, { source: "Guess from a photo", ok: 2, total: 2 }],
+      cooking: Object.values(db.users).filter((u) => u.id !== ME).map((u) => ({ id: u.id, weeks: weeksOf(u.id) })), active: 3 };
     if (sum.system) sum.system.version = VERSION.version;
     return sum; }
   const activity = () => Object.values(db.users).flatMap((u, k) => Object.entries(recipesOf(u.id)).slice(0, 3).map(([, r], j) => ({ id: 100 - k * 10 - j, user: u.id, name: u.name, at: day_(k + j).toISOString(), action: "recipe_added", target: r.title || "" })))
@@ -116,8 +142,22 @@
     scan: () => ({ items: [{ item: "egg", qty: 6, unit: "", aisle: "dairy & eggs", sure: true }, { item: "greek yoghurt", qty: null, unit: "", aisle: "dairy & eggs", sure: true }, { item: "lemon", qty: 3, unit: "", aisle: "produce", sure: true }, { item: "leftover curry", qty: null, unit: "", aisle: "other", sure: false }] }),
     ideas: () => [{ title: "Lemon rice", why: "Bright and quick.", missing: [] }, { title: "Egg fried rice", why: "Uses the eggs.", missing: ["spring onion"] }, { title: "Shakshuka", why: "Eggs in sauce.", missing: ["tinned tomato"] }],
     write: (m) => ({ title: m.title || "Egg fried rice", servings: 2, prep_min: 5, cook_min: 10, tags: [], ingredients: [I(2, "cup", "cooked rice", "", "pantry"), I(2, "whole", "egg", "", "dairy & eggs"), I(1, "tbsp", "soy sauce", "", "pantry")], steps: ["Scramble the eggs.", "Fry the rice for 4 minutes.", "Toss together with the soy."] }),
+    // 2.9.0 stand-in for the nutrition job: rough per-100 g figures by keyword, divided by servings.
+    nutrition: (m) => {
+      const T = [[/beef|lamb|pork|mince/, 250, 20, 0, 18, 0, 0, 70], [/chicken|thigh|breast/, 165, 31, 0, 4, 0, 0, 75], [/prawn|kingfish|fish/, 100, 22, 0, 1, 0, 0, 150],
+        [/rice/, 360, 7, 80, 1, 1, 0, 5], [/noodle|flour|pasta|roux/, 360, 10, 72, 3, 3, 2, 300], [/oil/, 880, 0, 0, 100, 0, 0, 0], [/sugar|honey|mirin/, 330, 0, 80, 0, 0, 75, 10],
+        [/soy|fish sauce|doubanjiang/, 60, 8, 6, 0, 1, 2, 5500], [/coconut milk/, 200, 2, 3, 21, 0, 2, 15], [/egg/, 143, 13, 1, 10, 0, 1, 140], [/yoghurt|cheese|cream|milk/, 120, 8, 5, 7, 0, 5, 60],
+        [/tofu/, 60, 7, 2, 3, 1, 1, 10], [/.*/, 35, 1.5, 7, 0.3, 2, 3, 20]];
+      const W = { g: 1, kg: 1000, ml: 1, l: 1000, tsp: 5, tbsp: 15, cup: 200, clove: 5, whole: 120, "": 120, bunch: 60, slice: 30, can: 400, packet: 250, cube: 20, stalk: 30 };
+      const SAT = [0.4, 0.3, 0.25, 0.3, 0.2, 0.15, 0, 0, 0.85, 0.3, 0.6, 0.15, 0.2], t = [0, 0, 0, 0, 0, 0, 0, 0], serves = Number(m.servings) > 0 ? Number(m.servings) : 2;
+      for (const line of m.ingredients || []) { const mt = String(line).match(/^([\d.¼½¾⅓⅔]+)?\s*([a-zA-Z]+)?\s*(.*)$/) || []; const q = parseFloat(mt[1]) || 1, u = (mt[2] || "").toLowerCase();
+        const unit = W[u] != null ? u : "", item = (W[u] != null ? mt[3] : (mt[2] || "") + " " + (mt[3] || "")).toLowerCase(), g = q * (W[unit] ?? 120), row = T.find(([re]) => re.test(item));
+        for (let k = 0; k < 7; k++) t[k] += row[k + 1] * g / 100; t[7] += row[4] * SAT[T.indexOf(row)] * g / 100; }
+      const p = t.map((v) => v / serves);
+      return { kcal: Math.round(p[0]), protein_g: Math.round(p[1]), carbs_g: Math.round(p[2]), fat_g: Math.round(p[3]), fibre_g: Math.round(p[4]), sugar_g: Math.round(p[5]), sodium_mg: Math.round(p[6] / 10) * 10, sat_fat_g: Math.round(p[7]), serves, basis: "Preview estimate." };
+    },
     cost: (m) => { const n = (m.ingredients || []).length || 3, serves = Number(m.servings) > 0 ? Number(m.servings) : 2, home = Math.round(n * 3.2 * 100) / 100;
-      return { currency: "AUD", course: "main", comparable: m.title || "A comparable dish", basis: "Preview estimate.", serves, home_total: home, home_per_serve: Math.round(home / serves * 100) / 100, casual_per_serve: 19, out_per_serve: 19 }; },
+      return { currency: "AUD", course: "main", comparable: m.title || "A comparable dish", basis: "Preview estimate.", serves, home_total: home, home_per_serve: Math.round(home / serves * 100) / 100, casual_per_serve: 19, out_per_serve: 19, nutrition: AI.nutrition(m) }; },
   };
   async function route(method, path, q, body) {
     const p = path.split("/").filter(Boolean).slice(1).map(decodeURIComponent); // after "api"
@@ -136,7 +176,7 @@
       const id = hex(); photos[id] = url; if (!put(PKEY, photos)) { delete photos[id]; return err(413, "storage_full", "this device's storage for the preview is full"); }
       return json(201, { id });
     }
-    if (p[0] === "people" && !p[1]) return json(200, named().map((u) => { const rs = Object.values(recipesOf(u.id)); return { ...person(u), recipes: rs.length, cooks: rs.reduce((n, r) => n + (r.cooks || []).length, 0) }; }));
+    if (p[0] === "people" && !p[1]) return json(200, named().map((u) => { const rs = Object.values(recipesOf(u.id)); const last = rs.flatMap((r) => [r.created_at, ...(r.cooks || []).map((c) => c && (c.at || c.date))]).filter(Boolean).sort().pop() || null; return { ...person(u), recipes: rs.length, cooks: rs.reduce((n, r) => n + (r.cooks || []).length, 0), last_active: last }; }));
     if (p[0] === "people" && p[1] && !p[2]) { const u = db.users[p[1]]; return u ? json(200, { person: person(u), recipes: recipesOf(u.id) }) : err(404, "not_found", "no such person"); }
     if (p[0] === "people" && p[2] === "recipes") { const u = db.users[p[1]], r = u && recipesOf(u.id)[p[3]]; return r ? json(200, { person: person(u), id: p[3], recipe: r }) : err(404, "not_found", "that recipe isn't there any more"); }
     if (p[0] === "copy") { const { owner, id } = JSON.parse(body || "{}"), u = db.users[owner], src = u && recipesOf(owner)[id];

@@ -14,14 +14,14 @@ try {
   // --- tab bar
   const tabs = await page.evaluate(() => [...document.querySelectorAll("#tabs button")].map((t) => ({ v: t.dataset.view, w: t.getBoundingClientRect().width })));
   const labels = await page.$$eval("#tabs button", (bs) => bs.map((b) => b.textContent.trim()).join());
-  check("five tabs, Recipes in the middle: Plan, Pantry, Recipes, Shop, Archives; no Import (2.7.0)", tabs.map((t) => t.v).join() === "plan,pantry,recipes,shop,timeline" && labels === "Plan,Pantry,Recipes,Shop,Archives", labels);
+  check("five tabs with + in the middle: Plan, Recipes, Add, Pantry, Archives; no Shop tab (2.9.0)", tabs.map((t) => t.v).join() === "plan,recipes,add,pantry,timeline" && labels === "Plan,Recipes,Add,Pantry,Archives", labels);
   check("…and the app still opens on Recipes", (await onTab()) === "recipes" && await page.isVisible("#view-recipes.active"));
   check("tabs share the width evenly", Math.max(...tabs.map((t) => t.w)) - Math.min(...tabs.map((t) => t.w)) < 1 && tabs[0].w >= 60, JSON.stringify(tabs));
 
   // --- "+" asks how
   await page.click("#btnManual");
   const opts = await page.$$eval("#sheet.open [data-act]", (bs) => bs.map((x) => x.dataset.act));
-  check("'+' opens a sheet, most used first: Import a recipe / Guess from a photo / Write one yourself (2.6.1)", opts.join() === "import,guess,manual" && /Import a recipe/.test(await page.textContent("#sheet")) && /Write one yourself/.test(await page.textContent("#sheet")), opts.join());
+  check("'+' opens a sheet: Import a recipe / Guess from a photo / Cook from the pantry / Write one yourself (2.9.0)", opts.join() === "import,guess,pantry,manual" && /Import a recipe/.test(await page.textContent("#sheet")) && /Cook from the pantry/.test(await page.textContent("#sheet")) && /Write one yourself/.test(await page.textContent("#sheet")), opts.join());
 
   // --- import
   await page.click('#sheet [data-act="import"]');
@@ -50,7 +50,7 @@ try {
   await page.click('#tabs button[data-view="plan"]'); await page.click('#tabs button[data-view="recipes"]');
   await page.click("#btnManual");
   const acts2 = await page.$$eval("#sheet.open [data-act]", (bs) => bs.map((x) => x.dataset.act));
-  check("unsaved import: sheet offers to carry on with it first", acts2.join() === "resume,import,guess,manual" && (await page.textContent('#sheet [data-act="resume"]')).includes(title), await page.textContent("#sheet"));
+  check("unsaved import: sheet offers to carry on with it first", acts2.join() === "resume,import,guess,pantry,manual" && (await page.textContent('#sheet [data-act="resume"]')).includes(title), await page.textContent("#sheet"));
   check("the other choices say they replace it", (await page.textContent('#sheet [data-act="manual"]')).includes(`Replaces “${title}”`));
   await page.click('#sheet [data-act="resume"]');
   check("Carry on returns to the review screen", (await page.inputValue("#fTitle")) === title);
@@ -63,7 +63,51 @@ try {
   await page.click('#sheet [data-act="manual"]');
   check("Write one yourself after an import starts blank", (await page.inputValue("#fTitle")) === "");
 
+  // --- the + tab (2.9.0): the same sheet, over the page you're on
+  await page.evaluate(() => closeSheet()); await page.click('#tabs button[data-view="plan"]'); await page.waitForTimeout(200);
+  await page.click('#tabs button[data-view="add"]'); await page.waitForSelector("#sheet.open");
+  check("2.9.0: the + tab opens Add a recipe over the page, and the tab you were on stays lit", /Add a recipe/.test(await page.textContent("#sheet.open h3")) && (await page.evaluate(() => state.view)) === "plan" && (await onTab()) === "plan", await onTab());
+  // Cook from the pantry: with nothing in the pantry it says so; with things in, the ideas come up
+  await page.click('#sheet [data-act="pantry"]'); await page.waitForTimeout(300);
+  check("2.9.0: Cook from the pantry with an empty pantry opens Pantry and says to add what you have", (await page.evaluate(() => state.view)) === "pantry" && /Add what you have in first/.test(await page.textContent("#toast")), await page.textContent("#toast"));
+  await page.fill("#pantryAdd", "eggs, rice"); await page.click("#pantryAddBtn"); await page.waitForTimeout(400);
+  await page.click('#tabs button[data-view="add"]'); await page.click('#sheet [data-act="pantry"]');
+  await page.waitForFunction(() => /Lemon rice/.test(document.getElementById("ideas").textContent), null, { timeout: 8000 }).catch(() => {});
+  check("…with things in, it runs Cook from what I have: the ideas show", /Lemon rice/.test(await page.textContent("#ideas")) && (await onTab()) === "pantry", await page.textContent("#ideas"));
+
+  // --- 2.9.0: Paste beside the link box, turning into Fetch & read once there's a link
+  // what's on the clipboard (the headless browser's own clipboard isn't dependable across a long suite)
+  const clip = (t) => page.evaluate((t) => { navigator.clipboard.readText = () => Promise.resolve(t); }, t);
+  const said = async (re) => { await page.waitForFunction((src) => new RegExp(src).test(document.getElementById("toast").textContent), re.source, { timeout: 3000 }).catch(() => {}); return re.test(await page.textContent("#toast")); };
+  const slot = () => page.evaluate(() => ({ paste: !document.getElementById("btnPaste").hidden, fetch: !document.getElementById("btnFetch").hidden }));
+  await page.click('#tabs button[data-view="recipes"]'); await page.click("#btnManual"); await page.click('#sheet [data-act="import"]');
+  await page.click("#btnClear");
+  let sl = await slot();
+  check("2.9.0: an empty link box has Paste beside it, not Fetch & read", sl.paste && !sl.fetch, JSON.stringify(sl));
+  await page.fill("#srcUrl", "https://example.com/x"); sl = await slot();
+  check("…typing a link turns it into Fetch & read", !sl.paste && sl.fetch, JSON.stringify(sl));
+  await page.fill("#srcUrl", ""); sl = await slot();
+  check("…and clearing it brings Paste back", sl.paste && !sl.fetch, JSON.stringify(sl));
+  await clip("");
+  await page.click("#btnPaste");
+  check("…Paste with nothing copied says so", await said(/clipboard is empty/), await page.textContent("#toast"));
+  await clip("2 eggs, whisked, then fried");
+  await page.click("#btnPaste");
+  check("…copied recipe text goes into the text box", (await page.inputValue("#srcText")) === "2 eggs, whisked, then fried" && (await page.inputValue("#srcUrl")) === "" && await said(/Pasted into the recipe text/), await page.inputValue("#srcText"));
+  await clip("Look at this https://www.instagram.com/p/ABC123/, so good");
+  await page.click("#btnPaste");
+  check("…a copied link (in a sentence) goes into the link box, tidied, and is read straight away", (await page.inputValue("#srcUrl")) === "https://www.instagram.com/p/ABC123/" && (await slot()).fetch, await page.inputValue("#srcUrl"));
+  await page.waitForSelector("#review:not([hidden]) #fTitle", { timeout: 8000 }).catch(() => {});
+  check("…which lands on the review form, as Fetch & read does", await page.isVisible("#review"));
+  await page.evaluate(() => document.getElementById("revBack").click()); await page.waitForSelector("#btnClear");
+  await page.click("#btnClear");
+  await page.evaluate(() => { navigator.clipboard.readText = () => Promise.reject(new Error("NotAllowedError")); });
+  await page.click("#btnPaste");
+  check("…and if the phone won't let Bourdain read the clipboard, it says how to paste by hand", await said(/Press and hold in the link box/), await page.textContent("#toast"));
+  await page.click("#impBack");
+
   // --- empty book
+  await page.click('#tabs button[data-view="recipes"]');
   await page.evaluate(() => { state.recipes = {}; show("recipes"); });
   check("empty book mentions the + button", /Tap \+ to import/.test(await page.textContent("#rlist")));
   await page.click('#rlist [data-go="add"]');

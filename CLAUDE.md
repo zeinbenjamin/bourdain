@@ -60,6 +60,7 @@ A recipe:
                                     // added: true for one added later for an earlier day (2.6.0, at = midday)
   copied_from: {owner, id, name, title}, // set on a copy made with Add to my recipes (2.1); the credit line
   cost: {home_per_serve, casual_per_serve, out_per_serve, course, currency, hash, at}, // 2.5, see Cost
+  nutrition: {kcal, protein_g, carbs_g, fat_g, sat_fat_g, sugar_g, fibre_g, sodium_mg, hash, at}, // 2.9.0, one serve; or {none, hash, at}
   guess: {dish, cuisine, confidence, alternatives, basis}, // 2.5, set by Guess from a photo
   tags: [string],
   ingredients: [{
@@ -78,13 +79,22 @@ only through `unitLabel()`: litres are stored as `"l"` but shown as "L", and
 servings made (`cookServes()`: recipe servings × batch), falling back to the
 batch size when a recipe has no servings.
 
+**Units (2.9.0)** (`units`, `measure(q, u, sys, item)`): a **Recipe · Metric · US** switch
+(`#unitsSeg`) above a recipe's ingredients, remembered per phone in
+`localStorage["bourdain.units"]` (`orig` | `metric` | `imperial`; "US" on screen). Cook mode
+and the shopping list follow it. Metric shows dry goods measured in cups (`DRY`) in grams
+through `ML_G`; liquids stay in ml. Spoons and counts never convert. Counts take plurals
+through `unitFor`/`PLURAL` ("4 cloves", "2 cans"); measures don't ("2 tbsp"). The batch
+scales first, then the conversion. A recipe opened from the Plan (`slotSheet`'s Open recipe)
+is at the planned servings.
+
 Splitting ingredients into `quantity` / `unit` / `item` at import time is what
 makes shopping-list merging and pantry matching possible. Keep `raw_text`
 always — it is the fallback if parsing logic improves later.
 
 `plan` is keyed by ISO date (`2026-09-28`) holding `{date, entries: [{recipeId,
 servings}]}`. `shop` is keyed by week-start date, holding `{week, checked, need, manual}`
-(see **Shop tab**). `pantry` is keyed by item id.
+(see **Shopping list**). `pantry` is keyed by item id.
 
 ### Client/server boundary
 
@@ -176,7 +186,12 @@ a tap and forget that on reload, so a capture-phase `pointerdown` listener calls
 `timers.unlock()` whenever a cook is in progress. There are no background
 notifications; the wake lock keeps the screen on in cook mode instead.
 
-**Plan tab** (`renderPlan`): each day row has a round "+" (`.addslot`, `data-add`)
+**Plan tab** (`renderPlan`): since 2.9.0 it holds two views, Meals (`plan`) and the
+Shopping list (`shop`), switched by `.weekseg` (`[data-weekview]`) under the date range. Both
+keep the Plan tab lit. `state.weekView` remembers the last side, which the Plan tab reopens;
+tapping Plan while on either goes to Meals. Tests click `.view.active [data-weekview=…]`,
+since both views carry a switch. With nutrition (`nutOf`, `nutLine`), each meal shows its
+kcal a serve, and a day with two or more meals a total; there is no week-wide line. Each day row has a round "+" (`.addslot`, `data-add`)
 on the right that opens the recipe picker. When the week shown is the current one,
 `.weeknav` gets `current`: the date range turns `--flame` and "(this week)" shows
 under it. The note keeps its space on other weeks, so the days don't jump. The
@@ -196,7 +211,7 @@ once (2.6.5): the picker and "Add to the week" say "Already on …" instead of
 adding it again, and `mergeDay()` folds older duplicates into one (larger serves)
 when the Plan shows that week.
 
-**Shop tab (2.7.0)** (`renderShop`, `buildList`, `shopRows`, `shopText`): the
+**Shopping list (2.7.0; the Plan's Shopping list side since 2.9.0)** (`renderShop`, `buildList`, `shopRows`, `shopText`): the
 shopping list, restored from the hidden 1.x code. Nothing on it is stored except
 what the person did: it is built from the Plan each time, for the Plan's own week
 (`state.week`, so the two tabs move together; the Shop has its own ‹ › and dates,
@@ -204,7 +219,10 @@ what the person did: it is built from the Plan each time, for the Plan's own wee
 in full (there's no line saying so, since 2.7.3). Items merge by item and unit family (`item|fam`, the key ticks are stored
 under; since 2.7.9 `shopRows` shows one row per item across families, its keys
 joined with `KEY_SEP` "§" and its amounts with " + ", and ticking it ticks every key) and show in the recipe's own unit when every line uses the same unit
-(`shopAmount`), else in g/kg or ml/L, rounded up to what you'd buy (`buyAmount`, 2.7.9:
+(`shopAmount`). Since 2.9.0, when the lines use different units (cloves and a tbsp of
+garlic) they're converted (`EACH_G`, `ML_G`) and added into one amount marked "about", with
+each recipe's own amount after its name (`shopLabel`); counts are plural ("2 packets"), and
+with US units chosen the list shows lb/oz. Otherwise amounts are in g/kg or ml/L, rounded up to what you'd buy (`buyAmount`, 2.7.9:
 whole counts, g/ml in 5/10/25/50 steps, spoons in quarters). Pantry items (an `itemKey` match) stay in
 their aisle, ticked, with a `.ptag` "from pantry" (inline-block, so the
 strike-through doesn't reach it). The week's `shop` doc holds `checked` (ticked by
@@ -215,8 +233,9 @@ edit form's menu, which used to show and save it as Produce. **Clear ticked** em
 **Share list** sends what's left (not ticked, not pantry) as plain text through
 `navigator.share`, else copies it. 1.x shop docs (`items: []`) open fine.
 
-**The tab bar (2.7.0)**: Plan, Pantry, Recipes, Shop, Archives, with Recipes in the
-middle; the app still opens on Recipes. It's a frosted pill (`backdrop-filter`)
+**The tab bar (2.7.0; 2.9.0)**: Plan, Recipes, +, Pantry, Archives, with + in the middle;
+the app still opens on Recipes. The + tab (`data-view="add"`) isn't a view: it opens
+`addSheet()` over the page, and the tab you were on stays lit. It's a frosted pill (`backdrop-filter`)
 floating 14px in, icons with 10px labels, the current tab on a grey pill.
 `max-width: 500px` centres it on an iPad. Since 2.7.2 it sits low, like Instagram's:
 its bottom is `--tabgap` (`max(10px, safe-area-inset-bottom − 12px)`, so 22px on an
@@ -233,9 +252,10 @@ a mostly vertical drag on it is a scroll. If the screen is redrawn mid-slide (th
 when the feed arrives) `slide.relink()` carries on with the same switch in the new
 drawing, found by its buttons' `data-*`. The `slide` suite checks all of it.
 
-**Adding a recipe** (`addSheet`): the Recipes "+" (and the empty book's button)
-opens a sheet, most used first (2.6.1): **Import a recipe** (the import form, with "‹ Recipes" to go back),
-**Guess from a photo of a dish**, or **Write one yourself** (a blank review form; `state.draftManual` makes its Back
+**Adding a recipe** (`addSheet`): the Recipes "+", the + tab (2.9.0) and the empty book's
+button open a sheet, most used first (2.6.1): **Import a recipe** (the import form, with "‹ Recipes" to go back),
+**Guess from a photo of a dish**, **Cook from the pantry** (2.9.0: the Pantry tab, running
+Cook from what I have, or asking you to add things if it's empty), or **Write one yourself** (a blank review form; `state.draftManual` makes its Back
 return to the list rather than the import form). If an import or new recipe is
 open and unsaved, the sheet first offers **Carry on with "…"**, and the other two
 say they replace it. The review form is headed "New recipe" either way (or "Edit
@@ -275,8 +295,8 @@ then aisle and prep), so the name isn't squeezed to a 48px box.
 "the archives". It was called Timeline until 1.10.0 and is still `timeline`
 inside (`state.view`, `data-view`, `#view-timeline`, the test suite); only the
 words on screen changed. Stats (cooks this month,
-this year, recipes tried out of all), **Most cooked** (top 3 cooked more than once;
-ties go to the most recently cooked), then every finished cook newest first,
+this year, recipes tried out of all), then every finished cook newest first (Most cooked
+was removed in 2.9.0),
 under month headings (the year is added for past years) and grouped by day in the
 Plan's day-row style. Nothing is stored for it: it is read from each recipe's
 `cooks`, so deleting a recipe or removing a date in its cook log takes those
@@ -291,7 +311,13 @@ people (see **Other people** below).
   `/api/copy`, `/api/search`, `/api/feed`, `PUT /api/me`) lets everyone read
   everyone's recipes and cooks, and write only their own.
 - **The People row** (`peopleRowHtml`) is at the top of Recipes since 2.7.3 (it was
-  on the Archives), only once someone else has a name. A profile opened from it
+  on the Archives), only once someone else has a name. Since 2.9.0 it's ordered by
+  `last_active` from `/api/people` (`lastActive()`: their newest recipe or finished cook,
+  never when they opened the app), and anyone with something new since you last opened
+  their page comes first with a red ring (`.person.new`, read out as ", something new").
+  When you last opened each person is kept on the phone (`peopleSeen`,
+  `bourdain.peopleSeen:<userId>`); someone never opened counts as new if active in the
+  last week. A profile opened from it
   (`openPerson`, `state.personFrom`) says "‹ Recipes" and keeps Recipes lit, and so
   does a recipe opened from that profile (`show()` maps `theirs` from `person` through
   `personFrom`, 2.7.5); one opened from a recipe in the feed goes back to the Archives.
@@ -366,7 +392,16 @@ heading, only when `store.me.is_admin`. There is deliberately no button.
   today and this month, limits, their activity, Pause/Resume), `ai` (cost by
   provider, feature and person, failed calls, the limits form), `activity`
   (person / event kind / period / search; sign-ins are their own kind),
-  `audit`, `errors`, `people`. **People each day** (2.8.0, `visitorsHtml`): bars for
+  `audit`, `errors`, `people`, `gates`. **Pilot gates** and **People** (2.9.0) are the first
+two buttons under Admin, each its own screen; a person opened from People goes back with
+"‹ People". Pilot gates (`pilotGates()` in `server.js`, `gatesLine`/`gatesHtml`): imports
+over 30 days by kind of source (`ai_usage.source`, from `importSource()`: never the link;
+`GATE_SOURCES`) against 90%, where an import Claude finds no recipe in (outcome
+`no_recipe`, which doesn't count against AI health) and a failed `link_fetched` count as
+failed, and calls from before 2.9.0 are counted apart; which of the last six Monday weeks
+each named, unpaused person other than the owner finished a cook in (added past cooks
+don't count); and `active`, distinct visitors this month, for AI cost per person.
+**People each day** (2.8.0, `visitorsHtml`): bars for
   the last 30 days from `summary.visitors` (`visitorsByDay()`: `visits`, plus anyone with
   activity that day, which covers days before visits were recorded), today in `--flame`;
   hovering, tapping or dragging across it (`visPick`) reads a day in the line above, with
@@ -379,8 +414,11 @@ heading, only when `store.me.is_admin`. There is deliberately no button.
   database and photo storage are tested on every look (a write, `statfs` free
   space); Cloudflare's keys are fetched when over an hour old; Claude and
   OpenAI are never test-called (that costs money), so they show the last real
-  call's outcome; backups are "Not monitored". Never add a green status the
-  server can't check.
+  call's outcome; backups (2.9.0, `snapshotHealth()`) read the names in `DATA_DIR/.zfs/snapshot` and
+  `PHOTO_DIR/.zfs/snapshot` (TrueNAS's `auto-YYYY-MM-DD_HH-MM`; the container can list but
+  not open them; other names are ignored): newest ≤26h ok, ≤50h "Snapshot overdue", else a
+  problem under Needs attention; no `.zfs` folder is "Not monitored". The off-site copy
+  isn't checked, and says so. Never add a green status the server can't check.
 - **Records**: `audit` (limit, cover-price and account changes with from → to,
   new people, deploys vs restarts from `last_boot`) is never pruned or edited;
   `server_errors` (5xx, Claude/OpenAI failures, sign-in key failures; one per
@@ -449,9 +487,10 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   conversion, refusing to start, Cloudflare refused, `/api/me`, the export
   zip), `cost` (estimates, savings in the Archives, re-estimating), `dish`
   (Guess from a photo, YouTube links), `allowance` (what's left of the AI
-  allowance, 2.6.0), `shop` (the Shop tab, 2.7.0), `back` (the phone's back
+  allowance, 2.6.0), `shop` (the shopping list, 2.7.0; inside the Plan since 2.9.0), `back` (the phone's back
   gesture and drafts kept through a restart, 2.7.4), `slide` (sliding along the tab bar
-  and Everyone / Just me, 2.8.0), `preview` (the preview in
+  and Everyone / Just me, 2.8.0), `units` (Recipe · Metric · US, plurals, Open recipe at
+  the planned servings, 2.9.0), `gates` (Pilot gates and the snapshot Backups row, 2.9.0), `preview` (the preview in
   Claude still builds and runs, `tools/preview`), `scan`, `video`.
 - `slowProxy` delays: `shell` (index.html), `state` (`/api/state`), `write`
   (PUT/DELETE).
@@ -524,8 +563,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v60"`
-in `public/sw.js` → `v61`, `v62`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v61"`
+in `public/sw.js` → `v62`, `v63`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -563,7 +602,8 @@ are `overflow: hidden` with `overscroll-behavior: none`; `<main>` is the scrolle
 dragged the page and the list wouldn't move; 2.6.2 made the page scroll instead,
 and then on some iPhones the fixed tab bar and sticky header drifted with the
 content during a fast swipe. Locking the page fixes both. Since 2.7.1 `body` is also
-`position: fixed; inset: 0` (with the notch's `safe-area-inset-top` as padding): in an iPhone home-screen app `height: 100%` stopped
+`position: fixed; inset: 0` (with the notch's `safe-area-inset-top` as padding, so the sticky header is at `top: 0`;
+2.9.0 removed a second inset there that pushed it down): in an iPhone home-screen app `height: 100%` stopped
 short of the home bar, so the page ended in a hard line under the floating tab bar. Reset with `toTop()`
 (`main.scrollTop = 0`), never `window.scrollTo`. The one exception is `unnudge` (2.8.1): after
 portrait → landscape → portrait iPhone could leave the locked page itself nudged down, drawn
@@ -767,6 +807,12 @@ Four routes in, most to least reliable:
    cap is 10 images). Audio is not transcribed; the model reads on-screen text
    and caption overlays.
 
+**Paste (2.9.0)** (`linkSlot`, `canPaste`, `#btnPaste`): with the link box empty, a Paste
+button sits beside it where Fetch & read goes; once there's a link it's Fetch & read again.
+Paste reads the clipboard (`navigator.clipboard.readText`, only in a secure context): a link,
+even inside a sentence, goes into the link box and is read straight away; anything else is
+added to the text box. Empty or refused clipboards get a toast saying what to do.
+
 The import form lists these under the link box (`.srcicons`, 2.5.3: recipe
 sites, Instagram, TikTok, YouTube, as plain ink line icons); add a route there
 when one is added here.
@@ -829,15 +875,13 @@ never inline.
 
 ## Current state
 
-Five tabs: Plan, Pantry, Recipes, Shop, Archives (2.7.0; see **The tab bar**).
+Five tabs: Plan, Recipes, +, Pantry, Archives (2.9.0; see **The tab bar**).
 Importing lives behind the Recipes "+" (see **Adding a recipe** above); the import
-form is still `state.view === "import"`, with the Recipes tab highlighted. Zein may
-later move Pantry behind the Recipes "+" too (as something like "Cook from the
-pantry").
+form is still `state.view === "import"`, with the Recipes tab highlighted.
 
 Live features: link fetch and AI import with review screen, screen-recording
 frame extraction, recipe photos, AI cover illustrations (on request), drag-to-reorder ingredients in the edit form,
-0.5×–10× batch multiplier, week planner, a shopping list from the plan (the Shop tab), pantry with "cook from what I have"
+0.5×–10× batch multiplier, week planner, a shopping list from the plan (in the Plan tab), Recipe / Metric / US units, nutrition estimates, pantry with "cook from what I have"
 and photo scanning, cook mode with a checklist and step timers, Michelin
 ratings, a per-recipe cook log, the Archives (every cook, with stats; other
 people's too once there are any), profiles, browsing and copying other people's
@@ -849,7 +893,7 @@ small `zipStore()` in `server.js` with no dependency).
 Everything outstanding (pilot requests, setup, ideas) is in `docs/backlog.md`.
 The long-term plan (the pilot, what to watch, and the decision at its end) is
 in `docs/strategy.md`; weigh new feature requests against it.
-Ideas not yet built: nutrition estimates, pantry quantities decremented by
+Ideas not yet built: pantry quantities decremented by
 cooking, timer alerts while the phone is locked (would need push
 notifications), and
 a cleanup for unused photos (`.jpg`); unused covers are already swept.
@@ -886,9 +930,17 @@ one at a time, any recipe whose `cost.hash` (title-free hash of servings and
 ingredients) is missing or stale, and saves it with `store.enqueue` (no toast).
 It runs only when `store.me.ai` (the server has a Claude key). The job may write up to 2000 tokens (`maxTokens`, 2.7.10): at 600, Sonnet 5.5's estimates were cut off and failed as `truncated`. Saved per cook =
 (out − home) per serve × servings × batch (`cookSaved`). The recipe page shows
-`costHtml()`; the Archives show each cook's saving and `savingsHtml()` totals.
-`feedEntry` sends others' `cost` per serve. A recipe PUT that only changes `cost`
-isn't logged as an edit.
+`costHtml()`; the Archives show each cook's saving ("about $X under eating out") and
+`savingsHtml()` totals ("came to about $X less than eating out this month, and $Y this
+year"). `feedEntry` sends others' `cost` per serve. A recipe PUT that only changes `cost`
+or `nutrition` isn't logged as an edit (`sameApart`).
+
+**Nutrition (2.9.0)** comes back from the same call (`COST_PROMPT` step 3, for one serve;
+`nutritionOf()` in `server.js` checks each value against `NUTRIENTS`), and `costs` saves it
+as `nutrition` with the same hash. A reply with none is saved as `{none: true}` so it isn't
+asked again; a recipe costed before 2.9.0 is asked once more. The recipe page shows
+`nutritionHtml()`: kcal, protein, carbs and fat, with a "Show more detail" `<details>`
+for the rest.
 
 ## Covers
 

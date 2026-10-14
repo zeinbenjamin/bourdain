@@ -103,7 +103,7 @@ try {
   // --- app: alone, the Archives look as before
   await page.evaluate(() => { const f = window.fetch; window.__peopleCalls = 0; window.fetch = (u, o) => { if (String(u).includes("/api/people")) window.__peopleCalls++; return f(u, o); }; });
   await page.click('#tabs button[data-view="timeline"]'); await sleep(2500);
-  check("alone: no People row, no Everyone / Just me", !(await page.$(".people")) && !(await page.$(".seg")));
+  check("alone: no People row, no Everyone / Just me", !(await page.$(".people")) && !(await page.$("#view-timeline .seg")));
   await page.click('#tabs button[data-view="recipes"]'); await sleep(300);
   check("…nor on Recipes", !(await page.$(".people")));
   await page.click('#tabs button[data-view="timeline"]'); await sleep(300);
@@ -118,27 +118,27 @@ try {
   check("People row: You first, then Sam", JSON.stringify(row) === JSON.stringify(["You", "Sam"]), JSON.stringify(row));
   check("your own photo in the row", Boolean(await page.$('.people .person:first-child .av img')));
   check("2.7.3: the People row is at the top of Recipes, above the search box", await page.evaluate(() => { const r = document.querySelector("#view-recipes .people"); return !!r && r.getBoundingClientRect().bottom <= document.getElementById("search").getBoundingClientRect().top; }));
-  await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector(".seg");
+  await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector("#view-timeline .seg");
   check("…and no longer on the Archives, which keep Everyone / Just me", !(await page.$("#view-timeline .people")) && !!(await page.$("#view-timeline .seg")));
   d2 = db(); d2.prepare("UPDATE users SET name = 'Sam Taylor-Jones' WHERE id = 'sam'").run(); d2.close();
   await page.evaluate(() => { people.at = 0; people.list = null; }); await page.reload(); await page.waitForFunction(() => !store.loading);
   await page.click('#tabs button[data-view="recipes"]'); await page.waitForSelector('.people .person[data-person="sam"]'); await sleep(300);
   const full = await page.$eval('.people .person[data-person="sam"]', (x) => ({ shown: x.lastElementChild.textContent.trim(), label: x.getAttribute("aria-label") }));
-  check("People row: first names only, the full name still read out", full.shown === "Sam" && full.label === "Sam Taylor-Jones", JSON.stringify(full));
+  check("People row: first names only, the full name still read out", full.shown === "Sam" && /^Sam Taylor-Jones(, something new)?$/.test(full.label), JSON.stringify(full));
   d2 = db(); d2.prepare("UPDATE users SET name = 'Sam' WHERE id = 'sam'").run(); d2.close();
   await page.reload(); await page.waitForFunction(() => !store.loading);
-  await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector(".seg"); await sleep(500);
+  await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector("#view-timeline .seg"); await sleep(500);
   const statsEvery = await page.$$eval(".stat b", (xs) => xs.map((x) => x.textContent));
   const feedEvery = await page.$$eval(".feed .slot", (xs) => xs.map((x) => x.textContent.replace(/\s+/g, " ").trim()));
-  check("Everyone: Sam's cooks in the feed, with his name", /Everyone/.test(await page.textContent(".seg .on")) && feedEvery.filter((t) => /Chicken katsu curry.*Sam/.test(t)).length === 2 && feedEvery.some((t) => /Tarka dal.*Sam/.test(t)) && feedEvery.some((t) => /Leek soup.*You/.test(t)), JSON.stringify(feedEvery));
+  check("Everyone: Sam's cooks in the feed, with his name", /Everyone/.test(await page.textContent("#view-timeline .seg .on")) && feedEvery.filter((t) => /Chicken katsu curry.*Sam/.test(t)).length === 2 && feedEvery.some((t) => /Tarka dal.*Sam/.test(t)) && feedEvery.some((t) => /Leek soup.*You/.test(t)), JSON.stringify(feedEvery));
   check("…with the servings they made", feedEvery.some((t) => /Chicken katsu curry.*Sam.*2 servings/.test(t)), JSON.stringify(feedEvery));
-  await page.click('.seg [data-who="me"]');
+  await page.click('#view-timeline .seg [data-who="me"]');
   const feedMe = await page.$$eval(".feed .slot", (xs) => xs.map((x) => x.textContent));
   check("Just me: only mine", feedMe.length === 1 && /Leek soup/.test(feedMe[0]) && !feedMe.some((t) => /Sam/.test(t)));
   check("the stats are yours either way", JSON.stringify(await page.$$eval(".stat b", (xs) => xs.map((x) => x.textContent))) === JSON.stringify(statsEvery), JSON.stringify(statsEvery));
-  await page.reload(); await page.waitForFunction(() => !store.loading); await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector(".seg");
-  check("Just me is remembered on this phone", /Just me/.test(await page.textContent(".seg .on")));
-  await page.click('.seg [data-who="everyone"]'); await page.waitForSelector('.feed [data-owner="sam"]');
+  await page.reload(); await page.waitForFunction(() => !store.loading); await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector("#view-timeline .seg");
+  check("Just me is remembered on this phone", /Just me/.test(await page.textContent("#view-timeline .seg .on")));
+  await page.click('#view-timeline .seg [data-who="everyone"]'); await page.waitForSelector('.feed [data-owner="sam"]');
 
   // --- app: a feed entry of Sam's opens his recipe read-only
   await page.click('.feed [data-owner="sam"][data-rid="dal"]'); await page.waitForSelector("#tCopy");
@@ -266,9 +266,34 @@ try {
   // --- layout
   await page.click('#tabs button[data-view="recipes"]'); await page.waitForSelector(".people .person");
   const personH = await page.evaluate(() => [...document.querySelectorAll(".people .person")].map((x) => Math.round(x.getBoundingClientRect().height)));
-  await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector(".seg");
-  const sz = await page.evaluate((personH) => ({ person: personH, seg: Math.round(document.querySelector(".seg").getBoundingClientRect().height), over: document.documentElement.scrollWidth - innerWidth }), personH);
+  await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector("#view-timeline .seg");
+  const sz = await page.evaluate((personH) => ({ person: personH, seg: Math.round(document.querySelector("#view-timeline .seg").getBoundingClientRect().height), over: document.documentElement.scrollWidth - innerWidth }), personH);
   check("layout: people and the switch are easy to tap, no sideways scroll", sz.person.every((h) => h >= 44) && sz.seg >= 44 && sz.over <= 0, JSON.stringify(sz));
+
+  // --- 2.9.0: the People row puts what's new first, with a red ring
+  { const dd = db(), ago = (n) => new Date(Date.now() - n * 864e5).toISOString();
+    dd.prepare("INSERT INTO users (id, email, name, created_at) VALUES ('kim', 'kim@example.com', 'Kim', datetime())").run();
+    dd.prepare("INSERT INTO recipes (owner, id, doc, updated_at) VALUES ('kim', 'k1', ?, datetime())").run(JSON.stringify({ title: "Old soup", created_at: ago(20), ingredients: [], steps: [] }));
+    const r = JSON.parse(dd.prepare("SELECT doc FROM recipes WHERE owner = 'sam' LIMIT 1").get().doc);
+    r.cooks = [...(r.cooks || []), { date: ago(0).slice(0, 10), at: ago(0.01), mult: 1 }];
+    dd.prepare("UPDATE recipes SET doc = ? WHERE owner = 'sam' AND id = (SELECT id FROM recipes WHERE owner = 'sam' LIMIT 1)").run(JSON.stringify(r)); dd.close(); }
+  const ppl2 = (await api("/api/people")).j;
+  const la = Object.fromEntries(ppl2.map((p) => [p.id, p.last_active]));
+  check("2.9.0: /api/people says when each person last added a recipe or cooked", Date.now() - Date.parse(la.sam) < 3600e3 && Math.abs(Date.parse(la.kim) - (Date.now() - 20 * 864e5)) < 60e3, JSON.stringify(la));
+  check("…and nothing about when anyone last opened the app", ppl2.every((p) => !("last_seen" in p) && !("visits" in p)));
+  await page.evaluate(() => { people.at = 0; people.list = null; localStorage.removeItem(store.key("bourdain.peopleSeen")); });
+  await page.reload(); await page.waitForFunction(() => !store.loading);
+  await page.click('#tabs button[data-view="recipes"]'); await page.waitForSelector('.people .person[data-person="kim"]');
+  const rowNow = () => page.$$eval(".people .person", (bs) => bs.map((x) => x.dataset.person + (x.classList.contains("new") ? "*" : "")));
+  const r1 = await rowNow();
+  check("2.9.0: someone active in the last week comes first with a ring; someone quiet for 20 days comes after, without", r1.slice(1).join() === "sam*,kim", JSON.stringify(r1));
+  check("…the ring is read out too", /something new/.test(await page.getAttribute('.people .person[data-person="sam"]', "aria-label")));
+  await page.click('.people .person[data-person="sam"]'); await page.waitForSelector("#view-person .profile"); await page.click("#pBack"); await page.waitForSelector(".people .person");
+  check("…opening their page clears the ring", (await rowNow()).slice(1).join() === "sam,kim", JSON.stringify(await rowNow()));
+  { const dd = db(); dd.prepare("INSERT INTO recipes (owner, id, doc, updated_at) VALUES ('kim', 'k2', ?, datetime())").run(JSON.stringify({ title: "New salad", created_at: new Date().toISOString(), ingredients: [], steps: [] })); dd.close(); }
+  await page.evaluate(() => { people.at = 0; people.list = null; }); await page.reload(); await page.waitForFunction(() => !store.loading);
+  await page.click('#tabs button[data-view="recipes"]'); await page.waitForSelector('.people .person[data-person="kim"].new');
+  check("…and when someone adds something new, they move to the front with a ring", (await rowNow()).slice(1).join() === "kim*,sam", JSON.stringify(await rowNow()));
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
 } catch (e) { finish(e); } finally { await b?.browser.close(); await s?.cleanup(); }

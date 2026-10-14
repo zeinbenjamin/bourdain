@@ -37,7 +37,7 @@ try {
   check("…and says it's the preview", /preview/.test(await page.evaluate(() => APP.version)));
   const imgs = await page.evaluate(async () => { await new Promise((r) => setTimeout(r, 400)); return [...document.querySelectorAll("#rlist img")].slice(0, 4).map((i) => i.naturalWidth); });
   check("…covers load from the published files", imgs.length && imgs.every((w) => w > 0), JSON.stringify(imgs));
-  for (const v of ["plan", "pantry", "shop", "timeline"]) { await page.click(`#tabs button[data-view="${v}"]`); await sleep(250); }
+  for (const v of ["plan", "shop", "pantry", "timeline"]) { if (v === "shop") await page.click('.view.active [data-weekview="shop"]'); else await page.click(`#tabs button[data-view="${v}"]`); await sleep(250); } // 2.9.0: the Shopping list is inside Plan
   check("every tab draws: the Plan has meals, the Shop a list, the Archives other people's cooks",
     /Gyudon/.test(await page.textContent("#view-plan")) && (await page.locator("#shopList .item").count()) > 0 && /Alex Tran|Sam Lee/.test(await page.textContent("#view-timeline")));
   await page.click('#tabs button[data-view="recipes"]'); await page.click('.rcard:has-text("Beef Rendang")'); await page.click("#cookThis"); await page.waitForSelector("#cookIng");
