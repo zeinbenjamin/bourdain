@@ -6,6 +6,14 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.9.2 — 2026-10-14
+- Security fixes from the 2.9.0 audit. Nothing changes in how you use the app.
+- The photo library Bourdain uses is updated to fix a flaw that a booby-trapped image file could exploit.
+- Photos are only accepted as JPEG, PNG or WebP (the app always sends JPEG), and a file that would expand to an enormous picture is refused before it's opened.
+- If sign-in through Cloudflare were ever turned off, Bourdain would now only let in devices on your home network or Tailscale, rather than anyone who could reach it.
+- Requests that are going to be turned away are turned away before Bourdain reads them.
+- AI limits now hold when many requests arrive at the same moment.
+
 ## 2.9.1 — 2026-10-14
 - The shopping list names each meal once under an ingredient, with its amount for the whole week. A recipe planned on several days, or one that uses an ingredient twice, was listed again for every day and every line.
 - Those amounts read as kitchen fractions ("⅓ tbsp", not "0.4 tbsp").

@@ -38,8 +38,9 @@ services:
       IMAGE_MODEL: "gpt-image-2"
       IMAGE_QUALITY: "medium"
       # Sign-in through Cloudflare Access (2.3.0+). Leave these commented out until
-      # the Access application exists: without them every request is you, and
-      # anything arriving through Cloudflare is refused. See docs/multi-user.md.
+      # the Access application exists: without them every request from your home
+      # network or Tailscale is you (2.9.2), anything else is refused, and anything
+      # arriving through Cloudflare is refused. See docs/multi-user.md.
       # CF_ACCESS_TEAM: "your-team"           # from your-team.cloudflareaccess.com
       # CF_ACCESS_AUD: "the-application-aud-tag"
       # With sign-in on, requests that don't come through Cloudflare are you only
