@@ -6,6 +6,10 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.9.3 — 2026-10-14
+- Photos from an iPhone saved as HEIC are now always turned into a JPEG before Claude reads them, for imports, pantry scans and dish guesses. Before, a small HEIC could be sent as it was and the import failed.
+- A photo the phone can't open now says so, with what to do instead, rather than failing without a word.
+
 ## 2.9.2 — 2026-10-14
 - Security fixes from the 2.9.0 audit. Nothing changes in how you use the app.
 - The photo library Bourdain uses is updated to fix a flaw that a booby-trapped image file could exploit.

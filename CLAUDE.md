@@ -574,8 +574,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v62"`
-in `public/sw.js` → `v63`, `v64`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v63"`
+in `public/sw.js` → `v64`, `v65`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -811,7 +811,11 @@ Four routes in, most to least reliable:
    `youtubeText`): oEmbed for the title and channel, plus `shortDescription`
    from the watch page (sent with a consent cookie). Only the description is
    read, so a recipe that's only spoken needs a screen recording.
-3. **Screenshots** — sent to the model as images.
+3. **Screenshots** — sent to the model as images, through `forReading()`: a 1568px JPEG,
+   or the original when that's smaller and Claude reads its type (`CLAUDE_READS`: JPEG,
+   PNG, WebP, GIF). Anything else, such as an iPhone HEIC, always goes as the JPEG; one the
+   phone can't open is `image_unreadable`, with a message (2.9.3). Pantry scans and dish
+   guesses use it too.
 4. **Screen recording** (`videoToSheets`, reworked in 2.5.8) — the browser
    samples about 3 frames a second (up to 120), compares 120px-wide greyscale
    copies block by block (so a small caption counts even when the rest is still),

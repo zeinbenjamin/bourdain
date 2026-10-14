@@ -87,6 +87,23 @@ try {
   const im = await page.evaluate(async () => { const f = state.images[0]; const bm = await createImageBitmap(f); return { type: f.type, size: f.size, long: Math.max(bm.width, bm.height) }; });
   check("screenshot shrunk to 1568px JPEG before sending", im.type === "image/jpeg" && im.size < big.length && im.long === 1568, JSON.stringify(im));
 
+  // --- 2.9.3: only what Claude reads goes as it is; anything else as a JPEG, or a clear message
+  const tiny = await sharp({ create: { width: 8, height: 8, channels: 3, background: "#d3072b" } }).png().toBuffer();
+  const fr = await page.evaluate(async (bytes) => {
+    const u8 = new Uint8Array(bytes), out = {};
+    const png = await forReading(new File([u8], "a.png", { type: "image/png" })); out.png = png.type;
+    const heic = await forReading(new File([u8], "IMG_0001.HEIC", { type: "image/heic" })); out.heic = heic.type; out.heicBigger = heic.size > u8.length;
+    try { await forReading(new File([new Uint8Array(200)], "IMG_0002.HEIC", { type: "image/heic" })); out.bad = "sent"; } catch (e) { out.bad = e.code; }
+    return out;
+  }, [...tiny]);
+  check("2.9.3: a small PNG still goes as it is", fr.png === "image/png", JSON.stringify(fr));
+  check("…a photo Claude can't read (HEIC) goes as a JPEG, even when the JPEG is bigger", fr.heic === "image/jpeg" && fr.heicBigger, JSON.stringify(fr));
+  check("…and one this phone can't open isn't sent at all (image_unreadable)", fr.bad === "image_unreadable", JSON.stringify(fr));
+  await page.evaluate(() => { state.images = []; renderThumbs(); });
+  await page.setInputFiles("#srcImgs", { name: "IMG_0003.HEIC", mimeType: "image/heic", buffer: Buffer.alloc(200) });
+  await page.waitForFunction(() => document.querySelector("#importStatus").classList.contains("err"));
+  check("…on the import form it says what to do, and nothing is added", /can't open that photo\. Take a screenshot/.test(await page.textContent("#importStatus")) && (await page.evaluate(() => state.images.length)) === 0, await page.textContent("#importStatus"));
+
   // --- offline
   await page.evaluate(() => { store.online = false; }); await page.click('#tabs button[data-view="recipes"]');
   await page.click('.rcard:has-text("Leek soup")'); await page.click("#makeCover");
