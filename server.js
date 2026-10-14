@@ -154,12 +154,15 @@ app.use((_req, res, next) => {
    it would have blocked to /api/csp-report, which lands in the owner's Errors, and blocks
    nothing. Only index.html's own inline script may run, by its hash, worked out here at
    start-up; styles still need 'unsafe-inline' for the style="" attributes. Once a week of real
-   use reports nothing, send it as Content-Security-Policy instead. */
+   use reports nothing, send it as Content-Security-Policy instead. Cloudflare Web Analytics
+   (2.9.4, Zein's choice): Cloudflare adds its beacon script to the page on the way through, and
+   it sends page timings to cloudflareinsights.com, so both are allowed by name. */
+const CF_BEACON = { script: "https://static.cloudflareinsights.com", connect: "https://cloudflareinsights.com" };
 const SCRIPT_HASHES = [...INDEX_HTML.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => `'sha256-${createHash("sha256").update(m[1], "utf8").digest("base64")}'`);
 const CSP = [
-  "default-src 'self'", `script-src 'self' ${SCRIPT_HASHES.join(" ")}`,
+  "default-src 'self'", `script-src 'self' ${SCRIPT_HASHES.join(" ")} ${CF_BEACON.script}`,
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com", "font-src https://fonts.gstatic.com",
-  "img-src 'self' data: blob:", "media-src 'self' blob:", "connect-src 'self'", "worker-src 'self'", "manifest-src 'self'",
+  "img-src 'self' data: blob:", "media-src 'self' blob:", `connect-src 'self' ${CF_BEACON.connect}`, "worker-src 'self'", "manifest-src 'self'",
   "object-src 'none'", "base-uri 'none'", "form-action 'self'", "frame-ancestors 'none'", "report-uri /api/csp-report",
 ].join("; ");
 
