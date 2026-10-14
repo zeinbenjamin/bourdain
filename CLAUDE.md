@@ -605,6 +605,12 @@ writes only under `DATA_DIR` and `/tmp`; anything new that writes elsewhere fail
 `EROFS`. **GitHub Actions are pinned to commit SHAs** in `publish.yml`, with the version in a
 comment; `.github/dependabot.yml` proposes updates weekly.
 
+**`TZ` goes inside `environment:`** (6 spaces), never beside `image:`. At the service level
+TrueNAS refuses the whole YAML with "Failed 'down' action for 'bourdain' app" in the UI and
+`services.bourdain Additional property TZ is not allowed` in `/var/log/app_lifecycle.log`
+(read that log for any failed app edit). Without `TZ` the container runs on UTC. The live YAML
+has had `TZ` and the 2.9.3 lockdown since 2026-10-15.
+
 **The container uses the host's network** (`network_mode: host`, no `ports:`)
 since 2.3.1. With Docker's port mapping every request seemed to come from
 Docker's gateway, so `TRUSTED_NETS` could never match a real device.
