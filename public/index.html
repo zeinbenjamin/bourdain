@@ -2393,7 +2393,7 @@ function buildList(days=shopDays()){
         const it=items[key];
         if(q==null||!isFinite(q)) it.unknown=true; else { it.qty+=toBase(q,ing.unit); it.own+=q; it.units.add(String(ing.unit||"").toLowerCase()); }
         it.from.add(r.title||"Untitled"); if(!ing.optional) it.optional=false;
-        if(q!=null&&isFinite(q)) it.parts.push(`${r.title||"Untitled"} (${fmtQty(Math.round(q*100)/100)}${unitFor(q,ing.unit)?" "+unitFor(q,ing.unit):""})`);
+        if(q!=null&&isFinite(q)) it.parts.push({rid:e.recipeId,title:r.title||"Untitled",q,unit:String(ing.unit||"").toLowerCase()});
       });
     });
   }
@@ -2438,6 +2438,21 @@ function shopLabel(list){
   else main=shopAmount({qty:total,fam:"mass",units:new Set()});
   return ["about "+main,...rest.map(shopAmount)].filter(Boolean).join(" + ");
 }
+/* Each recipe's own amount, once per recipe (2.9.1): a recipe planned on four days, or one that
+   uses garlic in two of its lines, was listed once for every line on every day. Added up per
+   recipe and unit, in a kitchen fraction ("⅓ tbsp", not "0.4 tbsp"). */
+function partAmount(q,u){
+  let n;
+  if(u==="g"||u==="ml") n=Math.max(1,Math.round(q));
+  else if(u==="kg"||u==="l") n=Math.round(q*100)/100;
+  else { const a=Math.round(q*4)/4, b=Math.round(q*3)/3; n=Math.abs(a-q)<=Math.abs(b-q)?a:b; if(!n) n=Math.round(q*100)/100; }
+  return `${fmtQty(n)}${unitFor(n,u)?" "+unitFor(n,u):""}`;
+}
+function partsText(parts){
+  const by=new Map();
+  for(const p of parts){ const r=by.get(p.rid)||{title:p.title,units:new Map()}; r.units.set(p.unit,(r.units.get(p.unit)||0)+p.q); by.set(p.rid,r); }
+  return [...by.values()].map(r=>`${r.title} (${[...r.units].map(([u,q])=>partAmount(q,u)).join(" + ")})`).join(", ");
+}
 const KEY_SEP="§"; // between the keys of one Shop row (an item in more than one unit)
 function shopWeek(){ const k=iso(state.week); const sw=state.shop[k]||(state.shop[k]={week:k}); sw.checked=sw.checked||{}; sw.need=sw.need||{}; sw.manual=Array.isArray(sw.manual)?sw.manual:[]; return sw; }
 async function saveShop(){ const k=iso(state.week); await store.put("shop",k,state.shop[k]); }
@@ -2448,7 +2463,7 @@ function shopRows(){
   // garlic) were separate rows. Ticks are still kept per unit (item|family), so old ones still apply.
   const byItem={}; for(const it of buildList()) (byItem[it.item]=byItem[it.item]||[]).push(it);
   return [...Object.values(byItem).map(list=>{ const it=list[0], keys=list.map(x=>x.key), pantry=have.has(itemKey(it.item));
-      return {key:keys.join(KEY_SEP),label:shopLabel(list),item:it.item,aisle:it.aisle,from:list.length>1?list.flatMap(x=>x.parts).join(", "):[...new Set(list.flatMap(x=>[...x.from]))].join(", "), // measured differently: each recipe's own amount (2.9.0)
+      return {key:keys.join(KEY_SEP),label:shopLabel(list),item:it.item,aisle:it.aisle,from:list.length>1?partsText(list.flatMap(x=>x.parts)):[...new Set(list.flatMap(x=>[...x.from]))].join(", "), // measured differently: each recipe's own amount (2.9.0)
         optional:list.every(x=>x.optional),manual:false,pantry,
         done:pantry?keys.every(k=>!sw.need[k]):keys.every(k=>sw.checked[k])}; }),
     ...sw.manual.map(m=>({key:"m:"+m.id,label:m.qty?`${fmtQty(m.qty)}${unitLabel(m.unit)?" "+unitLabel(m.unit):""}`:"",item:String(m.item||""),aisle:m.aisle||"other",from:"",manual:true,id:m.id,done:!!sw.checked["m:"+m.id]}))];
