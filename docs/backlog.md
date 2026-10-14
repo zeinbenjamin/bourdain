@@ -97,7 +97,6 @@ found: only the placeholders in `docker-compose.yml`), and the container locked 
 | Item | Notes |
 | --- | --- |
 | Turn the content policy from report-only to enforcing | After a week of real use with no `csp` rows in the owner's Errors. One word in `sendIndex`. |
-| Copy the container lockdown into the live TrueNAS YAML | `read_only`, `tmpfs`, `security_opt`, `cap_drop` from `docker-compose.yml`. |
 | HSTS | Cloudflare → SSL/TLS → Edge Certificates → HSTS. Not in the code. |
 | Check port 8080 can't be reached from outside | From mobile data, `http://<public-ip>:8080/api/health` should time out. |
 | Pin the Node base image by digest | Optional; would need Dependabot for Docker too. |
