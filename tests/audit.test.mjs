@@ -132,6 +132,7 @@ try {
   check("2.9.3: no other site may frame Bourdain (X-Frame-Options DENY and frame-ancestors 'none', enforced), on the page and the API", [page0, api0].every((r) => r.headers.get("x-frame-options") === "DENY" && r.headers.get("content-security-policy") === "frame-ancestors 'none'"), JSON.stringify([...page0.headers]));
   const inline = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => "'sha256-" + createHash("sha256").update(m[1], "utf8").digest("base64") + "'");
   check("…the page's content policy lets only its own script run, by its hash, with no 'unsafe-inline' for scripts", inline.length === 1 && csp.includes(`script-src 'self' ${inline[0]}`) && !/script-src[^;]*unsafe-inline/.test(csp) && /object-src 'none'/.test(csp) && /base-uri 'none'/.test(csp) && /connect-src 'self'/.test(csp) && /report-uri \/api\/csp-report/.test(csp), csp);
+  check("2.9.4: Cloudflare Web Analytics is allowed by name (its beacon script and where it reports), and nothing else from outside", /script-src [^;]*https:\/\/static\.cloudflareinsights\.com/.test(csp) && /connect-src 'self' https:\/\/cloudflareinsights\.com(;|$)/.test(csp) && !/script-src[^;]*(\*|https:(\s|;)|data:)/.test(csp), csp);
   check("…and no inline event handlers left in the page (the policy wouldn't allow them)", !/\son[a-z]+="/i.test(html));
   b = await openBrowser();
   const { page, errors } = b;
@@ -159,6 +160,12 @@ try {
   const seen = await page.evaluate(() => window.__csp);
   check("…and nothing in the app would be blocked by it: every screen once, photos, a screenshot, cook mode, the owner's view", seen.length === 0, JSON.stringify(seen));
   check("…the fonts still switch on without an onload attribute", (await page.getAttribute("#fontcss", "media")) === "all");
+  // 2.9.4: the beacon Cloudflare adds to the page, as it adds it (a script tag before </body>), and its report
+  await b.ctx.route(/static\.cloudflareinsights\.com/, (r) => r.fulfill({ status: 200, contentType: "application/javascript", body: "window.__beacon = 1; fetch('https://cloudflareinsights.com/cdn-cgi/rum', { method: 'POST', body: '{}' }).catch(() => {});" }));
+  await b.ctx.route(/\/\/cloudflareinsights\.com/, (r) => r.fulfill({ status: 204, body: "" }));
+  await page.evaluate(() => new Promise((res) => { const sc = document.createElement("script"); sc.defer = true; sc.src = "https://static.cloudflareinsights.com/beacon.min.js/v4bc70e2c"; sc.onload = res; sc.onerror = res; document.body.appendChild(sc); }));
+  await page.waitForFunction(() => window.__beacon === 1, null, { timeout: 3000 }).catch(() => {}); await sleep(300);
+  check("…Cloudflare's analytics beacon runs and reports without a single policy report", (await page.evaluate(() => window.__beacon)) === 1 && (await page.evaluate(() => window.__csp.length)) === 0, JSON.stringify(await page.evaluate(() => window.__csp)));
   // what it would catch: a script slipped into the page, and a picture from somewhere else
   await page.evaluate(() => { const sc = document.createElement("script"); sc.textContent = "window.__slipped = 1"; document.body.appendChild(sc); const im = new Image(); im.src = "https://example.com/x.png"; });
   await page.waitForFunction(() => window.__csp.length >= 2, null, { timeout: 5000 }).catch(() => {});

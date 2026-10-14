@@ -797,7 +797,8 @@ anyone the owner; it can only refuse.
 `index.html` also carries a full policy (`CSP` in `server.js`) as **report-only**: scripts
 only by the hash of the page's one inline script (`SCRIPT_HASHES`, worked out at start-up),
 styles `'unsafe-inline'` (for the `style=""` attributes) plus Google Fonts, `connect-src
-'self'`, `img-src 'self' data: blob:`, `object-src 'none'`, `base-uri 'none'`. Browsers post
+'self'`, and by name Cloudflare Web Analytics, which Cloudflare injects on the way through
+(`CF_BEACON`: its script host and `cloudflareinsights.com`, Zein's choice, 2.9.4), `img-src 'self' data: blob:`, `object-src 'none'`, `base-uri 'none'`. Browsers post
 what it would block to `/api/csp-report` (into `server_errors`, area `csp`; extensions
 ignored). So: **no inline event handlers** (`onclick=""`, `onload=""`) and no second inline
 `<script>`: the fonts' media switch is in the script (`#fontcss`). Once real use reports
