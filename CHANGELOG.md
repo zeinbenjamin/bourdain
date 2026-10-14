@@ -6,6 +6,24 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.9.0 — 2026-10-14
+- The tab bar is now Plan, Recipes, +, Pantry, Archives. The + opens Add a recipe from any page, over whatever you were looking at.
+- The shopping list has moved into the Plan tab: switch between Meals and Shopping list under the dates. The Plan tab reopens on whichever one you were last on; tap Plan again to get back to Meals.
+- Add a recipe has a new choice, Cook from the pantry, between Guess from a photo and Write one yourself.
+- Recipes have a Recipe · Metric · US switch above the ingredients. Metric shows dry things like flour and rice in grams; US shows pounds, ounces and cups. Cook mode and the shopping list follow your choice, and the phone remembers it.
+- Counts read properly: "4 cloves", "2 cans".
+- On the shopping list, an ingredient measured in different ways across the week (garlic by the clove and by the tablespoon) is added up into one amount marked "about", with each recipe's own amount underneath.
+- Recipes now show nutrition for one serve: calories, protein, carbs and fat, with "Show more detail" for the rest. It's worked out together with the cost, so it costs nothing extra. Recipes fill in over the next while.
+- The Plan shows the calories for each meal, and a day's total when it has two or more.
+- Open recipe from the Plan now shows the recipe at the servings you planned.
+- The People row puts whoever has added or cooked something most recently first, with a red ring around anyone with something new since you last looked at their page.
+- The Archives no longer have the Most cooked list.
+- Savings in the Archives now read "came to about $X less than eating out this month", and each cook says "about $X under eating out".
+- The import form has a Paste button beside the link box. It turns into Fetch & read once there's a link in the box. Pasting a link reads it straight away; pasting recipe text puts it in the text box.
+- Fixed: the header could sit lower than the top of the screen on an iPhone, with the page showing above it.
+- Owner's view: Pilot gates and People are now the first two buttons under Admin. Pilot gates shows how imports are going by kind of source (against 90%) and which of the last six weeks each person cooked in. A person opened from People goes back to People.
+- Owner's view: Backups now reads the NAS's daily ZFS snapshots and goes red if the newest is more than two days old.
+
 ## 2.8.1 — 2026-10-11
 - While you cook, change how many servings you're making: − and + under the recipe's name. The amounts change straight away, your ticks stay, and Finished cooking logs that amount.
 - "Add a date I cooked this" now asks how many servings you made, the same way as changing a cook you've logged, instead of a batch menu.

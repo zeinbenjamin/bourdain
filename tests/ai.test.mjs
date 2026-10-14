@@ -215,11 +215,13 @@ try {
   await page.waitForSelector("#view-admin.active .adm-title");
   let adm = await admText();
   check("a long press opens the admin overview, with the sheet closed", /System overview/.test(adm) && /Only you can see this/.test(adm) && !(await page.isVisible("#sheet.open")));
-  check("…sections in order: overview, people each day (2.8.0), health, AI usage, people, recent activity, admin, system", (await page.$$eval("#view-admin .adm-head h3", (hs) => hs.map((h) => h.textContent.replace(/\s*\d+$/, "").trim()))).join("|") === "People each day|System health|AI usage|People|Recent activity|Admin|System", adm.slice(0, 200));
+  check("…sections in order: overview, people each day (2.8.0), health, AI usage, recent activity, admin, system (People moved under Admin, 2.9.0)", (await page.$$eval("#view-admin .adm-head h3", (hs) => hs.map((h) => h.textContent.replace(/\s*\d+$/, "").trim()))).join("|") === "People each day|System health|AI usage|Recent activity|Admin|System", adm.slice(0, 200));
   check("…overview metrics: users, recipes, AI calls, AI spend, storage", (await page.$$eval("#view-admin .adm-metrics .adm-m span", (xs) => xs.map((x) => x.textContent))).map((t) => t.replace(/ · .*/, "")).join("|") === "Users|Recipes|AI calls|AI spend|Storage");
   check("…health rows say what they know: database operational, backups not monitored", /Database[\s\S]*Operational/.test(adm) && /Backups[\s\S]*Not monitored/.test(adm) && (await page.locator("#view-admin .adm-h.ok").count()) >= 2 && (await page.locator("#view-admin .adm-h.unknown, #view-admin .adm-h.off").count()) >= 2);
   check("…needs attention lists today's errors", /Needs attention/.test(adm) && /recorded today/.test(adm));
-  check("…a compact people list and recent activity without sign-ins", /Test Owner · You/.test(adm) && /\d+ recipes? · \d+ cooks? · \d+ AI calls? · US\$/.test(adm) && /deleted\s*Dal tadka/.test(adm) && !/signed in via/.test(adm));
+  check("…recent activity without sign-ins", /deleted\s*Dal tadka/.test(adm) && !/signed in via/.test(adm));
+  const firstAdmin = await page.$$eval("#view-admin .adm-actions .adm-a", (bs) => bs.slice(0, 2).map((x) => x.dataset.go + ":" + x.querySelector("small").textContent));
+  check("2.9.0: Admin starts with Pilot gates and People, People saying how many", /^gates:Imports /.test(firstAdmin[0] || "") && /^people:\d+ people · usage, limits and accounts$/.test(firstAdmin[1] || ""), JSON.stringify(firstAdmin));
   check("…the Recipes tab stays lit", await page.evaluate(() => document.querySelector('#tabs button.on')?.dataset.view === "recipes"));
   const chart = await page.evaluate(() => { const v = document.querySelector("#view-admin .vis"); return v && { read: v.querySelector(".vread").textContent, cols: v.querySelectorAll(".col").length, bars: v.querySelectorAll(".bar").length, today: !!v.querySelector(".bar.today"), table: v.querySelectorAll("table tr").length, label: v.querySelector("svg").getAttribute("aria-label") }; });
   check("2.8.0 People each day: a bar for each day with someone in it, today's in the accent", chart && chart.cols === 30 && chart.bars === 3 && chart.today, JSON.stringify(chart));
@@ -232,11 +234,16 @@ try {
   await fitsPhone("overview");
 
   // a person
+  await page.click('.adm-a[data-go="people"]'); await page.waitForSelector("#view-admin .adm-p");
+  adm = await admText();
+  check("…People: everyone, one line each with recipes, cooks, AI calls and spend", /^People$/.test(await page.textContent(".adm-title")) && /Test Owner · You/.test(adm) && /\d+ recipes? · \d+ cooks? · \d+ AI calls? · US\$/.test(adm));
   await page.click(`#view-admin [data-person="${owner}"]`); await page.waitForSelector("#view-admin .adm-top");
   adm = await admText();
   check("a person: email, counts, AI today and this month, limits, recent activity", /owner@example\.com/.test(adm) && /AI today · no limits/.test(adm) && /AI this month/.test(adm) && /Imports a day/.test(adm) && (await page.locator("#view-admin .adm-act").count()) > 0, adm.slice(0, 300));
-  check("…back says ‹ Admin, and your own account has no Pause", (await page.textContent("#aBack")).trim() === "‹ Admin" && !(await page.$('[data-admin="pause"]')));
+  check("…back says ‹ People, from the People list (2.9.0), and your own account has no Pause", (await page.textContent("#aBack")).trim() === "‹ People" && !(await page.$('[data-admin="pause"]')));
   await fitsPhone("person");
+  await page.click("#aBack"); await page.waitForSelector("#view-admin .adm-p");
+  check("…and goes back to People, whose back says ‹ Admin", /^People$/.test(await page.textContent(".adm-title")) && (await page.textContent("#aBack")).trim() === "‹ Admin");
   await page.click("#aBack"); await page.waitForSelector("#view-admin .adm-metrics");
 
   // AI usage and limits
@@ -253,7 +260,7 @@ try {
   check("Save limits saves everyone's limits, the cover price and the exemption", sum.defaults.import === 7 && sum.prices.image_usd === 0.06 && sum.defaults.admin_exempt === false, JSON.stringify(sum.defaults));
   await page.waitForFunction(() => state.admin && state.admin.sum && state.admin.sum.defaults.import === 7);
   check("…and stays on the AI screen", await page.isVisible("#limSave"));
-  await page.click("#aBack"); await page.click(`#view-admin [data-person="${owner}"]`); await page.waitForSelector("#view-admin .adm-use");
+  await page.click("#aBack"); await page.click('.adm-a[data-go="people"]'); await page.click(`#view-admin [data-person="${owner}"]`); await page.waitForSelector("#view-admin .adm-use");
   check("…the person shows usage against the new limits", /\/ 7\s*Imports/.test(await admText()));
 
   await page.click(`[data-lim="${owner}"]`); await page.waitForSelector("#sheet.open #lim_scan");
@@ -283,7 +290,7 @@ try {
   check("…and Resume account brings them back", !(await get("/api/admin/summary")).people.find((p) => p.id === "sam").paused);
 
   // all activity, with filters
-  await page.click("#aBack"); await page.click('.adm-head [data-go="activity"]'); await page.waitForSelector("#actList .adm-act");
+  await page.click("#aBack"); await page.waitForSelector("#view-admin .adm-p"); await page.click("#aBack"); await page.click('.adm-head [data-go="activity"]'); await page.waitForSelector("#actList .adm-act");
   check("activity: the default leaves sign-ins out", !/signed in via/.test(await page.textContent("#actList")));
   await page.selectOption("#actCat", "security"); await page.waitForFunction(() => Array.isArray(state.adminActRows) && state.adminActRows.every((r) => r.action === "signed_in") && state.adminActRows.length > 0);
   check("…Sign-ins shows only sign-ins", /signed in via/.test(await page.textContent("#actList")));

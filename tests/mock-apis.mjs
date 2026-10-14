@@ -1,6 +1,6 @@
 // Test-only stand-ins for api.anthropic.com and api.openai.com, loaded into the server
 // with `node --import tests/mock-apis.mjs`. The mode is read from MOCK_FILE on every call
-// ({"claude": "...", "image": "...", "scan": "...", "claudeDelay": ms, "imageDelay": ms, "cfCerts": "down", "cost": "junk"|"long", "dish": "nofood"|"unsure", "youtube": "nodesc", "instagram": "nocaption"|"json"|"json2"|"escaped"|"blocked-embed"|"preview-only"|"403"}), so one
+// ({"claude": "...", "image": "...", "scan": "...", "claudeDelay": ms, "imageDelay": ms, "cfCerts": "down", "cost": "junk"|"long"|"nonutrition"|"badnutrition", "import": "norecipe", "dish": "nofood"|"unsure", "youtube": "nodesc", "instagram": "nocaption"|"json"|"json2"|"escaped"|"blocked-embed"|"preview-only"|"403"}), so one
 // server can be driven through every failure. Requests are logged as MOCK_CLAUDE_REQ,
 // MOCK_SCAN and MOCK_IMG_REQ so tests can check exactly what was sent.
 import { readFileSync } from "node:fs";
@@ -43,11 +43,15 @@ globalThis.fetch = async (url, opts = {}) => {
       return json(200, { content: [{ type: "text", text: "Here you go:\n" + JSON.stringify({ items }) }], stop_reason: "end_turn", usage });
     }
     if (/You estimate food costs/.test(prompt)) { // 2.5
-      console.log("MOCK_COST " + JSON.stringify(prompt.slice(prompt.indexOf("RECIPE:"), prompt.indexOf("RECIPE:") + 60)));
+      console.log("MOCK_COST " + JSON.stringify(prompt.slice(prompt.indexOf("RECIPE:"), prompt.indexOf("RECIPE:") + 60)) + (/Nutrition: for ONE serve/.test(prompt) ? " +nutrition" : ""));
+      // 2.9.0: the same call answers nutrition for one serve. "nonutrition" is an older reply without it;
+      // "badnutrition" has some numbers no meal could have, which the server drops.
+      const nutrition = m.cost === "nonutrition" ? undefined : m.cost === "badnutrition" ? { kcal: 500, protein_g: 30, carbs_g: 40, fat_g: 20, sugar_g: 9999, sodium_mg: "salty" }
+        : { kcal: 640, protein_g: 48, carbs_g: 12, fat_g: 44, sat_fat_g: 30, sugar_g: 6, fibre_g: 3, sodium_mg: 620 };
       if (m.cost === "junk") return json(200, { content: [{ type: "text", text: '{"course":"main","home_total":"cheap"}' }], stop_reason: "end_turn", usage });
       // 2.7.10: a wordier model's estimate needs ~900 tokens; under a lower max_tokens it's cut off, as Claude does
       if (m.cost === "long" && body.max_tokens < 900) return json(200, { content: [{ type: "text", text: '{"course":"main","comparable":"Beef rendang with rice","home_total":42,"casual_per_serve":22,"basis":"Mostly the beef, which at' }], stop_reason: "max_tokens", usage: { input_tokens: 1000, output_tokens: body.max_tokens } });
-      return json(200, { content: [{ type: "text", text: JSON.stringify({ course: "main", comparable: "Beef rendang with rice", home_total: 42, casual_per_serve: 22, basis: "Mostly the beef." }) }], stop_reason: "end_turn", usage });
+      return json(200, { content: [{ type: "text", text: JSON.stringify({ course: "main", comparable: "Beef rendang with rice", home_total: 42, casual_per_serve: 22, basis: "Mostly the beef.", nutrition }) }], stop_reason: "end_turn", usage });
     }
     if (/photo of a finished dish/.test(prompt)) { // 2.5
       console.log("MOCK_DISH images=" + body.messages[0].content.filter((c) => c.type === "image").length);
@@ -57,6 +61,7 @@ globalThis.fetch = async (url, opts = {}) => {
         steps: ["Fill and fold the dumplings.", "Steam for 15 minutes."], tags: ["afghan"], notes: "Guessed from a photo.",
         guess: { dish: "Afghan mantu", cuisine: "Afghan", confidence: m.dish === "unsure" ? 30 : 62, alternatives: ["Turkish manti", "Shish barak"], basis: "Folded dumplings under yoghurt and a red sauce." } }) }], stop_reason: "end_turn", usage });
     }
+    if (m.import === "norecipe" && /import step of a personal recipe app/.test(prompt)) return json(200, { content: [{ type: "text", text: '{"error":"no recipe found"}' }], stop_reason: "end_turn", usage });
     if (/Suggest 3 different dishes/.test(prompt)) {
       return json(200, { content: [{ type: "text", text: JSON.stringify([{ title: "Lemon rice", why: "Bright and quick.", missing: [] }, { title: "Egg fried rice", why: "Uses the eggs.", missing: ["spring onion"] }, { title: "Shakshuka", why: "Eggs in sauce.", missing: ["tinned tomato"] }]) }], stop_reason: "end_turn", usage });
     }

@@ -1,6 +1,7 @@
 // The Shop tab (2.7.0): the shopping list built from the Plan, in step with the Plan's
 // week, from today on for this week, amounts in the recipe's own unit, pantry items
-// ticked with a tag, Share list and Clear ticked.
+// ticked with a tag, Share list and Clear ticked. Since 2.9.0 it's the Shopping list side
+// of the Plan tab, and an ingredient measured in different ways is one converted amount.
 import { suite, startServer, openBrowser, openApp, sleep } from "./lib.mjs";
 
 const { check, finish } = suite("shop");
@@ -27,7 +28,9 @@ try {
   const { page, errors } = b;
   await page.clock.setFixedTime(new Date("2026-10-06T09:00:00"));
   await openApp(page, s.url);
-  await page.click('#tabs button[data-view="shop"]');
+  // 2.9.0: Plan → Shopping list (the switch on the page showing; Plan may reopen on the list already)
+  const toShop = async () => { await page.click('#tabs button[data-view="plan"]'); await page.click('.view.active [data-weekview="shop"]'); await sleep(150); };
+  await toShop();
   const shop = () => page.evaluate(() => ({
     week: document.getElementById("shopWeekTitle").textContent, current: document.querySelector("#view-shop .weeknav").classList.contains("current"),
     sub: document.getElementById("shopSub")?.textContent ?? null, meals: /meals? planned/.test(document.getElementById("view-shop").textContent),
@@ -38,7 +41,7 @@ try {
 
   // --- built from the Plan, this week from today on
   let v = await shop();
-  check("the Shop tab opens on this week, marked like the Plan's", v.week === "5 Oct – 11 Oct" && v.current && (await page.evaluate(() => document.querySelector("#tabs button.on").dataset.view)) === "shop", JSON.stringify(v.week));
+  check("the Shopping list opens on this week, marked like the Plan's, with the Plan tab lit (2.9.0)", v.week === "5 Oct – 11 Oct" && v.current && (await page.evaluate(() => document.querySelector("#tabs button.on").dataset.view)) === "plan" && (await page.textContent("#view-shop .weekseg .on")) === "Shopping list", JSON.stringify(v.week));
   check("…from today: Monday's leek soup isn't on it; Tuesday's and Wednesday's meals are", !/leek/.test(v.text) && /chicken thigh/.test(v.text) && /mini cucumber/.test(v.text), v.text.slice(0, 200));
   check("2.7.3: no 'From today · 3 meals planned' line under the dates", v.sub === null && !v.meals, String(v.sub));
   check("grouped by aisle in shop order", v.aisles.join() === "Produce,Meat & seafood,Pantry,Other", v.aisles.join());
@@ -55,7 +58,7 @@ try {
   await page.locator('#shopList .item:has-text("honey") input').uncheck(); await sleep(400);
   let doc = (await s.state()).shop["2026-10-05"];
   check("unticking a pantry item puts it back on the list, and the server keeps that", !(await shop()).rows.honey.done && doc?.need?.["honey|vol"] === true && !doc.checked?.["honey|vol"], JSON.stringify(doc));
-  await page.reload(); await page.waitForFunction(() => !store.loading); await page.click('#tabs button[data-view="shop"]');
+  await page.reload(); await page.waitForFunction(() => !store.loading); await toShop();
   check("…still unticked after a reload", (await shop()).rows.honey.done === false);
 
   // --- ticking, adding by hand, Clear ticked
@@ -94,7 +97,7 @@ try {
   check("› goes to next week, in full: 'Leek soup' for 8, nothing 'from today'", v.week === "12 Oct – 18 Oct" && !v.current && v.rows.leek?.q === "4" && !v.meals, JSON.stringify([v.week, v.rows.leek]));
   await page.click('#tabs button[data-view="plan"]');
   check("…and the Plan is on that week too", (await page.textContent("#weekTitle")) === "12 Oct – 18 Oct");
-  await page.click("#prevWeek"); await page.click("#prevWeek"); await page.click('#tabs button[data-view="shop"]');
+  await page.click("#prevWeek"); await page.click("#prevWeek"); await toShop();
   check("moving the Plan's week moves the Shop's", (await shop()).week === "28 Sept – 4 Oct" || (await shop()).week === "28 Sep – 4 Oct", (await shop()).week);
   v = await shop();
   check("a week with nothing planned (and a 1.x list) says what to do", /Nothing to buy yet/.test(v.text) && /Plan some meals/.test(v.text), v.text);
@@ -115,18 +118,24 @@ try {
   await R("roast", "Garlic roast pork", 6, [I(4, "clove", "garlic", "produce"), I(400, "ml", "chicken stock", "pantry"), I(500, "g", "pork mince", "meat"), I(1, "packet", "mystery mix", "somewhere odd")]);
   await R("aioli", "Aioli", 2, [I(1, "tbsp", "garlic", "produce")]);
   await s.put("plan", "2026-10-20", { date: "2026-10-20", entries: [{ recipeId: "roast", servings: 10 }, { recipeId: "aioli", servings: 2 }] });
-  await page.reload(); await page.waitForFunction(() => !store.loading); await page.click('#tabs button[data-view="shop"]');
+  await page.reload(); await page.waitForFunction(() => !store.loading); await toShop();
   await page.click('#view-shop [data-week="1"]'); await page.click('#view-shop [data-week="1"]'); await sleep(300);
   v = await shop();
   const garlic = Object.entries(v.rows).filter(([k]) => k === "garlic");
-  check("rounded up to what you'd buy: 4 cloves for 6, made for 10, is 7 cloves, not 6⅔", /^7 clove/.test(v.rows.garlic?.q || ""), JSON.stringify(v.rows.garlic));
+  check("rounded up to what you'd buy: 1 packet for 6, made for 10, is 2 packets, not 1⅔ (and plural, 2.9.0)", v.rows["mystery mix"]?.q === "2 packets", JSON.stringify(v.rows["mystery mix"]));
   check("…and 666⅔ ml of stock is 675 ml", v.rows["chicken stock"]?.q === "675 ml", JSON.stringify(v.rows["chicken stock"]));
-  check("one row for garlic though the recipes use cloves and tbsp, with both amounts", garlic.length === 1 && (await page.evaluate(() => [...document.querySelectorAll("#shopList .item .lbl")].filter((l) => [...l.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("").trim() === "garlic").length)) === 1 && /^7 cloves? \+ 1 tbsp$/.test(v.rows.garlic?.q || ""), JSON.stringify(v.rows.garlic));
-  check("…for both recipes", v.rows.garlic?.from === "Garlic roast pork, Aioli", v.rows.garlic?.from);
+  check("2.9.0: one row for garlic though the recipes use cloves and a tbsp, added up into one amount marked 'about' (6⅔ cloves + 1 tbsp ≈ 10 cloves)", garlic.length === 1 && (await page.evaluate(() => [...document.querySelectorAll("#shopList .item .lbl")].filter((l) => [...l.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("").trim() === "garlic").length)) === 1 && v.rows.garlic?.q === "about 10 cloves", JSON.stringify(v.rows.garlic));
+  check("…and each recipe's own amount underneath, to check it by", v.rows.garlic?.from === "Garlic roast pork (6⅔ cloves), Aioli (1 tbsp)", v.rows.garlic?.from);
+  check("…an item every recipe measures the same way is added as it is, with no 'about'", v.rows["chicken stock"]?.q === "675 ml" && !/about/.test(v.rows["pork mince"]?.q || ""), JSON.stringify(v.rows["pork mince"]));
+  await page.evaluate(() => { units.set("imperial"); renderShop(); }); v = await shop();
+  check("2.9.0: with US units chosen, the list shows ounces and pounds (500 g pork for 10 is about 1¾ lb)", v.rows["pork mince"]?.q === "2 lb" || v.rows["pork mince"]?.q === "1¾ lb", JSON.stringify(v.rows["pork mince"]));
+  await page.evaluate(() => { units.set("metric"); renderShop(); }); v = await shop();
+  check("…with Metric (or the recipe's own), it stays in what the shop sells", /^\d+ g$/.test(v.rows["pork mince"]?.q || ""), JSON.stringify(v.rows["pork mince"]));
+  await page.evaluate(() => { units.set("orig"); renderShop(); }); v = await shop();
   await page.evaluate(() => [...document.querySelectorAll("#shopList .item")].find((r) => [...r.querySelector(".lbl").childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("").trim() === "garlic").querySelector("input").click()); await sleep(400);
   const ticks = Object.entries((await s.state()).shop["2026-10-19"]?.checked || {}).filter(([k]) => k.startsWith("garlic|"));
   check("…ticking it ticks both", ticks.length === 2 && ticks.every(([, t]) => t === true), JSON.stringify(ticks));
-  await page.reload(); await page.waitForFunction(() => !store.loading); await page.click('#tabs button[data-view="shop"]');
+  await page.reload(); await page.waitForFunction(() => !store.loading); await toShop();
   await page.click('#view-shop [data-week="1"]'); await page.click('#view-shop [data-week="1"]'); await sleep(300);
   check("…and it's still ticked after a reload", (await shop()).rows.garlic?.done === true);
   const inAisle = (item) => page.evaluate((item) => [...document.querySelectorAll("#shopList .aisle")].find((a) => a.textContent.includes(item))?.querySelector("h3").textContent, item);
@@ -137,6 +146,14 @@ try {
   check("…and the edit form shows them as Meat & seafood and Other, not Produce", sel[2] === "meat & seafood" && sel[3] === "other" && sel[0] === "produce", JSON.stringify(sel));
   await page.click("#revBack");
 
+  // --- 2.9.0: the Plan tab reopens the side you were on; tapping it again goes to Meals
+  await page.click('#tabs button[data-view="plan"]'); await page.click('.view.active [data-weekview="shop"]');
+  await page.click('#tabs button[data-view="recipes"]'); await page.click('#tabs button[data-view="plan"]');
+  check("2.9.0: back on the Plan tab, the Shopping list is still showing, with its switch on", await page.isVisible("#view-shop") && (await page.textContent("#view-shop .weekseg .on")) === "Shopping list");
+  await page.click('#tabs button[data-view="plan"]');
+  check("…tapping Plan again goes to Meals", await page.isVisible("#view-plan") && (await page.textContent("#view-plan .weekseg .on")) === "Meals");
+  await page.click('#tabs button[data-view="recipes"]'); await page.click('#tabs button[data-view="plan"]');
+  check("…and Meals is what reopens after that", await page.isVisible("#view-plan"));
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
 } catch (e) { finish(e); } finally { await b?.browser.close(); await s?.cleanup(); }

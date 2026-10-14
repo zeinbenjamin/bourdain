@@ -40,18 +40,17 @@ the home bar gap and lazy pictures; these are left, most useful first.
 
 | Item | Notes |
 | --- | --- |
-| "Paste link" button on the import form | Reads the clipboard into the link box: one tap instead of press-and-hold, Paste. Small. |
 | "Share to Bourdain" on Android | A `share_target` in the web app manifest puts Bourdain in the share menu of Instagram, TikTok and Chrome. Android only; iPhone doesn't allow it for web apps. Small to medium. |
-| Toasts sit over sheet content | e.g. the Undo toast covers a row of the cook log for 6s. Raise it above the sheet, or into the sheet's own space. Small. |
 | Check the keyboard with the tab bar | On some iOS versions the fixed tab bar rides up over the keyboard and can cover the field being typed in. Needs checking on a real iPhone (edit form, pantry box) before deciding on a fix. |
 
 ## Requested by Zein
 
-For 2.9.0 (2026-10-11), in the preview first: Original / Metric / Imperial on a recipe's
-ingredients (cook mode and the shopping list follow it); one amount per ingredient on
-the shopping list when recipes measure it differently (3 cloves + 1 tbsp of garlic is
-6 cloves); the Shop as a Meals / Shopping list switch inside the Plan tab (renamed
-Week for now; the name is still to be workshopped).
+Done in 2.9.0 (2026-10-14), after the preview: Recipe / Metric / US units on a recipe
+(cook mode and the shopping list follow it); one amount per ingredient on the shopping
+list when recipes measure it differently; the Shopping list as a switch inside the Plan
+tab; nutrition from the cost estimate; a + tab and "Cook from the pantry" in the Add
+sheet; the People row ordered by what's new; Pilot gates and ZFS snapshots in the
+owner's view; Paste on the import form. 2.8.0 already raised toasts above sheets.
 
 Later, not started:
 
@@ -84,10 +83,8 @@ Later, not started:
 | Item | Notes |
 | --- | --- |
 | Pantry amounts that go down when you cook | Needs every pantry item to have a real amount and unit: a data migration (a 3.0.0). |
-| Nutrition estimates | |
 | Timer alerts while the phone is locked | Needs push notifications. |
 | Clean up unused photos (`.jpg`) | Covers are already swept. |
-| Move Pantry behind the Recipes "+" | As something like "Cook from the pantry". |
 
 ## Low-risk items from the 2026-09-30 security review
 
