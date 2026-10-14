@@ -1,6 +1,6 @@
 // Test-only stand-ins for api.anthropic.com and api.openai.com, loaded into the server
 // with `node --import tests/mock-apis.mjs`. The mode is read from MOCK_FILE on every call
-// ({"claude": "...", "image": "...", "scan": "...", "claudeDelay": ms, "imageDelay": ms, "cfCerts": "down", "cost": "junk"|"long"|"nonutrition"|"badnutrition", "import": "norecipe", "dish": "nofood"|"unsure", "youtube": "nodesc", "instagram": "nocaption"|"json"|"json2"|"escaped"|"blocked-embed"|"preview-only"|"403"}), so one
+// ({"claude": "...", "image": "...", "scan": "...", "claudeDelay": ms, "imageDelay": ms, "cfCerts": "down", "image": "notimage"|…, "cost": "junk"|"long"|"nonutrition"|"badnutrition", "import": "norecipe", "dish": "nofood"|"unsure", "youtube": "nodesc", "instagram": "nocaption"|"json"|"json2"|"escaped"|"blocked-embed"|"preview-only"|"403"}), so one
 // server can be driven through every failure. Requests are logged as MOCK_CLAUDE_REQ,
 // MOCK_SCAN and MOCK_IMG_REQ so tests can check exactly what was sent.
 import { readFileSync } from "node:fs";
@@ -120,6 +120,7 @@ globalThis.fetch = async (url, opts = {}) => {
       case "401": return json(401, { error: { message: "Incorrect API key provided", type: "invalid_request_error", code: "invalid_api_key" } });
       case "quota": return json(429, { error: { message: "You exceeded your current quota", type: "insufficient_quota", code: "insufficient_quota" } });
       case "moderation": return json(400, { error: { message: "Your request was rejected by the safety system.", type: "image_generation_user_error", code: "moderation_blocked" } });
+      case "notimage": return json(200, { created: 1, output_format: "png", data: [{ b64_json: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>').toString("base64") }] }); // 2.9.2: a reply that isn't a picture
       case "no_transparent": if (body.background === "transparent") return json(400, { error: { message: "Transparent background is not supported for this model.", type: "invalid_request_error", param: "background" } });
     }
     return json(200, { created: 1, background: body.background, output_format: "png", data: [{ b64_json: await png(body.background === "transparent") }] });

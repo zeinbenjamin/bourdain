@@ -357,9 +357,12 @@ people (see **Other people** below).
   provider isn't counted; a stop, timeout or provider error is.
 - **Limits** per person per day, grouped: `import` (imports and dish guesses), `scan`, `ideas` (ideas and
   write share it), `cover`, `cost` (40 a day; it skips the one-at-a-time rule
-  and the activity log, since the phone runs it in the background); plus `monthly_usd`. Defaults in `DEFAULT_LIMITS`,
+  and the activity log, since the phone runs it in the background, but at most
+  `COST_AT_ONCE` (3) run together, 2.9.2); plus `monthly_usd`. Defaults in `DEFAULT_LIMITS`,
   changes in the `settings` table (`limits`, `limits:<userId>`, `image_usd`).
-  The day is the server's local day, so the container needs `TZ`. Over a
+  The day is the server's local day, so the container needs `TZ`. A call is only
+  written to `ai_usage` when it ends, so calls still running (`aiPending`, 2.9.2) count
+  against the limit too: a burst of requests can't all pass the check together. Over a
   limit: 429 `ai_limit` (with `kind`, `limit`), `ai_budget`, or `ai_busy` (one
   job at a time). The admin is exempt from all three while `admin_exempt`.
   `/api/cover` goes through `runAi` too, as kind `cover`.
@@ -374,6 +377,12 @@ people (see **Other people** below).
   limits, 413 `storage_full` over it. Photos from before 2.3 aren't in the table.
   `storageUsed()` counts only photos still in one of the person's recipes or
   their profile, plus the last day's uploads (drafts), so removing a photo frees it.
+- **What reaches sharp** (2.9.2, `imageKind`, `MAX_PIXELS`, `inImageSlot`): only JPEG,
+  PNG and WebP, decided by the file's first bytes, never its name or type (anything else
+  is 415 `not_an_image`; sharp's prebuilt libvips would decode SVG through librsvg); at
+  most 100 megapixels (413 `image_too_big`); two images worked on at a time. Uploads are
+  capped at 10 MB (the phone sends a 1600px JPEG). A cover from OpenAI that isn't a
+  picture is `image_failed`. Keep sharp at 0.35.5 or later (GHSA-wq5f-xc86-pv6w).
 - **What's left, before a limit** (2.6.0, `allowanceFor()` in `server.js`,
   `allowance` in `index.html`): `/api/me` has `allowance` (today's `{used, limit}`
   for `import`, `scan`, `ideas`, `cover`, `month_pct`, `storage`; or just
@@ -489,7 +498,9 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   (Guess from a photo, YouTube links), `allowance` (what's left of the AI
   allowance, 2.6.0), `shop` (the shopping list, 2.7.0; inside the Plan since 2.9.0), `back` (the phone's back
   gesture and drafts kept through a restart, 2.7.4), `slide` (sliding along the tab bar
-  and Everyone / Just me, 2.8.0), `units` (Recipe · Metric · US, plurals, Open recipe at
+  and Everyone / Just me, 2.8.0), `audit` (the 2.9.2 security fixes: owner only by the
+  connection's address, bodies read after sign-in, image formats and sizes, AI limits under
+  a burst, odd ways to write a private address), `units` (Recipe · Metric · US, plurals, Open recipe at
   the planned servings, 2.9.0), `gates` (Pilot gates and the snapshot Backups row, 2.9.0), `preview` (the preview in
   Claude still builds and runs, `tools/preview`), `scan`, `video`.
 - `slowProxy` delays: `shell` (index.html), `state` (`/api/state`), `write`
@@ -721,8 +732,10 @@ steps in that doc.
 **Signing in (2.3).** The middleware under "who is asking" in `server.js`
 decides `req.user` for every `/api` request except `/api/health` and
 `/api/version`:
-- **Not set up** (`CF_ACCESS_TEAM` / `CF_ACCESS_AUD` unset): every request is the
-  owner, and anything carrying Cloudflare headers (`Cf-Ray`,
+- **Not set up** (`CF_ACCESS_TEAM` / `CF_ACCESS_AUD` unset): every request from a home
+  address is the owner (`HOME_NETS`: `TRUSTED_NETS` if set, else `LOCAL_NETS`, i.e.
+  loopback, the private ranges, Tailscale's 100.64/10 and link-local; 2.9.2), anything else
+  is 401 `not_trusted`, and anything carrying Cloudflare headers (`Cf-Ray`,
   `Cf-Connecting-Ip`, `Cf-Access-Jwt-Assertion`) gets 403 `cf_not_set_up`.
   This is what every suite except `signin` runs as.
 - **Set up:** a `Cf-Access-Jwt-Assertion` token is checked (`verifyCfToken`:
@@ -762,7 +775,9 @@ a request as the owner by network only when its Host is a home address
 (`homeHost()`: an IP, localhost, a dotless name, .local/.lan/.home.arpa/.internal/
 .ts.net, or `HOME_HOSTS`; else 403 `unknown_host`). That second check stops DNS
 rebinding: a web page resolving its own name to the NAS. JSON bodies are capped
-at 2 MB, except `/api/ai` (30 MB, for screenshots).
+at 2 MB, except `/api/ai` (30 MB, for screenshots), and are read only after the who-is-asking
+middleware (2.9.2), so a refused request is never read. The `Host` header never makes
+anyone the owner; it can only refuse.
 
 **Adding fields is safe; renaming is not.** Old recipes simply lack new fields —
 treat missing as empty. Renaming an existing field orphans every stored recipe

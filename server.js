@@ -142,10 +142,6 @@ const readAll = (t, owner) => {
 
 /* ---------------- app ---------------- */
 const app = express();
-// Screenshots travel to /api/ai as base64, so it takes up to 30 MB. Everything else
-// is a recipe or smaller: 2 MB, so nobody can fill the NAS with a few huge writes.
-app.use("/api/ai", express.json({ limit: "30mb" }));
-app.use(express.json({ limit: "2mb" }));
 app.disable("x-powered-by");
 app.use((_req, res, next) => { res.set("X-Content-Type-Options", "nosniff").set("Referrer-Policy", "same-origin"); next(); });
 
@@ -203,8 +199,13 @@ function blockList(cidrs, label) {
   return { has: (ip) => { ip = plainIp(ip); return Boolean(isIP(ip)) && list.check(ip, ipType(ip)); }, kept };
 }
 const TRUSTED = blockList((process.env.TRUSTED_NETS || "").split(/[\s,]+/).filter(Boolean), "TRUSTED_NETS");
+// Without sign-in set up (2.9.2), the owner only from where a home device would be: this
+// machine, the home network's private ranges, Tailscale (100.64/10), link-local. TRUSTED_NETS,
+// when set, is used instead. Before, anyone who could reach the port was the owner.
+const LOCAL_NETS = blockList(["127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16", "::1/128", "fc00::/7", "fe80::/10"], "LOCAL_NETS");
+const HOME_NETS = TRUSTED.kept.length ? TRUSTED : LOCAL_NETS;
 if (CF_ON) console.log(`sign-in: Cloudflare Access (${CF_TEAM}); without a token, only from ${TRUSTED.kept.join(", ") || "nowhere (TRUSTED_NETS is empty)"}`);
-else console.log("sign-in: not set up, so every request is the owner and Cloudflare traffic is refused");
+else console.log(`sign-in: not set up, so every request from ${TRUSTED.kept.length ? TRUSTED.kept.join(", ") : "this machine or a home network"} is the owner and Cloudflare traffic is refused`);
 
 // The team's signing keys, cached for an hour and fetched again for a key we haven't seen (at most once a minute).
 const cfKeys = { byKid: new Map(), at: 0, tried: 0, error: null };
@@ -288,8 +289,19 @@ app.use("/api", async (req, res, next) => {
     return res.status(403).json({ error: "unknown address for Bourdain", code: "unknown_host", seen: host });
   }
   let how;
+  // Say which address was seen, to the device itself and in the log, so a wrong
+  // TRUSTED_NETS (or Docker hiding the real address) can be spotted from the phone.
+  const untrusted = (list) => {
+    const ip = clientIp(req);
+    if (Date.now() - (refusedAt.get(ip) || 0) > 60_000) {
+      refusedAt.set(ip, Date.now());
+      console.warn(`refused a request from ${ip} with no Cloudflare sign-in: it isn't in ${list}`);
+    }
+    return res.status(401).json({ error: "this network isn't trusted; use the Cloudflare address", code: "not_trusted", seen: ip });
+  };
   if (!CF_ON) {
     if (cf) return res.status(403).json({ error: "Bourdain isn't set up for access through Cloudflare yet", code: "cf_not_set_up" });
+    if (!HOME_NETS.has(clientIp(req))) return untrusted(TRUSTED.kept.length ? `TRUSTED_NETS (${TRUSTED.kept.join(", ")})` : "a home network (sign-in isn't set up)");
     req.user = OWNER; how = "home (sign-in not set up)";
   } else if (token) {
     try { req.user = signedInUser(await verifyCfToken(token)); how = "Cloudflare"; }
@@ -303,16 +315,7 @@ app.use("/api", async (req, res, next) => {
     return res.status(401).json({ error: "signed out", code: "signed_out" });
   } else if (TRUSTED.has(clientIp(req))) {
     req.user = OWNER; how = "home network";
-  } else {
-    // Say which address was seen, to the device itself and in the log, so a wrong
-    // TRUSTED_NETS (or Docker hiding the real address) can be spotted from the phone.
-    const ip = clientIp(req);
-    if (Date.now() - (refusedAt.get(ip) || 0) > 60_000) {
-      refusedAt.set(ip, Date.now());
-      console.warn(`refused a request from ${ip} with no Cloudflare sign-in: it isn't in TRUSTED_NETS (${TRUSTED.kept.join(", ") || "empty"})`);
-    }
-    return res.status(401).json({ error: "this network isn't trusted; use the Cloudflare address", code: "not_trusted", seen: ip });
-  }
+  } else return untrusted(`TRUSTED_NETS (${TRUSTED.kept.join(", ") || "empty"})`);
   // Always the current row (a name change shows at once), and last seen at most every 5 minutes.
   req.user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id) || req.user;
   // A paused account (owner's view) can still take its data with it, and nothing else.
@@ -332,6 +335,11 @@ app.use("/api", async (req, res, next) => {
   }
   next();
 });
+// Screenshots travel to /api/ai as base64, so it takes up to 30 MB. Everything else
+// is a recipe or smaller: 2 MB, so nobody can fill the NAS with a few huge writes.
+// Read only after the check above (2.9.2), so a request that's refused is never read.
+app.use("/api/ai", express.json({ limit: "30mb" }));
+app.use(express.json({ limit: "2mb" }));
 
 // The vegetable pictures in public/avatars (2.5), chosen as "veg:<name>".
 const VEG_AVATARS = ["tomato", "carrot", "onion", "garlic", "broccoli", "eggplant", "capsicum", "mushroom", "potato", "lemon", "avocado", "corn", "chilli", "ginger", "basil", "spring-onion", "spinach", "red-onion"];
@@ -577,7 +585,26 @@ app.delete("/api/:col(recipes|plan|pantry|shop)/:id", sameDataVersion, (req, res
 });
 
 /* ---------------- photos ---------------- */
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+// The phone shrinks every photo to a 1600px JPEG (well under 1 MB) before it uploads it.
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+/* What an image is, from its first bytes (2.9.2), never its name or stated type. Only JPEG,
+   PNG and WebP reach sharp, which would otherwise decode anything libvips knows, SVG
+   (through librsvg) included. A small file can unpack to gigabytes, so the size is capped
+   (MAX_PIXELS: a 48 MP phone photo fits twice over), and two images are worked on at a time. */
+function imageKind(buf) {
+  if (!Buffer.isBuffer(buf) || buf.length < 12) return null;
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "jpeg";
+  if (buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "png";
+  if (buf.toString("latin1", 0, 4) === "RIFF" && buf.toString("latin1", 8, 12) === "WEBP") return "webp";
+  return null;
+}
+const MAX_PIXELS = 100_000_000;
+const imageSlots = { busy: 0, waiting: [] };
+async function inImageSlot(work) {
+  while (imageSlots.busy >= 2) await new Promise((r) => imageSlots.waiting.push(r));
+  imageSlots.busy++;
+  try { return await work(); } finally { imageSlots.busy--; imageSlots.waiting.shift()?.(); }
+}
 
 /* A person's photo storage: photos they uploaded that are still in use (in one of
    their recipes, or their profile photo), plus anything from the last day, which
@@ -594,13 +621,20 @@ function storageUsed(userId) {
 }
 app.post("/api/photos", upload.single("photo"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "no file", code: "no_file" });
+  if (!imageKind(req.file.buffer)) return res.status(415).json({ error: "only JPEG, PNG or WebP photos", code: "not_an_image" });
   try {
     const id = randomUUID().replace(/-/g, "");
-    const jpeg = await sharp(req.file.buffer)
-      .rotate()
-      .resize(1600, 1600, { fit: "inside", withoutEnlargement: true })
-      .jpeg({ quality: 82 })
-      .toBuffer();
+    let jpeg;
+    try {
+      jpeg = await inImageSlot(() => sharp(req.file.buffer, { limitInputPixels: MAX_PIXELS })
+        .rotate()
+        .resize(1600, 1600, { fit: "inside", withoutEnlargement: true })
+        .jpeg({ quality: 82 })
+        .toBuffer());
+    } catch (err) {
+      if (/pixel limit/i.test(err.message)) return res.status(413).json({ error: "that photo is too big to use", code: "image_too_big" });
+      throw err;
+    }
     // Each person's photos share a storage cap (2.3). Photos from before 2.3 aren't
     // in the table, so they count for nobody; they're all the owner's anyway.
     const lim = limitsFor(req.user.id);
@@ -837,11 +871,18 @@ const CLAUDE_PRICES = {
 const prices = () => ({ model: MODEL, claude: CLAUDE_PRICES[MODEL] || [3, 15], known: Boolean(CLAUDE_PRICES[MODEL]), image_usd: getSetting("image_usd") ?? 0.05 });
 const localDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const aiInFlight = new Set();
+// Calls started but not yet recorded, per person and group (2.9.2). A call is only written to
+// ai_usage when it ends, so without this a burst of background cost estimates, which skip the
+// one-at-a-time rule, all passed the daily check together. At most 3 of those at once.
+const aiPending = new Map();
+const COST_AT_ONCE = 3;
 function aiBlock(user, group) {
   const lim = limitsFor(user.id);
   if (user.is_admin && lim.admin_exempt) return null;
   if (group !== "cost" && aiInFlight.has(user.id)) return { status: 429, body: { error: "still working on your last one", code: "ai_busy" } }; // cost estimates run in the background, alongside
-  const used = db.prepare("SELECT COUNT(*) AS n FROM ai_usage WHERE user = ? AND day = ? AND grp = ?").get(user.id, localDay(), group).n;
+  const pending = aiPending.get(user.id + "|" + group) || 0;
+  if (group === "cost" && pending >= COST_AT_ONCE) return { status: 429, body: { error: "still working on your last one", code: "ai_busy" } };
+  const used = db.prepare("SELECT COUNT(*) AS n FROM ai_usage WHERE user = ? AND day = ? AND grp = ?").get(user.id, localDay(), group).n + pending;
   if (used >= lim[group]) return { status: 429, body: { error: `daily limit reached (${lim[group]})`, code: "ai_limit", kind: group, limit: lim[group] } };
   const spent = db.prepare("SELECT COALESCE(SUM(est_usd), 0) AS s FROM ai_usage WHERE user = ? AND day LIKE ?").get(user.id, localDay().slice(0, 7) + "%").s;
   if (spent >= lim.monthly_usd) return { status: 429, body: { error: "monthly AI allowance used up", code: "ai_budget", limit: lim.monthly_usd } };
@@ -871,8 +912,9 @@ const allowanceOf = (user, group) => { const a = allowanceFor(user); return a.ex
 async function runAi(req, res, kind, group, up, job, source = null) {
   const blocked = aiBlock(req.user, group);
   if (blocked) { res.status(blocked.status).json(blocked.body); return { blocked: true }; }
-  const solo = group !== "cost";
+  const solo = group !== "cost", pendingKey = req.user.id + "|" + group;
   if (solo) aiInFlight.add(req.user.id);
+  aiPending.set(pendingKey, (aiPending.get(pendingKey) || 0) + 1);
   up.meter = { reached: false, input: 0, output: 0, images: 0 };
   let outcome = "ok";
   try {
@@ -884,6 +926,7 @@ async function runAi(req, res, kind, group, up, job, source = null) {
   catch (err) { outcome = err instanceof UpstreamError ? err.code : up.clientGone() ? "stopped" : "error"; throw err; }
   finally {
     if (solo) aiInFlight.delete(req.user.id);
+    const left = (aiPending.get(pendingKey) || 1) - 1; if (left > 0) aiPending.set(pendingKey, left); else aiPending.delete(pendingKey);
     const m = up.meter;
     if (m.reached) {
       const p = prices(), usd = (m.input * p.claude[0] + m.output * p.claude[1]) / 1e6 + m.images * p.image_usd;
@@ -1314,7 +1357,8 @@ app.post("/api/cover", async (req, res) => {
       const dish = await describeDish(recipe, up);
       const png = await paintCover(COVER_STYLE + dish, up);
       const id = randomUUID().replace(/-/g, "");
-      const webp = await sharp(png).resize(1024, 1024, { fit: "inside", withoutEnlargement: true }).webp({ quality: 88 }).toBuffer();
+      if (!imageKind(png)) throw new UpstreamError(UPSTREAM_FAILED, "image_failed", "the image model's reply wasn't a picture");
+      const webp = await inImageSlot(() => sharp(png, { limitInputPixels: MAX_PIXELS }).resize(1024, 1024, { fit: "inside", withoutEnlargement: true }).webp({ quality: 88 }).toBuffer());
       await writeFile(path.join(PHOTO_DIR, `${id}.webp`), webp);
       console.log(`cover ${id} for "${recipe.title}": ${dish}`);
       return { id, url: `/api/covers/${id}`, dish };
