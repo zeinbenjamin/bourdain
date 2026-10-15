@@ -1,0 +1,48 @@
+<!doctype html>
+<!-- The one public page (2.9.5): what a link preview and a new pilot user see before signing in.
+     Cloudflare Access lets /welcome through without signing in, so everything this page uses lives
+     in public/welcome/. It loads no data and calls no API. Preview picture: tools/welcome. -->
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bourdain</title>
+<meta name="description" content="Save recipes from anywhere, plan the week and cook step by step. Pilot version.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Bourdain">
+<meta property="og:title" content="Bourdain">
+<meta property="og:description" content="Save recipes from anywhere, plan the week and cook step by step. Pilot version.">
+<meta property="og:url" content="https://bourdain.elevengrant.com/welcome/">
+<meta property="og:image" content="https://bourdain.elevengrant.com/welcome/og.png">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#ffffff">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,700&family=Libre+Franklin:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#121212;--ink2:#5a5a5a;--rule:#dfdfdf;--flame:#D3072B;color-scheme:light}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#fff;color:var(--ink);font:17px/1.5 "Source Serif 4",Georgia,serif;min-height:100vh;display:flex;justify-content:center}
+main{width:100%;max-width:440px;padding:56px 24px 40px;display:flex;flex-direction:column;min-height:100vh}
+.kicker{font:700 12px/1 "Libre Franklin",Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--flame)}
+h1{font-size:58px;line-height:1;font-weight:700;letter-spacing:-.03em;margin:12px 0 14px;display:flex;align-items:center;gap:14px}
+h1 svg{width:40px;height:40px;color:var(--flame);flex:none}
+.lede{font-size:20px;line-height:1.4;padding-bottom:22px;border-bottom:2px solid var(--ink)}
+ul{list-style:none;margin:20px 0 26px}
+li{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--rule)}
+li img{width:34px;height:34px;object-fit:contain;flex:none}
+li b{font-weight:700}
+.btn{display:flex;align-items:center;justify-content:center;min-height:52px;border-radius:999px;background:var(--ink);color:#fff;text-decoration:none;font:600 17px "Libre Franklin",Arial,sans-serif}
+.how{font:500 13.5px/1.5 "Libre Franklin",Arial,sans-serif;color:var(--ink2);text-align:center;margin-top:12px}
+.foot{margin-top:auto;padding-top:32px;font:500 12.5px/1.5 "Libre Franklin",Arial,sans-serif;color:var(--ink2);text-align:center}
+</style></head><body><main>
+<div class="kicker">Pilot version</div>
+<h1>Bourdain<svg viewBox="0 0 100 100" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="6" stroke-linejoin="round"><path id="p" d="M42.3,36.7 C38.2,29.6 34.4,21.6 35.2,14.2 C36,6.8 42,3 50,3 C58,3 64,6.8 64.8,14.2 C65.6,21.6 61.8,29.6 57.7,36.7"/><use href="#p" transform="rotate(60 50 50)"/><use href="#p" transform="rotate(120 50 50)"/><use href="#p" transform="rotate(180 50 50)"/><use href="#p" transform="rotate(240 50 50)"/><use href="#p" transform="rotate(300 50 50)"/></g></svg></h1>
+<p class="lede">Save recipes from anywhere, plan the week and cook step by step.</p>
+<ul>
+  <li><img src="mushroom.webp" alt=""><span><b>Import</b> from a recipe site, Instagram, TikTok or a screenshot</span></li>
+  <li><img src="carrot.webp" alt=""><span><b>Plan</b> the week and get one shopping list</span></li>
+  <li><img src="chilli.webp" alt=""><span><b>Cook</b> with a checklist and timers</span></li>
+  <li><img src="avocado.webp" alt=""><span><b>See</b> what everyone else is cooking</span></li>
+</ul>
+<a class="btn" href="/">Open Bourdain</a>
+<p class="how">You'll sign in with your email and a one-time code.</p>
+<p class="foot">Only invited emails can get in. Nothing to install or pay.</p>
+</main></body></html>

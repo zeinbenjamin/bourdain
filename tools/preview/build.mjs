@@ -48,7 +48,8 @@ must(/"\/api\/covers\/"\+id/, "PREVIEW.img(id)");
 html = html.replaceAll('src="/avatars/', 'src="avatars/');
 // The artifact wraps the page in its own document: keep what's inside <head> and <body>.
 const head = html.slice(html.indexOf("<head>") + 6, html.indexOf("</head>"))
-  .replace(/<meta charset[^>]*>\n?/, "").replace(/<meta name="viewport"[^>]*>\n?/, "").replace(/<title>[^<]*<\/title>\n?/, "");
+  .replace(/<meta charset[^>]*>\n?/, "").replace(/<meta name="viewport"[^>]*>\n?/, "").replace(/<title>[^<]*<\/title>\n?/, "")
+  .replace(/<!-- The link preview[\s\S]*?<meta name="twitter:card"[^>]*>\n?/, ""); // a fragment in an artifact has no link preview, and it would name the real address
 const body = html.slice(html.indexOf("<body>") + 6, html.lastIndexOf("</body>"));
 const mock = readFileSync(path.join(HERE, "mock.js"), "utf8").replace("/*COVERS*/{}", JSON.stringify(covers)).replace("/*VERSION*/{}", JSON.stringify(VERSION))
   .replace("/*ADMIN*/{}", () => readFileSync(path.join(HERE, "admin.json"), "utf8").trim());
