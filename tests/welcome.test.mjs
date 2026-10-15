@@ -24,9 +24,15 @@ try {
   r = await get("/welcome/og.png");
   const pic = Buffer.from(await r.arrayBuffer()), meta = await sharp(pic).metadata();
   check("the preview picture is public too: a 1200 × 630 PNG", r.status === 200 && r.headers.get("content-type") === "image/png" && meta.width === 1200 && meta.height === 630, `${r.status} ${meta.width}x${meta.height}`);
-  r = await get("/welcome/logo.png");
-  const logo = await sharp(Buffer.from(await r.arrayBuffer())).metadata();
-  check("…and a square logo for Cloudflare's sign-in page", r.status === 200 && logo.width === 512 && logo.height === 512, `${logo.width}x${logo.height}`);
+  // 2.9.6: Zein's Eleven Grant logo, for Cloudflare's sign-in page (shared by all his Access applications)
+  const logos = [];
+  for (const v of ["dark", "light"]) {
+    const svg = await get(`/welcome/elevengrant-${v}.svg`), png = await get(`/welcome/elevengrant-${v}.png`);
+    const m = await sharp(Buffer.from(await png.arrayBuffer())).metadata(), text = await svg.text();
+    logos.push({ v, svg: svg.status, type: svg.headers.get("content-type"), png: png.status, size: `${m.width}x${m.height}`, alpha: m.hasAlpha, clean: !/rgb\(1000/.test(text) && /^<svg /.test(text) });
+  }
+  check("…and the Eleven Grant logo, dark and light, as SVG and as a 512px PNG with a clear background, for Cloudflare's sign-in page", logos.every((l) => l.svg === 200 && /image\/svg\+xml/.test(l.type) && l.png === 200 && l.size === "512x512" && l.alpha && l.clean), JSON.stringify(logos));
+  check("…and no Bourdain logo there any more", (await get("/welcome/logo.png")).status !== 200 || !/image\/png/.test((await get("/welcome/logo.png")).headers.get("content-type") || ""));
   check("the page uses nothing outside /welcome/ (anything else is behind sign-in) except Google Fonts", [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map((m) => m[1]).every((u) => u === "/" || /^#\w+$/.test(u) || /^https:\/\/fonts\.googleapis\.com\//.test(u) || /^[\w-]+\.(webp|png)$/.test(u)), [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map((m) => m[1]).join(" "));
   check("…and no script, so it runs nothing and reads no data", !/<script/i.test(html) && !/\/api\//.test(html));
   r = await get("/api/me");
