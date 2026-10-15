@@ -85,6 +85,12 @@ a{color:inherit}
 .vernote{font-family:var(--sans);font-size:13px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--steel);margin:4px 0 8px}
 .vernote.stale{border-color:var(--flame);color:var(--ink)}
 .top .sub{font-family:var(--sans);color:var(--ink-3);font-size:11px;font-weight:500;letter-spacing:.02em}
+/* 2.9.7: one line, always. "3 changes not synced · Thu 15 Oct" wrapped at phone width, so the
+   header grew 14px and the page jumped on every save. Now the status takes the date's place
+   while it shows, and anything still too long is cut with "…" rather than wrapping. */
+.top h1{flex:none}
+.top .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.top .sync:not(:empty) + #topSub{display:none}
 .top .sync{color:var(--ink);font-weight:700}
 
 /* Where the floating tab bar sits (2.7.2): low, like Instagram's, its bottom 12px into
@@ -1095,7 +1101,7 @@ const store = {
   paint(){
     const el=document.getElementById("syncSub"); if(!el) return;
     const n=this.outbox.length+photoQueue.pending;
-    el.textContent = signin.out ? (signin.out==="account_disabled"?"Paused · ":"Signed out · ") : n ? `${n} change${n===1?"":"s"} not synced · ` : this.loading ? "Loading… · " : (!this.fromServer||!this.online) ? "Offline · " : "";
+    el.textContent = signin.out ? (signin.out==="account_disabled"?"Paused":"Signed out") : n ? `${n} change${n===1?"":"s"} not synced` : this.loading ? "Loading…" : (!this.fromServer||!this.online) ? "Offline" : ""; // shown in place of the date (2.9.7)
   },
   /* One of the app's AI jobs (import, scan, ideas, write), run by the server:
      the prompts live there and every call counts against this person's limits.

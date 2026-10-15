@@ -6,6 +6,10 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.9.7 — 2026-10-15
+
+- The page no longer jumps when you tick something or save. "1 change not synced" used to wrap the header onto a second line for a moment, pushing everything down; it now shows in place of the date, on one line.
+
 ## 2.9.6 — 2026-10-15
 - Nothing changes in Bourdain itself. The Eleven Grant logo is now hosted with the welcome page, so Cloudflare's sign-in page can show it.
 

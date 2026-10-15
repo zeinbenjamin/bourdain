@@ -376,6 +376,27 @@ try {
 
   const topAt = await page.evaluate(() => getComputedStyle(document.querySelector(".top")).top);
   check("2.9.0: the header sticks at the very top of the page (the page already pads for the notch, so no second inset)", topAt === "0px", topAt);
+
+  // --- 2.9.7: a save showed "1 change not synced · Thu 15 Oct", which wrapped onto a second
+  // line, so the header grew 14px and the page under it jumped down and back on every tick.
+  const head = () => page.evaluate(() => { const t = document.querySelector(".top"), s = t.querySelector(".sub"), d = document.getElementById("topSub");
+    return { h: Math.round(t.getBoundingClientRect().height), subOut: Math.round(s.getBoundingClientRect().right - (t.getBoundingClientRect().right - parseFloat(getComputedStyle(t).paddingRight))), dateShown: d.offsetParent !== null, sync: document.getElementById("syncSub").textContent }; });
+  for (const w of [390, 360]) {
+    await page.setViewportSize({ width: w, height: 844 }); await page.waitForTimeout(150);
+    const calm = await head();
+    await s.stop();
+    await page.evaluate(() => Promise.all([1, 2, 3].map((i) => store.put("pantry", "w" + i, { id: "w" + i, item: "salt " + i, aisle: "pantry" }))));
+    await page.waitForFunction(() => /not synced/.test(document.getElementById("syncSub").textContent));
+    const busy = await head();
+    check(`2.9.7: at ${w}px the header stays one line while changes wait to sync (no jump)`, busy.h === calm.h && busy.subOut <= 0, JSON.stringify({ calm, busy }));
+    check(`…it says how many are waiting in place of the date, without a dangling "·"`, !busy.dateShown && /^3 changes not synced$/.test(busy.sync.trim()) && !/·/.test(busy.sync), JSON.stringify(busy));
+    await s.restart(); await page.evaluate(() => store.flush());
+    await page.waitForFunction(() => !document.getElementById("syncSub").textContent, null, { timeout: 15000 });
+    const after = await head();
+    check("…and the date is back once they've synced", after.dateShown && after.h === calm.h, JSON.stringify(after));
+    for (const i of [1, 2, 3]) await page.evaluate((i) => store.del("pantry", "w" + i), i);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   check("no page errors", errors.length === 0, errors.join(" | "));
   finish();
 } catch (e) { finish(e); } finally { await b?.browser.close(); await s?.cleanup(); }
