@@ -813,7 +813,9 @@ avatars; anything else on the domain is behind Access), plus Google Fonts; it ha
 no API. `/welcome` redirects to `/welcome/` (express.static). Its `og:` tags point at
 `/welcome/og.png` (1200 × 630), rendered from `tools/welcome/og.html` by `node
 tools/welcome/render.mjs`, which needs Google Fonts reachable and refuses to write fallback-font
-pictures; `logo.png` (512²) is for Cloudflare's sign-in page branding. `index.html` carries the same
+pictures. `elevengrant-dark|light.svg|png` (2.9.6) are Zein's **Eleven Grant** logo, not Bourdain's: Cloudflare's
+sign-in page is shared by every Access application on his account, and it takes the logo only as a
+public URL, so it's hosted here. `index.html` carries the same
 `og:` tags. The `welcome` suite checks it opens through Cloudflare without a token, uses nothing
 outside `/welcome/`, and that `/api` still answers 401.
 
