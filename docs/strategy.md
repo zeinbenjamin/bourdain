@@ -96,3 +96,57 @@ adding features, keep it reliable, and the current setup runs for years.
    phone won't clear.
 6. **Splitting the one-file front end**, and moving recipe blobs to real
    columns, once more than one person works on it.
+
+## If it goes public: what changes in the code
+
+Written 2026-10-15, after 2.9.6. Neither is needed for the pilot; this is what
+"Hosting" and "An App Store shell" above would mean for the codebase.
+
+**An App Store app.** Wrap the existing front end with Capacitor (a native shell
+around `index.html`, with plugins for native features) rather than rewrite it.
+
+- **Sign-in.** Cloudflare Access is a browser sign-in and doesn't suit an app.
+  Use our own: email codes or passkeys through a provider (Cognito, Auth0), the
+  token kept in the Keychain. `verifyCfToken` already checks a signed token, so
+  the server mostly changes which issuer it trusts. Offering Google sign-in
+  means offering Sign in with Apple too.
+- **Same-origin no longer.** The app calls the server from
+  `capacitor://localhost`, so the server must allow that origin by name, and the
+  `cross_site` write check must let it through without opening it to web pages.
+- **Updates.** The front end is bundled into the app: changes go through App
+  Store review (or a live-update service), the version sheet's "the server has
+  a newer build" goes away, the service worker isn't needed, and there is a
+  build step.
+- **Storage.** iOS can clear a web view's localStorage; move the outbox and the
+  offline copy to native SQLite.
+- **What it buys.** A share extension ("Share → Bourdain" from Instagram,
+  TikTok or Safari, the biggest win for importing), push notifications for timers
+  on a locked phone, haptics.
+- **Apple's rules.** A website in a wrapper can be refused (guideline 4.2), so
+  the native features matter; in-app account deletion; a privacy label covering
+  photos and AI; charging for it means in-app purchase.
+
+**Hosting on AWS.** Start small; scale only when the numbers need it.
+
+- **First step:** one EC2 or Lightsail server with a disk, SQLite kept,
+  Litestream streaming the database to S3 in place of ZFS snapshots. Never
+  SQLite on EFS (network file locking).
+- **Photos and covers** to S3 behind CloudFront. `photoUrl()`/`coverUrl()` stay
+  the same; the server signs or proxies the links.
+- **The home-network owner goes.** `TRUSTED_NETS`/`HOME_NETS` (owner by
+  address) means nothing on AWS and would be a way in: everyone signs in,
+  Zein included.
+- **Secrets** in Secrets Manager or Parameter Store, not the compose YAML.
+  Claude could come through Bedrock (AWS permissions, no API key); OpenAI stays
+  as it is.
+- **Health.** `systemHealth()` reads RDS or AWS Backup instead of
+  `.zfs/snapshot`; the free-space check doesn't apply to S3. `TZ` still matters
+  for the daily limits.
+- **More than one server, only when needed.** `aiPending`, `inImageSlot`,
+  `visitedOn` and the daily sweep live in one process's memory; they move to
+  Redis or the database, and the sweep to an EventBridge schedule. SQLite gives
+  way to Postgres (the (owner, id) JSON documents fit JSONB), which is the
+  costly part: `better-sqlite3` is synchronous, so every database call in
+  `server.js` becomes async.
+- **Deploys.** GitHub Actions to ECR, then App Runner or ECS, with the setup in
+  CDK or Terraform, instead of ghcr and a TrueNAS redeploy.
