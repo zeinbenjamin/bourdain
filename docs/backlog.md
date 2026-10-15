@@ -98,6 +98,7 @@ found: only the placeholders in `docker-compose.yml`), and the container locked 
 | --- | --- |
 | Turn the content policy from report-only to enforcing | After a week of real use with no `csp` rows in the owner's Errors. One word in `sendIndex`. |
 | HSTS | Cloudflare → SSL/TLS → Edge Certificates → HSTS. Not in the code. |
+| Brand Cloudflare's sign-in page | Zero Trust → Settings → Custom Pages → Login page: name Bourdain, logo `https://bourdain.elevengrant.com/welcome/logo.png`, background `#D3072B`. Not in the code. |
 | Pin the Node base image by digest | Optional; would need Dependabot for Docker too. |
 
 Accepted 2026-10-14: the API keys stay as environment variables in the TrueNAS YAML

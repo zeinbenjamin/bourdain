@@ -502,7 +502,7 @@ a pinned dev dependency; `npm ci --omit=dev` keeps it out of the image).
   connection's address, bodies read after sign-in, image formats and sizes, AI limits under
   a burst, odd ways to write a private address; 2.9.3: framing refused, the content policy
   and its reports, every screen with no report), `units` (Recipe · Metric · US, plurals, Open recipe at
-  the planned servings, 2.9.0), `gates` (Pilot gates and the snapshot Backups row, 2.9.0), `preview` (the preview in
+  the planned servings, 2.9.0), `welcome` (the public welcome page and its link preview, 2.9.5), `gates` (Pilot gates and the snapshot Backups row, 2.9.0), `preview` (the preview in
   Claude still builds and runs, `tools/preview`), `scan`, `video`.
 - `slowProxy` delays: `shell` (index.html), `state` (`/api/state`), `write`
   (PUT/DELETE).
@@ -575,8 +575,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v64"`
-in `public/sw.js` → `v65`, `v66`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v65"`
+in `public/sw.js` → `v66`, `v67`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
@@ -804,6 +804,18 @@ ignored). So: **no inline event handlers** (`onclick=""`, `onload=""`) and no se
 `<script>`: the fonts' media switch is in the script (`#fontcss`). Once real use reports
 nothing, change the header in `sendIndex` to `Content-Security-Policy`. The `audit` suite walks
 every screen and expects no reports.
+
+**The welcome page (2.9.5)** (`public/welcome/`): the one public page, for sharing and link
+previews. Cloudflare Access has a second application, `bourdain.elevengrant.com/welcome`, with a
+**Bypass / Everyone** policy (Access picks the most specific path), so everything else still needs a
+sign-in. So everything the page uses lives in `public/welcome/` (its pictures are copies of
+avatars; anything else on the domain is behind Access), plus Google Fonts; it has no script and calls
+no API. `/welcome` redirects to `/welcome/` (express.static). Its `og:` tags point at
+`/welcome/og.png` (1200 × 630), rendered from `tools/welcome/og.html` by `node
+tools/welcome/render.mjs`, which needs Google Fonts reachable and refuses to write fallback-font
+pictures; `logo.png` (512²) is for Cloudflare's sign-in page branding. `index.html` carries the same
+`og:` tags. The `welcome` suite checks it opens through Cloudflare without a token, uses nothing
+outside `/welcome/`, and that `/api` still answers 401.
 
 **Adding fields is safe; renaming is not.** Old recipes simply lack new fields —
 treat missing as empty. Renaming an existing field orphans every stored recipe

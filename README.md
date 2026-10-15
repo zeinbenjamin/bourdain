@@ -96,6 +96,8 @@ On plain `http://` the browser blocks **Add to Home Screen** and **camera access
 
 **Cloudflare Tunnel with Cloudflare Access** (how Bourdain is meant to run for more than one person): your own domain, reachable from anywhere, and Cloudflare asks each person to sign in before anything reaches the NAS. Set `CF_ACCESS_TEAM` and `CF_ACCESS_AUD` in the YAML once the Access application exists. Then `TRUSTED_NETS` (for example `192.168.1.0/24`) lists the networks where you're let in as the owner without signing in, when you open the NAS address directly. The steps, in order, are in `docs/multi-user.md` under "Setup Zein does". Turn on HSTS in Cloudflare (SSL/TLS → Edge Certificates) once everything is on HTTPS.
 
+**Sharing the link.** A chat app making a link preview can't sign in, so for the main address it shows Cloudflare. Share `https://<your-domain>/welcome` instead: a public page with Bourdain's picture and an **Open Bourdain** button. In Cloudflare, add a second self-hosted Access application for the same hostname with path `welcome` and one **Bypass / Everyone** policy, and no private hostnames (each destination belongs to one application). To brand Cloudflare's sign-in page, Zero Trust → Settings → Custom Pages → Login page; the logo is at `https://<your-domain>/welcome/logo.png`.
+
 **Tailscale** (just you, on your own devices):
 
 1. Install the Tailscale app from the TrueNAS catalogue and sign in.

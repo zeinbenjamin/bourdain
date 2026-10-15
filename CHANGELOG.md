@@ -6,6 +6,10 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.9.5 — 2026-10-15
+- A welcome page for sharing: send people Bourdain's address with /welcome on the end. In iMessage and WhatsApp the link now shows Bourdain's picture and a line about it, rather than Cloudflare. The page has an Open Bourdain button, which takes them to sign in as usual.
+- The welcome page is the only part of Bourdain anyone can see without signing in. It shows nothing from the app.
+
 ## 2.9.4 — 2026-10-15
 - Cloudflare's visitor analytics, which Cloudflare adds to the page itself, is now allowed by Bourdain's list of what may run, so it no longer shows up as an error in the owner's view.
 
