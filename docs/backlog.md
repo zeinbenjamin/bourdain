@@ -98,11 +98,14 @@ found: only the placeholders in `docker-compose.yml`), and the container locked 
 | --- | --- |
 | Turn the content policy from report-only to enforcing | After a week of real use with no `csp` rows in the owner's Errors. One word in `sendIndex`. |
 | HSTS | Cloudflare → SSL/TLS → Edge Certificates → HSTS. Not in the code. |
-| Check port 8080 can't be reached from outside | From mobile data, `http://<public-ip>:8080/api/health` should time out. |
 | Pin the Node base image by digest | Optional; would need Dependabot for Docker too. |
 
 Accepted 2026-10-14: the API keys stay as environment variables in the TrueNAS YAML
 (visible to TrueNAS admins only).
+
+Checked 2026-10-15: port 8080 can't be reached from outside (the only way in from the
+internet is the Cloudflare tunnel); the live YAML has the 2.9.3 lockdown and `TZ`; Dependabot
+alerts are on for the npm packages, alongside the weekly Actions updates.
 
 ## Low-risk items from the 2026-09-30 security review
 
