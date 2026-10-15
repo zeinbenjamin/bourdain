@@ -112,7 +112,8 @@ how data persists, that is the only place to touch.
   is pending. On load, unsynced outbox entries are laid over the server's data,
   so local changes win (last write wins, which is fine for one person). A 4xx
   means the server will never accept that change, so it is dropped with a toast.
-  The header shows "N changes not synced" or "Offline".
+  The header shows "N changes not synced" or "Offline", in place of the date and
+  never wrapping (2.9.7: a wrapped status made the page jump on every save).
 - `localStorage["bourdain:<userId>"]` is a full mirror, refreshed on every
   successful load. The outbox is `bourdain.outbox:<userId>`, and
   `bourdain.me` remembers who was signed in last. `store.key(base)` builds the
@@ -575,8 +576,8 @@ Take a ZFS snapshot before anything that changes stored data.
 
 ## Gotchas — all of these cost real debugging time
 
-**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v65"`
-in `public/sw.js` → `v66`, `v67`. This makes the phone install the new worker and
+**Bump the service worker cache on any front-end change.** `CACHE = "bourdain-v66"`
+in `public/sw.js` → `v67`, `v68`. This makes the phone install the new worker and
 drop the old cache. `index.html` and `sw.js` are served with
 `Cache-Control: no-cache`, so the new shell arrives on the next open. Keep it
 that way: a long `maxAge` on either one means the phone keeps the old app after
