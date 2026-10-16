@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light">
 <title>Bourdain</title>
-<link rel="manifest" href="/manifest.webmanifest">
+<!-- use-credentials (2.9.8): sent without the sign-in cookie, Cloudflare Access redirected the manifest to its login page -->
+<link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Bourdain">
 <meta name="theme-color" content="#ffffff">
@@ -2285,10 +2286,10 @@ function renderTimeline(){
   const entry=e=>{
     if(e.mine){ const r=state.recipes[e.recipeId];
       const sv=cookSaved(r.cost,r.servings,e.mult);
-      const sub=[everyone?`${avatar(meP,"xs")}You`:"", r.rating?stars(r.rating):"", esc(cookServes(r.servings,e.mult)), sv!=null?`about ${esc(aud(sv))} under eating out`:""].filter(Boolean).join(" · ");
+      const sub=[everyone?`${avatar(meP,"xs")}You`:"", r.rating?stars(r.rating):"", esc(cookServes(r.servings,e.mult)), sv!=null?`about ${esc(aud(sv))} less than eating out`:""].filter(Boolean).join(" · ");
       return card(e.recipeId,"",sub); }
     const sv=cookSaved(e.cost,e.servings,e.mult);
-    const sub=[`${avatar(e.who,"xs")}${esc(e.who.name||"Someone")}`, e.rating?stars(e.rating):"", esc(cookServes(e.servings,e.mult)), sv!=null?`about ${esc(aud(sv))} under eating out`:""].filter(Boolean).join(" · ");
+    const sub=[`${avatar(e.who,"xs")}${esc(e.who.name||"Someone")}`, e.rating?stars(e.rating):"", esc(cookServes(e.servings,e.mult)), sv!=null?`about ${esc(aud(sv))} less than eating out`:""].filter(Boolean).join(" · ");
     return `<button class="slot" data-owner="${esc(e.owner)}" data-rid="${esc(e.recipeId)}">${miniThumb({title:e.title,cover:e.cover,photos:e.firstPhoto?[e.firstPhoto]:[]})}<span class="t">${esc(e.title||"Untitled")}<span class="tl-sub">${sub}</span></span></button>`;
   };
   // group by month, then by day

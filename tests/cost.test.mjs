@@ -128,7 +128,7 @@ try {
   // --- Archives
   await page.click('#tabs button[data-view="timeline"]'); await page.waitForSelector(".feed .slot");
   const subs = await page.$$eval('.feed [data-open="rendang"]', (xs) => xs.map((x) => x.textContent.replace(/\s+/g, " ")));
-  check("Archives: each cook says how far under eating out it came, every serving counted (6 × $15, 12 × $15)", subs.some((t) => /6 servings · about \$90 under eating out/.test(t)) && subs.some((t) => /12 servings · about \$180 under eating out/.test(t)), JSON.stringify(subs));
+  check("Archives: each cook says how much less than eating out it came to, every serving counted (6 × $15, 12 × $15)", subs.some((t) => /6 servings · about \$90 less than eating out/.test(t)) && subs.some((t) => /12 servings · about \$180 less than eating out/.test(t)), JSON.stringify(subs));
   const sv = await page.textContent("#view-timeline .savings");
   check("…and a total for this month and this year, worded as a difference, not money saved (2.9.0)", sv.trim() === "Cooking at home came to about $270 less than eating out this month, and $270 this year." && !/saved/.test(sv), sv);
 
@@ -147,7 +147,7 @@ try {
   await page.evaluate(() => { feed.at = 0; feed.entries = null; people.at = 0; people.list = null; localStorage.setItem("bourdain.archivesWho", "everyone"); });
   await page.reload(); await page.waitForFunction(() => !store.loading); await page.click('#tabs button[data-view="timeline"]');
   await page.waitForSelector('.feed [data-owner="sam"]');
-  check("…and the Archives show how far under eating out their cook came", /2 servings · about \$40 under eating out/.test(await page.textContent('.feed [data-owner="sam"]')));
+  check("…and the Archives show how much less than eating out their cook came to", /2 servings · about \$40 less than eating out/.test(await page.textContent('.feed [data-owner="sam"]')));
 
   // --- no Claude key, no estimates
   await s.restart({ ANTHROPIC_API_KEY: "" });
