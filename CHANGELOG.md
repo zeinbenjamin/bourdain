@@ -6,6 +6,11 @@ when you tap the "Bourdain" title.
 Format: each version is a `## <version> — <YYYY-MM-DD>` heading followed by
 `- ` bullet lines. The app parses exactly that, so keep to it.
 
+## 2.9.8 — 2026-10-16
+
+- Adding Bourdain to the home screen now picks up its name, icon and full-screen mode when you're signed in through Cloudflare (away from home). The phone used to ask for those without its sign-in, so Cloudflare turned it away; it showed up as a content-policy error in the owner's view.
+- Each cook in the Archives now says "about $X less than eating out" rather than "under eating out", which read as if $X were what eating out would cost.
+
 ## 2.9.7 — 2026-10-15
 
 - The page no longer jumps when you tick something or save. "1 change not synced" used to wrap the header onto a second line for a moment, pushing everything down; it now shows in place of the date, on one line.

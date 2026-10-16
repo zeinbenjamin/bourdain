@@ -41,6 +41,11 @@ try {
   const app = await r.text();
   check("the app's own page carries the same preview, pointing at the public picture", /<meta property="og:image" content="https:\/\/bourdain\.elevengrant\.com\/welcome\/og\.png">/.test(app) && /<meta property="og:title" content="Bourdain">/.test(app));
 
+  // 2.9.8: browsers fetch the app manifest without cookies unless told otherwise, so behind
+  // Cloudflare Access it was redirected to the sign-in page (a content-policy report,
+  // manifest-src, from a pilot user's first visit) and Add to Home Screen got no name or icon.
+  check("2.9.8: the app asks for its manifest with the sign-in cookie (crossorigin=use-credentials)", /<link rel="manifest" href="\/manifest\.webmanifest" crossorigin="use-credentials">/.test(app), (app.match(/<link rel="manifest"[^>]*>/) || ["none"])[0]);
+
   // On a phone
   b = await openBrowser();
   const { page, errors } = b;
